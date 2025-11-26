@@ -1,0 +1,10 @@
+{
+  "dart.flutterHotReloadOnSave": "all",
+  "dart.flutterHotRestartOnSave": "never",
+  "dart.previewFlutterUiGuides": true,
+  "dart.debugExternalPackageLibraries": false,
+  "dart.debugSdkLibraries": false,
+  "dart.env": {
+    "CHROME_EXECUTABLE": "/mnt/c/Program Files/Google/Chrome/Application/chrome.exe"
+  }
+}
