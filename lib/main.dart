@@ -11,6 +11,8 @@ import 'dart:math' show atan2, cos, sin;
 import 'widgets/event_buttons.dart';
 import 'widgets/shortcuts_panel.dart';
 import 'widgets/video_picker.dart';
+import 'widgets/control_bar.dart';
+import 'widgets/drawing_tools_panel.dart';
 
 void main() {
   // 1. Initialize MediaKit (Crucial for the native video engine)
@@ -110,9 +112,6 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
   
   // Video loading state
   bool hasVideoLoaded = false;
-  
-  // Control bar position (will be centered on first build)
-  Offset? _controlBarPosition;
   
   // Shortcuts panel visibility
   bool _showShortcuts = false;
@@ -289,7 +288,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
       trail.isAnimating = true;
       final startTime = DateTime.now();
       
-      // Animate the erasure over 1 second
+      // Use WidgetsBinding to schedule frame callbacks for smooth animation
       void animate() {
         if (!mounted || !laserTrails.contains(trail)) return;
         
@@ -300,17 +299,23 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
           trail.animationProgress = progress;
         });
         
-        if (progress < 1.0) {
-          Future.delayed(const Duration(milliseconds: 33), animate); // ~30fps for better performance
-        } else {
+        if (progress >= 1.0) {
           // Animation complete, remove trail
           setState(() {
             laserTrails.remove(trail);
           });
+        } else {
+          // Schedule next frame using WidgetsBinding to ensure continuous updates
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            Future.delayed(const Duration(milliseconds: 33), animate);
+          });
         }
       }
       
-      animate();
+      // Start animation
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        animate();
+      });
     });
   }
 
@@ -352,129 +357,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
     // player.pause(); 
   }
 
-  Widget _buildControlBar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.7),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white24, width: 1),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Drag Handle
-          Container(
-            width: 40,
-            height: 4,
-            margin: const EdgeInsets.only(bottom: 8),
-            decoration: BoxDecoration(
-              color: Colors.white54,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          // Speed Controls
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text('Speed: ', style: TextStyle(color: Colors.white)),
-              ...[0.25, 0.5, 1.0, 2.0, 3.0].map((speed) => Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: ElevatedButton(
-                  onPressed: () => _changeSpeed(speed),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    minimumSize: const Size(50, 36),
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                  ),
-                  child: Text('${speed}x'),
-                ),
-              )),
-            ],
-          ),
-          const SizedBox(height: 8),
-          // Jump Controls
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Jump Backward
-              IconButton(
-                onPressed: () => _jumpBackward(const Duration(seconds: 10)),
-                icon: const Icon(Icons.replay_10, color: Colors.white),
-                tooltip: 'Back 10s (Large)',
-              ),
-              IconButton(
-                onPressed: () => _jumpBackward(const Duration(seconds: 5)),
-                icon: const Icon(Icons.replay_5, color: Colors.white),
-                tooltip: 'Back 5s (Medium)',
-              ),
-              IconButton(
-                onPressed: () => _jumpBackward(const Duration(seconds: 2)),
-                icon: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.fast_rewind, color: Colors.white, size: 20),
-                    Text('2', style: TextStyle(color: Colors.white, fontSize: 12)),
-                  ],
-                ),
-                tooltip: 'Back 2s (Small)',
-              ),
-              const SizedBox(width: 8),
-              // Play/Pause Button
-              StreamBuilder<bool>(
-                stream: player.stream.playing,
-                builder: (context, snapshot) {
-                  final isPlaying = snapshot.data ?? false;
-                  return IconButton(
-                    onPressed: _togglePlayPause,
-                    icon: Icon(
-                      isPlaying ? Icons.pause : Icons.play_arrow,
-                      color: Colors.white,
-                      size: 32,
-                    ),
-                    tooltip: isPlaying ? 'Pause' : 'Play',
-                  );
-                },
-              ),
-              const SizedBox(width: 8),
-              // Jump Forward
-              IconButton(
-                onPressed: () => _jumpForward(const Duration(seconds: 2)),
-                icon: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('2', style: TextStyle(color: Colors.white, fontSize: 12)),
-                    Icon(Icons.fast_forward, color: Colors.white, size: 20),
-                  ],
-                ),
-                tooltip: 'Forward 2s (Small)',
-              ),
-              IconButton(
-                onPressed: () => _jumpForward(const Duration(seconds: 5)),
-                icon: const Icon(Icons.forward_5, color: Colors.white),
-                tooltip: 'Forward 5s (Medium)',
-              ),
-              IconButton(
-                onPressed: () => _jumpForward(const Duration(seconds: 10)),
-                icon: const Icon(Icons.forward_10, color: Colors.white),
-                tooltip: 'Forward 10s (Large)',
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-
   @override
   Widget build(BuildContext context) {
-    // Initialize control bar position centered on first build
-    _controlBarPosition ??= Offset(
-      MediaQuery.of(context).size.width / 2 - 175,
-      20,
-    );
-
     return Focus(
       autofocus: true,
       onKeyEvent: (node, event) {
@@ -662,124 +546,25 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
           
           // LAYER 3: Playback Controls (Centered at top) - Draggable
           if (hasVideoLoaded)
-            Positioned(
-              left: _controlBarPosition!.dx,
-              top: _controlBarPosition!.dy,
-              child: GestureDetector(
-                onPanUpdate: (details) {
-                  setState(() {
-                    _controlBarPosition = Offset(
-                      _controlBarPosition!.dx + details.delta.dx,
-                      _controlBarPosition!.dy + details.delta.dy,
-                    );
-                  });
-                },
-                child: _buildControlBar(),
-              ),
+            DraggableControlBar(
+              player: player,
+              onSpeedChange: _changeSpeed,
+              onJumpForward: _jumpForward,
+              onJumpBackward: _jumpBackward,
+              onTogglePlayPause: _togglePlayPause,
             ),
           
           // LAYER 4: Drawing Controls (Right Side)
           if (hasVideoLoaded)
-            Positioned(
-              top: 200,
-              right: 20,
-              child: Column(
-                children: [
-                  // Toggle Drawing Mode
-                  FloatingActionButton(
-                    onPressed: _toggleDrawingMode,
-                    backgroundColor: isDrawingMode ? Colors.orange : Colors.grey,
-                    child: Icon(
-                      isDrawingMode ? Icons.draw : Icons.touch_app,
-                    ),
-                    tooltip: isDrawingMode ? 'Disable Drawing' : 'Enable Drawing',
-                  ),
-                  const SizedBox(height: 8),
-                  // Reset Zoom
-                  FloatingActionButton(
-                    onPressed: _resetZoom,
-                    backgroundColor: Colors.purple,
-                    mini: true,
-                    child: const Icon(Icons.zoom_out_map),
-                    tooltip: 'Reset Zoom',
-                  ),
-                  // Only show drawing tools when drawing mode is enabled
-                  if (isDrawingMode) ...[
-                    const SizedBox(height: 8),
-                    // Clear Drawing
-                    FloatingActionButton(
-                      onPressed: _clearDrawing,
-                      backgroundColor: Colors.redAccent.shade700,
-                      mini: true,
-                      child: const Icon(Icons.clear),
-                      tooltip: 'Clear Drawings',
-                    ),
-                    const SizedBox(height: 8),
-                    // Tool Selection
-                    // Freehand tool
-                    FloatingActionButton(
-                      onPressed: () => setState(() => currentTool = DrawingTool.freehand),
-                      backgroundColor: currentTool == DrawingTool.freehand ? Colors.orange : Colors.grey.shade700,
-                      mini: true,
-                      child: const Icon(Icons.gesture, size: 20),
-                      tooltip: 'Freehand',
-                    ),
-                    const SizedBox(height: 8),
-                    // Line tool
-                    FloatingActionButton(
-                      onPressed: () => setState(() => currentTool = DrawingTool.line),
-                      backgroundColor: currentTool == DrawingTool.line ? Colors.orange : Colors.grey.shade700,
-                      mini: true,
-                      child: const Icon(Icons.remove, size: 20),
-                      tooltip: 'Line',
-                    ),
-                    const SizedBox(height: 8),
-                    // Arrow tool
-                    FloatingActionButton(
-                      onPressed: () => setState(() => currentTool = DrawingTool.arrow),
-                      backgroundColor: currentTool == DrawingTool.arrow ? Colors.orange : Colors.grey.shade700,
-                      mini: true,
-                      child: const Icon(Icons.arrow_forward, size: 20),
-                      tooltip: 'Arrow',
-                    ),
-                    const SizedBox(height: 8),
-                    // Laser pointer tool
-                    FloatingActionButton(
-                      onPressed: () => setState(() => currentTool = DrawingTool.laser),
-                      backgroundColor: currentTool == DrawingTool.laser ? Colors.orange : Colors.grey.shade700,
-                      mini: true,
-                      child: const Icon(Icons.flash_on, size: 20),
-                      tooltip: 'Laser Pointer',
-                    ),
-                    const SizedBox(height: 8),
-                    // Color Options
-                    ...[ 
-                      Colors.red,
-                      Colors.blue,
-                      Colors.yellow,
-                      Colors.green,
-                      Colors.white,
-                    ].map((color) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: GestureDetector(
-                        onTap: () => setState(() => drawingColor = color),
-                        child: Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: color,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: drawingColor == color ? Colors.white : Colors.grey,
-                              width: drawingColor == color ? 3 : 1,
-                            ),
-                          ),
-                        ),
-                      ),
-                    )),
-                  ],
-                ],
-              ),
+            DrawingToolsPanel(
+              isDrawingMode: isDrawingMode,
+              currentTool: currentTool,
+              drawingColor: drawingColor,
+              onToggleDrawingMode: _toggleDrawingMode,
+              onResetZoom: _resetZoom,
+              onClearDrawing: _clearDrawing,
+              onToolChange: (tool) => setState(() => currentTool = tool),
+              onColorChange: (color) => setState(() => drawingColor = color),
             ),
           
           // LAYER 5: Event Buttons (Shot/Turnover tracking)
@@ -1040,8 +825,12 @@ class LaserPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(LaserPainter oldDelegate) {
-    return trails != oldDelegate.trails ||
-        currentStroke != oldDelegate.currentStroke ||
+    // Always repaint if trails exist (they might be animating)
+    if (trails.isNotEmpty || oldDelegate.trails.isNotEmpty) {
+      return true;
+    }
+    
+    return currentStroke != oldDelegate.currentStroke ||
         cursorPosition != oldDelegate.cursorPosition ||
         cursorColor != oldDelegate.cursorColor ||
         strokeWidth != oldDelegate.strokeWidth ||
