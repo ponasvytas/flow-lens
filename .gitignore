@@ -27,6 +27,7 @@ migrate_working_dir/
 **/doc/api/
 **/ios/Flutter/.last_build_id
 .dart_tool/
+.flutter-plugins
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
@@ -43,3 +44,11 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Web related
+/web/flutter_service_worker.js
+/web/version.json
+
+# Exceptions to the above rules (uncomment if needed)
+# !/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
+# !/dev/ci/**/Gemfile.lock
