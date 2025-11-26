@@ -28,7 +28,7 @@ class LaserPointerOverlay extends StatefulWidget {
 }
 
 class _LaserPointerOverlayState extends State<LaserPointerOverlay> 
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   Offset? _cursorPosition;
   List<DrawingPoint> _currentStroke = [];
   DateTime? _lastCursorUpdate;
@@ -62,11 +62,12 @@ class _LaserPointerOverlayState extends State<LaserPointerOverlay>
   }
 
   void _scheduleAnimation(LaserTrail trail) {
+    // Mark as animating immediately to prevent duplicate scheduling
+    trail.isAnimating = true;
+    
     // Wait 3 seconds before starting animation
     Future.delayed(_animationDelay, () {
       if (!mounted || !widget.trails.contains(trail)) return;
-      
-      trail.isAnimating = true;
       
       // Create AnimationController with vsync for smooth frame rendering
       final controller = AnimationController(
