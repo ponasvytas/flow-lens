@@ -13,6 +13,8 @@ import 'widgets/shortcuts_panel.dart';
 import 'widgets/video_picker.dart';
 import 'widgets/control_bar.dart';
 import 'widgets/drawing_tools_panel.dart';
+import 'widgets/laser_pointer_overlay.dart';
+import 'widgets/video_canvas.dart';
 
 void main() {
   // 1. Initialize MediaKit (Crucial for the native video engine)
@@ -98,14 +100,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
   
   // Laser pointer state
   List<LaserTrail> laserTrails = [];
-  List<DrawingPoint> currentLaserStroke = [];
-  Offset? laserCursorPosition;
   static const Duration laserDelayBeforeAnimation = Duration(seconds: 3);
   static const Duration laserAnimationDuration = Duration(seconds: 1);
-  
-  // Performance: throttle cursor updates
-  DateTime? _lastCursorUpdate;
-  DateTime? _lastDragUpdate;
 
   // Zoom/Pan state
   final TransformationController _transformationController = TransformationController();
@@ -221,9 +217,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
         currentStroke = [DrawingPoint(position, drawingColor, strokeWidth)];
       } else if (currentTool == DrawingTool.line || currentTool == DrawingTool.arrow) {
         lineStart = position;
-      } else if (currentTool == DrawingTool.laser) {
-        currentLaserStroke = [DrawingPoint(position, drawingColor, strokeWidth)];
       }
+      // Laser tool handled by LaserPointerOverlay widget
     });
   }
 
@@ -233,9 +228,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
       currentDrawPosition = position;
       if (currentTool == DrawingTool.freehand && currentStroke.isNotEmpty) {
         currentStroke.add(DrawingPoint(position, drawingColor, strokeWidth));
-      } else if (currentTool == DrawingTool.laser && currentLaserStroke.isNotEmpty) {
-        currentLaserStroke.add(DrawingPoint(position, drawingColor, strokeWidth));
       }
+      // Laser tool handled by LaserPointerOverlay widget
       // For line/arrow tools, we don't update until drag ends
     });
   }
@@ -252,19 +246,24 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
       } else if (currentTool == DrawingTool.arrow && lineStart != null && currentDrawPosition != null) {
         arrowShapes.add(ArrowShape(lineStart!, currentDrawPosition!, drawingColor, strokeWidth));
         lineStart = null;
-      } else if (currentTool == DrawingTool.laser && currentLaserStroke.isNotEmpty) {
-        // Create laser trail and schedule animation
-        final trail = LaserTrail(
-          List.from(currentLaserStroke),
-          drawingColor,
-          strokeWidth,
-          DateTime.now(),
-        );
-        laserTrails.add(trail);
-        currentLaserStroke = [];
-        _scheduleLaserAnimation(trail);
       }
+      // Laser tool handled by LaserPointerOverlay widget
       currentDrawPosition = null;
+    });
+  }
+  
+  void _completeLaserDrawing(List<DrawingPoint> strokePoints) {
+    if (strokePoints.isEmpty) return;
+    setState(() {
+      // Create laser trail and schedule animation
+      final trail = LaserTrail(
+        strokePoints,
+        drawingColor,
+        strokeWidth,
+        DateTime.now(),
+      );
+      laserTrails.add(trail);
+      _scheduleLaserAnimation(trail);
     });
   }
 
@@ -276,7 +275,6 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
       currentStroke = [];
       lineStart = null;
       laserTrails.clear();
-      currentLaserStroke = [];
     });
   }
   
@@ -322,10 +320,6 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
   void _toggleDrawingMode() {
     setState(() {
       isDrawingMode = !isDrawingMode;
-      // Clear laser cursor when exiting drawing mode
-      if (!isDrawingMode) {
-        laserCursorPosition = null;
-      }
     });
   }
 
@@ -397,151 +391,35 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
         // The Stack widget allows us to layer items on top of each other
         children: [
           
-          // LAYER 1: The Video Player with Zoom/Pan (Bottom Layer)
-          Center(
-            child: InteractiveViewer(
-              transformationController: _transformationController,
-              panEnabled: !isDrawingMode, // Disable pan when drawing
-              scaleEnabled: !isDrawingMode, // Disable zoom when drawing
-              minScale: 1.0,
-              maxScale: 10.0, // Increased max zoom
-              child: SizedBox(
-                width: MediaQuery.of(context).size.width,
-                height: MediaQuery.of(context).size.width * (9 / 16),
-                child: Stack(
-                  children: [
-                    // Video layer with RepaintBoundary for performance
-                    RepaintBoundary(
-                      child: Video(controller: controller),
-                    ),
-                    
-                    // Drawing layer (scales with zoom) - for non-laser tools
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        ignoring: !isDrawingMode || currentTool == DrawingTool.laser,
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onDoubleTap: () {
-                            if (isDrawingMode) {
-                              _clearDrawing();
-                            }
-                          },
-                          onPanStart: (details) {
-                            if (currentTool != DrawingTool.laser) {
-                              _startDrawing(details.localPosition);
-                            }
-                          },
-                          onPanUpdate: (details) {
-                            if (currentTool != DrawingTool.laser) {
-                              _updateDrawing(details.localPosition);
-                            }
-                          },
-                          onPanEnd: (details) {
-                            if (currentTool != DrawingTool.laser) {
-                              _endDrawing();
-                            }
-                          },
-                          child: RepaintBoundary(
-                            child: CustomPaint(
-                              painter: DrawingPainter(
-                                drawingStrokes,
-                                lineShapes,
-                                arrowShapes,
-                                currentStroke,
-                                lineStart,
-                                currentDrawPosition,
-                                drawingColor,
-                                strokeWidth,
-                                currentTool,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          // LAYER 1: Video Canvas with Zoom/Pan and Drawing
+          VideoCanvas(
+            controller: controller,
+            transformationController: _transformationController,
+            isDrawingMode: isDrawingMode,
+            currentTool: currentTool,
+            drawingStrokes: drawingStrokes,
+            lineShapes: lineShapes,
+            arrowShapes: arrowShapes,
+            currentStroke: currentStroke,
+            lineStart: lineStart,
+            currentDrawPosition: currentDrawPosition,
+            drawingColor: drawingColor,
+            strokeWidth: strokeWidth,
+            onStartDrawing: _startDrawing,
+            onUpdateDrawing: _updateDrawing,
+            onEndDrawing: _endDrawing,
+            onClearDrawing: _clearDrawing,
           ),
           
           // LAYER 2: Laser trails and cursor (No zoom scaling - overlay)
           if (hasVideoLoaded)
-            Center(
-              child: SizedBox(
-                width: MediaQuery.of(context).size.width,
-                height: MediaQuery.of(context).size.width * (9 / 16),
-                child: IgnorePointer(
-                  ignoring: currentTool != DrawingTool.laser || !isDrawingMode,
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.none, // Hide system cursor in laser mode
-                    onHover: (event) {
-                      if (currentTool == DrawingTool.laser && isDrawingMode) {
-                        // Throttle cursor updates to max 20 updates/sec for performance
-                        final now = DateTime.now();
-                        if (_lastCursorUpdate == null || 
-                            now.difference(_lastCursorUpdate!) > const Duration(milliseconds: 50)) {
-                          setState(() {
-                            laserCursorPosition = event.localPosition;
-                          });
-                          _lastCursorUpdate = now;
-                        }
-                      }
-                    },
-                    onExit: (event) {
-                      if (currentTool == DrawingTool.laser) {
-                        setState(() {
-                          laserCursorPosition = null;
-                        });
-                      }
-                    },
-                    child: GestureDetector(
-                      onPanStart: (details) {
-                        if (currentTool == DrawingTool.laser && isDrawingMode) {
-                          setState(() {
-                            laserCursorPosition = details.localPosition;
-                          });
-                          _startDrawing(details.localPosition);
-                        }
-                      },
-                      onPanUpdate: (details) {
-                        if (currentTool == DrawingTool.laser && isDrawingMode) {
-                          // Throttle updates during drawing
-                          final now = DateTime.now();
-                          if (_lastDragUpdate == null ||
-                              now.difference(_lastDragUpdate!) > const Duration(milliseconds: 16)) {
-                            setState(() {
-                              laserCursorPosition = details.localPosition;
-                            });
-                            _updateDrawing(details.localPosition);
-                            _lastDragUpdate = now;
-                          } else {
-                            // Still update drawing points without setState for smoothness
-                            _updateDrawing(details.localPosition);
-                          }
-                        }
-                      },
-                      onPanEnd: (details) {
-                        if (currentTool == DrawingTool.laser && isDrawingMode) {
-                          _endDrawing();
-                        }
-                      },
-                      child: RepaintBoundary(
-                        child: CustomPaint(
-                          painter: LaserPainter(
-                            laserTrails,
-                            currentLaserStroke,
-                            laserCursorPosition,
-                            drawingColor,
-                            strokeWidth,
-                            currentTool == DrawingTool.laser && isDrawingMode,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+            LaserPointerOverlay(
+              isActive: true,
+              isDrawingMode: isDrawingMode,
+              trails: laserTrails,
+              color: drawingColor,
+              strokeWidth: strokeWidth,
+              onCompleteDrawing: _completeLaserDrawing,
             ),
           
           // LAYER 3: Playback Controls (Centered at top) - Draggable
