@@ -8,6 +8,10 @@ import 'dart:html' as html show Blob, Url;
 import 'dart:typed_data' show Uint8List;
 import 'dart:math' show atan2, cos, sin;
 
+import 'widgets/event_buttons.dart';
+import 'widgets/shortcuts_panel.dart';
+import 'widgets/video_picker.dart';
+
 void main() {
   // 1. Initialize MediaKit (Crucial for the native video engine)
   WidgetsFlutterBinding.ensureInitialized();
@@ -462,94 +466,6 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
     );
   }
 
-  Widget _buildShortcutsPanel() {
-    return Container(
-      width: 320,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.85),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blue.shade300, width: 2),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.keyboard, color: Colors.blue, size: 24),
-              const SizedBox(width: 8),
-              const Text(
-                'Keyboard Shortcuts',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.close, color: Colors.white70, size: 20),
-                onPressed: _toggleShortcutsPanel,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-            ],
-          ),
-          const Divider(color: Colors.white24, height: 24),
-          _buildShortcutRow('Space', 'Play/Pause video'),
-          const SizedBox(height: 8),
-          _buildShortcutRow('K', 'Toggle laser pointer'),
-          const SizedBox(height: 8),
-          _buildShortcutRow('C', 'Clear all drawings'),
-          const SizedBox(height: 8),
-          // Add more shortcuts here as you implement them
-          const Text(
-            'More shortcuts coming soon...',
-            style: TextStyle(
-              color: Colors.white54,
-              fontSize: 12,
-              fontStyle: FontStyle.italic,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildShortcutRow(String key, String description) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade800,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: Colors.grey.shade600, width: 1),
-          ),
-          child: Text(
-            key,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              fontFamily: 'monospace',
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            description,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -866,74 +782,24 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
               ),
             ),
           
-          // LAYER 5: The Big Buttons (The "Controller")
-          Positioned(
-            bottom: 40,
-            right: 20,
-            child: FloatingActionButton.extended(
-              onPressed: () => _logEvent("SHOT"),
-              backgroundColor: Colors.redAccent,
-              icon: const Icon(Icons.sports_hockey),
-              label: const Text("SHOT ON GOAL"),
-            ),
-          ),
-          
-          Positioned(
-            bottom: 40,
-            left: 20,
-            child: FloatingActionButton.extended(
-              onPressed: () => _logEvent("TURNOVER"),
-              backgroundColor: Colors.blueGrey,
-              icon: const Icon(Icons.error_outline),
-              label: const Text("TURNOVER"),
-            ),
+          // LAYER 5: Event Buttons (Shot/Turnover tracking)
+          EventButtons(
+            onShot: () => _logEvent("SHOT"),
+            onTurnover: () => _logEvent("TURNOVER"),
           ),
 
-          // LAYER 6: Shortcuts Toggle Button
+          // LAYER 6 & 7: Shortcuts Panel with Toggle Button
           if (hasVideoLoaded)
-            Positioned(
-              bottom: 110,
-              left: 20,
-              child: FloatingActionButton(
-                onPressed: _toggleShortcutsPanel,
-                backgroundColor: _showShortcuts ? Colors.blue : Colors.grey.shade700,
-                mini: true,
-                child: const Icon(Icons.keyboard),
-                tooltip: 'Show Keyboard Shortcuts',
-              ),
+            ShortcutsPanel(
+              isVisible: _showShortcuts,
+              onToggle: _toggleShortcutsPanel,
             ),
 
-          // LAYER 7: Shortcuts Panel
-          if (_showShortcuts && hasVideoLoaded)
-            Positioned(
-              top: 100,
-              left: 20,
-              child: Material(
-                color: Colors.transparent,
-                child: _buildShortcutsPanel(),
-              ),
-            ),
-
-          // Pick Video Button (Centered if no video is playing)
+          // Video Picker (shown when no video is loaded)
           if (!hasVideoLoaded)
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ElevatedButton(
-                    onPressed: _pickVideo,
-                    child: const Text("Select Game Video"),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _loadTestVideo,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                    ),
-                    child: const Text("Load Test Video (URL)"),
-                  ),
-                ],
-              ),
+            VideoPicker(
+              onPickVideo: _pickVideo,
+              onLoadTestVideo: _loadTestVideo,
             ),
         ],
       ),
