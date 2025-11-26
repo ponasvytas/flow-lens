@@ -100,8 +100,6 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
   
   // Laser pointer state
   List<LaserTrail> laserTrails = [];
-  static const Duration laserDelayBeforeAnimation = Duration(seconds: 3);
-  static const Duration laserAnimationDuration = Duration(seconds: 1);
 
   // Zoom/Pan state
   final TransformationController _transformationController = TransformationController();
@@ -255,7 +253,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
   void _completeLaserDrawing(List<DrawingPoint> strokePoints) {
     if (strokePoints.isEmpty) return;
     setState(() {
-      // Create laser trail and schedule animation
+      // Create laser trail - animation handled by LaserPointerOverlay
       final trail = LaserTrail(
         strokePoints,
         drawingColor,
@@ -263,7 +261,12 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
         DateTime.now(),
       );
       laserTrails.add(trail);
-      _scheduleLaserAnimation(trail);
+    });
+  }
+  
+  void _removeTrail(LaserTrail trail) {
+    setState(() {
+      laserTrails.remove(trail);
     });
   }
 
@@ -278,44 +281,6 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
     });
   }
   
-  void _scheduleLaserAnimation(LaserTrail trail) {
-    // Wait 3 seconds before starting animation
-    Future.delayed(laserDelayBeforeAnimation, () {
-      if (!mounted || !laserTrails.contains(trail)) return;
-      
-      trail.isAnimating = true;
-      final startTime = DateTime.now();
-      
-      // Use WidgetsBinding to schedule frame callbacks for smooth animation
-      void animate() {
-        if (!mounted || !laserTrails.contains(trail)) return;
-        
-        final elapsed = DateTime.now().difference(startTime);
-        final progress = (elapsed.inMilliseconds / laserAnimationDuration.inMilliseconds).clamp(0.0, 1.0);
-        
-        setState(() {
-          trail.animationProgress = progress;
-        });
-        
-        if (progress >= 1.0) {
-          // Animation complete, remove trail
-          setState(() {
-            laserTrails.remove(trail);
-          });
-        } else {
-          // Schedule next frame using WidgetsBinding to ensure continuous updates
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            Future.delayed(const Duration(milliseconds: 33), animate);
-          });
-        }
-      }
-      
-      // Start animation
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        animate();
-      });
-    });
-  }
 
   void _toggleDrawingMode() {
     setState(() {
@@ -414,12 +379,13 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
           // LAYER 2: Laser trails and cursor (No zoom scaling - overlay)
           if (hasVideoLoaded)
             LaserPointerOverlay(
-              isActive: true,
+              isActive: currentTool == DrawingTool.laser,
               isDrawingMode: isDrawingMode,
               trails: laserTrails,
               color: drawingColor,
               strokeWidth: strokeWidth,
               onCompleteDrawing: _completeLaserDrawing,
+              onRemoveTrail: _removeTrail,
             ),
           
           // LAYER 3: Playback Controls (Centered at top) - Draggable

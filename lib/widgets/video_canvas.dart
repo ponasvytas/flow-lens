@@ -60,7 +60,26 @@ class VideoCanvas extends StatelessWidget {
                 child: Video(controller: controller),
               ),
               
-              // Drawing layer (scales with zoom) - for non-laser tools
+              // Drawing layer - always show existing drawings
+              Positioned.fill(
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    painter: DrawingPainter(
+                      drawingStrokes,
+                      lineShapes,
+                      arrowShapes,
+                      currentStroke,
+                      lineStart,
+                      currentDrawPosition,
+                      drawingColor,
+                      strokeWidth,
+                      currentTool,
+                    ),
+                  ),
+                ),
+              ),
+              
+              // Gesture layer - only for non-laser tools
               if (currentTool != DrawingTool.laser)
                 Positioned.fill(
                   child: IgnorePointer(
@@ -75,21 +94,6 @@ class VideoCanvas extends StatelessWidget {
                       onPanStart: (details) => onStartDrawing(details.localPosition),
                       onPanUpdate: (details) => onUpdateDrawing(details.localPosition),
                       onPanEnd: (details) => onEndDrawing(),
-                      child: RepaintBoundary(
-                        child: CustomPaint(
-                          painter: DrawingPainter(
-                            drawingStrokes,
-                            lineShapes,
-                            arrowShapes,
-                            currentStroke,
-                            lineStart,
-                            currentDrawPosition,
-                            drawingColor,
-                            strokeWidth,
-                            currentTool,
-                          ),
-                        ),
-                      ),
                     ),
                   ),
                 ),
