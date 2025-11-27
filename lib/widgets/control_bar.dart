@@ -24,13 +24,14 @@ class DraggableControlBar extends StatefulWidget {
 
 class _DraggableControlBarState extends State<DraggableControlBar> {
   Offset? _position;
+  bool _isExpanded = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Initialize position centered on first build
+    // Initialize position top-left corner
     _position ??= Offset(
-      MediaQuery.of(context).size.width / 2 - 175,
+      20,
       20,
     );
   }
@@ -60,17 +61,38 @@ class _DraggableControlBarState extends State<DraggableControlBar> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Drag Handle
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 8),
-                decoration: BoxDecoration(
-                  color: Colors.white54,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+              // Drag Handle & Toggle Button
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(right: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white54,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () {
+                      setState(() {
+                        _isExpanded = !_isExpanded;
+                      });
+                    },
+                    icon: Icon(
+                      _isExpanded ? Icons.expand_less : Icons.expand_more,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    tooltip: _isExpanded ? 'Collapse' : 'Expand',
+                  ),
+                ],
               ),
               // Speed Controls
+              if (_isExpanded) ...[const SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -89,32 +111,38 @@ class _DraggableControlBarState extends State<DraggableControlBar> {
                   )),
                 ],
               ),
-              const SizedBox(height: 8),
+              if (_isExpanded) const SizedBox(height: 8),
               // Jump Controls
-              Row(
+              if (_isExpanded) Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   // Jump Backward
                   IconButton(
-                    onPressed: () => widget.onJumpBackward(const Duration(seconds: 10)),
-                    icon: const Icon(Icons.replay_10, color: Colors.white),
-                    tooltip: 'Back 10s (Large)',
-                  ),
-                  IconButton(
-                    onPressed: () => widget.onJumpBackward(const Duration(seconds: 5)),
-                    icon: const Icon(Icons.replay_5, color: Colors.white),
-                    tooltip: 'Back 5s (Medium)',
-                  ),
-                  IconButton(
-                    onPressed: () => widget.onJumpBackward(const Duration(seconds: 2)),
+                    onPressed: () => widget.onJumpBackward(const Duration(seconds: 30)),
                     icon: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.fast_rewind, color: Colors.white, size: 20),
-                        Text('2', style: TextStyle(color: Colors.white, fontSize: 12)),
+                        Text('30', style: TextStyle(color: Colors.white, fontSize: 12)),
                       ],
                     ),
-                    tooltip: 'Back 2s (Small)',
+                    tooltip: 'Back 30s (Large)',
+                  ),
+                  IconButton(
+                    onPressed: () => widget.onJumpBackward(const Duration(seconds: 10)),
+                    icon: const Icon(Icons.replay_10, color: Colors.white),
+                    tooltip: 'Back 10s (Medium)',
+                  ),
+                  IconButton(
+                    onPressed: () => widget.onJumpBackward(const Duration(seconds: 3)),
+                    icon: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.fast_rewind, color: Colors.white, size: 20),
+                        Text('3', style: TextStyle(color: Colors.white, fontSize: 12)),
+                      ],
+                    ),
+                    tooltip: 'Back 3s (Small)',
                   ),
                   const SizedBox(width: 8),
                   // Play/Pause Button
@@ -136,28 +164,34 @@ class _DraggableControlBarState extends State<DraggableControlBar> {
                   const SizedBox(width: 8),
                   // Jump Forward
                   IconButton(
-                    onPressed: () => widget.onJumpForward(const Duration(seconds: 2)),
+                    onPressed: () => widget.onJumpForward(const Duration(seconds: 3)),
                     icon: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text('2', style: TextStyle(color: Colors.white, fontSize: 12)),
+                        Text('3', style: TextStyle(color: Colors.white, fontSize: 12)),
                         Icon(Icons.fast_forward, color: Colors.white, size: 20),
                       ],
                     ),
-                    tooltip: 'Forward 2s (Small)',
-                  ),
-                  IconButton(
-                    onPressed: () => widget.onJumpForward(const Duration(seconds: 5)),
-                    icon: const Icon(Icons.forward_5, color: Colors.white),
-                    tooltip: 'Forward 5s (Medium)',
+                    tooltip: 'Forward 3s (Small)',
                   ),
                   IconButton(
                     onPressed: () => widget.onJumpForward(const Duration(seconds: 10)),
                     icon: const Icon(Icons.forward_10, color: Colors.white),
-                    tooltip: 'Forward 10s (Large)',
+                    tooltip: 'Forward 10s (Medium)',
+                  ),
+                  IconButton(
+                    onPressed: () => widget.onJumpForward(const Duration(seconds: 30)),
+                    icon: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('30', style: TextStyle(color: Colors.white, fontSize: 12)),
+                        Icon(Icons.fast_forward, color: Colors.white, size: 20),
+                      ],
+                    ),
+                    tooltip: 'Forward 30s (Large)',
                   ),
                 ],
-              ),
+              ),],
             ],
           ),
         ),

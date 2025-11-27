@@ -52,3 +52,8 @@ app.*.map.json
 # Exceptions to the above rules (uncomment if needed)
 # !/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
 # !/dev/ci/**/Gemfile.lock
+
+*.Identifier
+**/*.Identifier
+**/*:Zone.Identifier
+**/*:Zone.Identifier.*

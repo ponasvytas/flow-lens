@@ -47,7 +47,7 @@ class VideoCanvas extends StatelessWidget {
       child: InteractiveViewer(
         transformationController: transformationController,
         panEnabled: !isDrawingMode, // Disable pan when drawing
-        scaleEnabled: !isDrawingMode, // Disable zoom when drawing
+        scaleEnabled: !isDrawingMode, // Enable default scroll zoom when not drawing
         minScale: 1.0,
         maxScale: 10.0, // Increased max zoom
         child: SizedBox(
@@ -55,25 +55,40 @@ class VideoCanvas extends StatelessWidget {
           height: MediaQuery.of(context).size.width * (9 / 16),
           child: Stack(
             children: [
-              // Video layer with RepaintBoundary for performance
-              RepaintBoundary(
-                child: Video(controller: controller),
+              // Video layer with built-in controls and progress bar
+              MaterialVideoControlsTheme(
+                normal: MaterialVideoControlsThemeData(
+                  // Hide unwanted buttons
+                  topButtonBar: [], // Remove all top buttons (PIP, enhance, transcribe, etc.)
+                  displaySeekBar: true,
+                  automaticallyImplySkipNextButton: false,
+                  automaticallyImplySkipPreviousButton: false,
+                ),
+                fullscreen: const MaterialVideoControlsThemeData(
+                  topButtonBar: [], // Also hide in fullscreen
+                ),
+                child: Video(
+                  controller: controller,
+                  controls: MaterialDesktopVideoControls,
+                ),
               ),
               
               // Drawing layer - always show existing drawings
               Positioned.fill(
-                child: RepaintBoundary(
-                  child: CustomPaint(
-                    painter: DrawingPainter(
-                      drawingStrokes,
-                      lineShapes,
-                      arrowShapes,
-                      currentStroke,
-                      lineStart,
-                      currentDrawPosition,
-                      drawingColor,
-                      strokeWidth,
-                      currentTool,
+                child: IgnorePointer(
+                  child: RepaintBoundary(
+                    child: CustomPaint(
+                      painter: DrawingPainter(
+                        drawingStrokes,
+                        lineShapes,
+                        arrowShapes,
+                        currentStroke,
+                        lineStart,
+                        currentDrawPosition,
+                        drawingColor,
+                        strokeWidth,
+                        currentTool,
+                      ),
                     ),
                   ),
                 ),
@@ -85,7 +100,7 @@ class VideoCanvas extends StatelessWidget {
                   child: IgnorePointer(
                     ignoring: !isDrawingMode,
                     child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
+                      behavior: HitTestBehavior.opaque,  // Opaque to intercept all gestures when active
                       onDoubleTap: () {
                         if (isDrawingMode) {
                           onClearDrawing();

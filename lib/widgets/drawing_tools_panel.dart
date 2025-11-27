@@ -35,10 +35,10 @@ class DrawingToolsPanel extends StatelessWidget {
           FloatingActionButton(
             onPressed: onToggleDrawingMode,
             backgroundColor: isDrawingMode ? Colors.orange : Colors.grey,
+            tooltip: isDrawingMode ? 'Disable Drawing' : 'Enable Drawing',
             child: Icon(
               isDrawingMode ? Icons.draw : Icons.touch_app,
             ),
-            tooltip: isDrawingMode ? 'Disable Drawing' : 'Enable Drawing',
           ),
           const SizedBox(height: 8),
           // Reset Zoom
@@ -46,36 +46,62 @@ class DrawingToolsPanel extends StatelessWidget {
             onPressed: onResetZoom,
             backgroundColor: Colors.purple,
             mini: true,
-            child: const Icon(Icons.zoom_out_map),
             tooltip: 'Reset Zoom',
+            child: const Icon(Icons.zoom_out_map),
           ),
           // Only show drawing tools when drawing mode is enabled
           if (isDrawingMode) ...[
             const SizedBox(height: 8),
             // Clear Drawing
-            FloatingActionButton(
-              onPressed: onClearDrawing,
-              backgroundColor: Colors.redAccent.shade700,
-              mini: true,
-              child: const Icon(Icons.clear),
-              tooltip: 'Clear Drawings',
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                FloatingActionButton(
+                  onPressed: onClearDrawing,
+                  backgroundColor: Colors.redAccent.shade700,
+                  mini: true,
+                  tooltip: 'Clear Drawings (C)',
+                  child: const Icon(Icons.clear),
+                ),
+                // Shortcut badge
+                Positioned(
+                  top: -4,
+                  right: -4,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade700,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 1),
+                    ),
+                    child: const Text(
+                      'C',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 8),
             // Tool Selection
-            _buildToolButton(DrawingTool.freehand, Icons.gesture, 'Freehand'),
+            _buildToolButton(DrawingTool.freehand, Icons.gesture, 'Freehand (1)', '1'),
             const SizedBox(height: 8),
-            _buildToolButton(DrawingTool.line, Icons.remove, 'Line'),
+            _buildToolButton(DrawingTool.line, Icons.remove, 'Line (2)', '2'),
             const SizedBox(height: 8),
-            _buildToolButton(DrawingTool.arrow, Icons.arrow_forward, 'Arrow'),
+            _buildToolButton(DrawingTool.arrow, Icons.arrow_forward, 'Arrow (3)', '3'),
             const SizedBox(height: 8),
-            _buildToolButton(DrawingTool.laser, Icons.flash_on, 'Laser Pointer'),
+            _buildToolButton(DrawingTool.laser, Icons.flash_on, 'Laser Pointer (K)', 'K'),
             const SizedBox(height: 8),
             // Color Options
             ...[
+              const Color(0xFF753b8f),
               Colors.red,
               Colors.blue,
               Colors.yellow,
-              Colors.green,
               Colors.white,
             ].map((color) => Padding(
               padding: const EdgeInsets.only(bottom: 8),
@@ -101,13 +127,40 @@ class DrawingToolsPanel extends StatelessWidget {
     );
   }
 
-  Widget _buildToolButton(DrawingTool tool, IconData icon, String tooltip) {
-    return FloatingActionButton(
-      onPressed: () => onToolChange(tool),
-      backgroundColor: currentTool == tool ? Colors.orange : Colors.grey.shade700,
-      mini: true,
-      child: Icon(icon, size: 20),
-      tooltip: tooltip,
+  Widget _buildToolButton(DrawingTool tool, IconData icon, String tooltip, String? shortcut) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        FloatingActionButton(
+          onPressed: () => onToolChange(tool),
+          backgroundColor: currentTool == tool ? Colors.orange : Colors.grey.shade700,
+          mini: true,
+          tooltip: tooltip,
+          child: Icon(icon, size: 20),
+        ),
+        // Shortcut badge
+        if (shortcut != null)
+          Positioned(
+            top: -4,
+            right: -4,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade700,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 1),
+              ),
+              child: Text(
+                shortcut,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

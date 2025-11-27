@@ -1,20 +1,23 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:async';
+import 'dart:math' show atan2, cos, sin;
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:file_picker/file_picker.dart';
+// Conditional imports for web
 import 'dart:html' as html show Blob, Url;
 import 'dart:typed_data' show Uint8List;
-import 'dart:math' show atan2, cos, sin;
 
-import 'widgets/event_buttons.dart';
-import 'widgets/shortcuts_panel.dart';
-import 'widgets/video_picker.dart';
-import 'widgets/control_bar.dart';
-import 'widgets/drawing_tools_panel.dart';
-import 'widgets/laser_pointer_overlay.dart';
 import 'widgets/video_canvas.dart';
+import 'widgets/drawing_tools_panel.dart';
+import 'widgets/event_buttons.dart';
+import 'widgets/control_bar.dart';
+import 'widgets/laser_pointer_overlay.dart';
+import 'widgets/shortcuts_panel.dart';
+import 'widgets/branded_title_bar.dart';
+import 'widgets/video_picker.dart';
 
 void main() {
   // 1. Initialize MediaKit (Crucial for the native video engine)
@@ -95,7 +98,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
   Offset? currentDrawPosition;
   bool isDrawingMode = false;
   DrawingTool currentTool = DrawingTool.freehand;
-  Color drawingColor = Colors.red;
+  Color drawingColor = const Color(0xFF753b8f); // const Color(0xFF753b8f)
   double strokeWidth = 5.0;
   
   // Laser pointer state
@@ -110,6 +113,10 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
   // Shortcuts panel visibility
   bool _showShortcuts = false;
 
+  // Speed control state for hold-to-speed shortcuts
+  double _previousPlaybackSpeed = 1.0;
+  bool _isSpeedShortcutActive = false;
+
   @override
   void initState() {
     super.initState();
@@ -118,7 +125,6 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
       configuration: PlayerConfiguration(
         title: 'Hockey Analyzer',
         // Enable GPU acceleration for better performance
-        // Try multiple video output backends, fallback to gpu if wgpu not available
         vo: kIsWeb ? 'gpu,wgpu' : 'gpu',
         // Enable logging for debugging
         logLevel: MPVLogLevel.info,
@@ -197,14 +203,24 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
   void _jumpForward(Duration duration) {
     final currentPosition = player.state.position;
     final newPosition = currentPosition + duration;
-    player.seek(newPosition);
+    // Pause video during seek for smoother experience
+    final wasPlaying = player.state.playing;
+    player.pause();
+    player.seek(newPosition).then((_) {
+      if (wasPlaying) player.play();
+    });
     print("Jumped forward ${duration.inSeconds}s to ${newPosition.toString()}");
   }
 
   void _jumpBackward(Duration duration) {
     final currentPosition = player.state.position;
     final newPosition = currentPosition - duration;
-    player.seek(newPosition > Duration.zero ? newPosition : Duration.zero);
+    // Pause video during seek for smoother experience
+    final wasPlaying = player.state.playing;
+    player.pause();
+    player.seek(newPosition > Duration.zero ? newPosition : Duration.zero).then((_) {
+      if (wasPlaying) player.play();
+    });
     print("Jumped backward ${duration.inSeconds}s to ${newPosition.toString()}");
   }
 
@@ -323,17 +339,44 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
       onKeyEvent: (node, event) {
         // Handle key press events
         if (event is KeyDownEvent) {
-          // Toggle play/pause when spacebar is pressed
+          // Toggle play/pause          // Space bar: Play/Pause
           if (event.logicalKey == LogicalKeyboardKey.space) {
             _togglePlayPause();
             return KeyEventResult.handled;
           }
-          // Clear drawings when 'C' key is pressed
+          
+          // 'G' key: Toggle graphics/drawing mode
+          if (event.logicalKey == LogicalKeyboardKey.keyG) {
+            _toggleDrawingMode();
+            return KeyEventResult.handled;
+          }
+          
+          // Tool shortcuts (only in graphics mode)
+          if (isDrawingMode) {
+            // '1' key: Freehand tool
+            if (event.logicalKey == LogicalKeyboardKey.digit1) {
+              setState(() => currentTool = DrawingTool.freehand);
+              return KeyEventResult.handled;
+            }
+            // '2' key: Line tool
+            if (event.logicalKey == LogicalKeyboardKey.digit2) {
+              setState(() => currentTool = DrawingTool.line);
+              return KeyEventResult.handled;
+            }
+            // '3' key: Arrow tool
+            if (event.logicalKey == LogicalKeyboardKey.digit3) {
+              setState(() => currentTool = DrawingTool.arrow);
+              return KeyEventResult.handled;
+            }
+          }
+          
+          // 'C' key: Clear all drawings
           if (event.logicalKey == LogicalKeyboardKey.keyC) {
             _clearDrawing();
             return KeyEventResult.handled;
           }
-          // Toggle laser pointer when 'K' key is pressed
+          
+          // 'K' key: Toggle laser pointer when 'K' key is pressed
           if (event.logicalKey == LogicalKeyboardKey.keyK) {
             setState(() {
               if (currentTool == DrawingTool.laser) {
@@ -347,37 +390,123 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
             });
             return KeyEventResult.handled;
           }
+          
+          // Arrow key navigation shortcuts
+          final isCtrlPressed = HardwareKeyboard.instance.isControlPressed;
+          final isAltPressed = HardwareKeyboard.instance.isAltPressed;
+          
+          // Arrow Left: Jump backward
+          if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+            if (isCtrlPressed) {
+              // Ctrl+Left: Jump backward 30s
+              _jumpBackward(const Duration(seconds: 30));
+            } else if (isAltPressed) {
+              // Alt+Left: Jump backward 10s
+              _jumpBackward(const Duration(seconds: 10));
+            } else {
+              // Left: Jump backward 3s
+              _jumpBackward(const Duration(seconds: 3));
+            }
+            return KeyEventResult.handled;
+          }
+          
+          // Arrow Right: Jump forward
+          if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+            if (isCtrlPressed) {
+              // Ctrl+Right: Jump forward 30s
+              _jumpForward(const Duration(seconds: 30));
+            } else if (isAltPressed) {
+              // Alt+Right: Jump forward 10s
+              _jumpForward(const Duration(seconds: 10));
+            } else {
+              // Right: Jump forward 3s
+              _jumpForward(const Duration(seconds: 3));
+            }
+            return KeyEventResult.handled;
+          }
+          
+          // 'S' key: Set speed to 0.33x (slow motion)
+          if (event.logicalKey == LogicalKeyboardKey.keyS) {
+            player.setRate(0.33);
+            print("Playback speed set to 0.33x (slow motion)");
+            return KeyEventResult.handled;
+          }
+          
+          // 'D' key: Set speed to 1.0x (normal)
+          if (event.logicalKey == LogicalKeyboardKey.keyD) {
+            player.setRate(1.0);
+            print("Playback speed set to 1.0x (normal)");
+            return KeyEventResult.handled;
+          }
+          
+          // 'A' key: Jump backward 5 seconds
+          if (event.logicalKey == LogicalKeyboardKey.keyA) {
+            _jumpBackward(const Duration(seconds: 5));
+            return KeyEventResult.handled;
+          }
+          
+          // Hold 'F' for 3x forward speed
+          if (event.logicalKey == LogicalKeyboardKey.keyF && !_isSpeedShortcutActive) {
+            _previousPlaybackSpeed = player.state.rate;
+            _isSpeedShortcutActive = true;
+            player.setRate(3.0);
+            print("Fast forward: 3x speed (previous: ${_previousPlaybackSpeed}x)");
+            return KeyEventResult.handled;
+          }
+        }
+        // Handle key release events
+        if (event is KeyUpEvent) {
+          // Release 'F' to restore previous speed
+          if (event.logicalKey == LogicalKeyboardKey.keyF && _isSpeedShortcutActive) {
+            player.setRate(_previousPlaybackSpeed);
+            _isSpeedShortcutActive = false;
+            print("Speed restored to ${_previousPlaybackSpeed}x");
+            return KeyEventResult.handled;
+          }
         }
         return KeyEventResult.ignored;
       },
       child: Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        // The Stack widget allows us to layer items on top of each other
-        children: [
-          
-          // LAYER 1: Video Canvas with Zoom/Pan and Drawing
-          VideoCanvas(
-            controller: controller,
-            transformationController: _transformationController,
-            isDrawingMode: isDrawingMode,
-            currentTool: currentTool,
-            drawingStrokes: drawingStrokes,
-            lineShapes: lineShapes,
-            arrowShapes: arrowShapes,
-            currentStroke: currentStroke,
-            lineStart: lineStart,
-            currentDrawPosition: currentDrawPosition,
-            drawingColor: drawingColor,
-            strokeWidth: strokeWidth,
-            onStartDrawing: _startDrawing,
-            onUpdateDrawing: _updateDrawing,
-            onEndDrawing: _endDrawing,
-            onClearDrawing: _clearDrawing,
-          ),
+        backgroundColor: Colors.black,
+        body: Stack(
+          children: [
+            // LAYER 0: Branded Title Bar (Top)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: BrandedTitleBar(
+                onShowShortcuts: () => setState(() => _showShortcuts = !_showShortcuts),
+                showShortcuts: _showShortcuts,
+              ),
+            ),
+            
+            // LAYER 1: Video Canvas with Zoom/Pan and Drawing (with top padding)
+            Padding(
+              padding: const EdgeInsets.only(top: 64),
+              child: VideoCanvas(
+                controller: controller,
+                transformationController: _transformationController,
+                isDrawingMode: isDrawingMode,
+                currentTool: currentTool,
+                drawingStrokes: drawingStrokes,
+                lineShapes: lineShapes,
+                arrowShapes: arrowShapes,
+                currentStroke: currentStroke,
+                lineStart: lineStart,
+                currentDrawPosition: currentDrawPosition,
+                drawingColor: drawingColor,
+                strokeWidth: strokeWidth,
+                onStartDrawing: _startDrawing,
+                onUpdateDrawing: _updateDrawing,
+                onEndDrawing: _endDrawing,
+                onClearDrawing: _clearDrawing,
+              ),
+            ),
           
           // LAYER 2: Laser trails and cursor (No zoom scaling - overlay)
-          if (hasVideoLoaded)
+          // Only show when laser is active or there are trails to display
+          if (hasVideoLoaded && (currentTool == DrawingTool.laser || laserTrails.isNotEmpty))
             LaserPointerOverlay(
               isActive: currentTool == DrawingTool.laser,
               isDrawingMode: isDrawingMode,
@@ -417,7 +546,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
             onTurnover: () => _logEvent("TURNOVER"),
           ),
 
-          // LAYER 6 & 7: Shortcuts Panel with Toggle Button
+          // LAYER 6: Shortcuts Panel with Toggle Button
           if (hasVideoLoaded)
             ShortcutsPanel(
               isVisible: _showShortcuts,
@@ -475,10 +604,34 @@ class DrawingPainter extends CustomPainter {
         ..style = PaintingStyle.stroke;
 
       final path = Path();
-      path.moveTo(stroke.points.first.offset.dx, stroke.points.first.offset.dy);
-      for (var i = 1; i < stroke.points.length; i++) {
-        path.lineTo(stroke.points[i].offset.dx, stroke.points[i].offset.dy);
+      final points = _reducePoints(stroke.points.map((p) => p.offset).toList());
+      
+      if (points.isEmpty) continue;
+      path.moveTo(points.first.dx, points.first.dy);
+      
+      // Use quadratic curves for smooth lines
+      for (var i = 1; i < points.length; i++) {
+        final p0 = points[i - 1];
+        final p1 = points[i];
+        final controlPoint = Offset(
+          (p0.dx + p1.dx) / 2,
+          (p0.dy + p1.dy) / 2,
+        );
+        
+        if (i == 1) {
+          path.lineTo(controlPoint.dx, controlPoint.dy);
+        } else {
+          path.quadraticBezierTo(
+            p0.dx, p0.dy,
+            controlPoint.dx, controlPoint.dy,
+          );
+        }
       }
+      // Draw final segment
+      if (points.length > 1) {
+        path.lineTo(points.last.dx, points.last.dy);
+      }
+      
       canvas.drawPath(path, paint);
     }
 
@@ -518,10 +671,34 @@ class DrawingPainter extends CustomPainter {
         ..style = PaintingStyle.stroke;
 
       final path = Path();
-      path.moveTo(currentStroke.first.offset.dx, currentStroke.first.offset.dy);
-      for (var i = 1; i < currentStroke.length; i++) {
-        path.lineTo(currentStroke[i].offset.dx, currentStroke[i].offset.dy);
+      final points = _reducePoints(currentStroke.map((p) => p.offset).toList());
+      
+      if (points.isEmpty) return;
+      path.moveTo(points.first.dx, points.first.dy);
+      
+      // Use quadratic curves for smooth lines
+      for (var i = 1; i < points.length; i++) {
+        final p0 = points[i - 1];
+        final p1 = points[i];
+        final controlPoint = Offset(
+          (p0.dx + p1.dx) / 2,
+          (p0.dy + p1.dy) / 2,
+        );
+        
+        if (i == 1) {
+          path.lineTo(controlPoint.dx, controlPoint.dy);
+        } else {
+          path.quadraticBezierTo(
+            p0.dx, p0.dy,
+            controlPoint.dx, controlPoint.dy,
+          );
+        }
       }
+      // Draw final segment
+      if (points.length > 1) {
+        path.lineTo(points.last.dx, points.last.dy);
+      }
+      
       canvas.drawPath(path, paint);
     }
 
@@ -564,6 +741,30 @@ class DrawingPainter extends CustomPainter {
     // Draw arrowhead lines
     canvas.drawLine(end, arrowPoint1, paint);
     canvas.drawLine(end, arrowPoint2, paint);
+  }
+
+  // Reduce points by filtering out those too close together
+  List<Offset> _reducePoints(List<Offset> points, {double minDistance = 5.0}) {
+    if (points.length <= 2) return points;
+    
+    final reduced = <Offset>[points.first];
+    
+    for (var i = 1; i < points.length; i++) {
+      final lastPoint = reduced.last;
+      final currentPoint = points[i];
+      final distance = (currentPoint - lastPoint).distance;
+      
+      if (distance >= minDistance) {
+        reduced.add(currentPoint);
+      }
+    }
+    
+    // Always include the last point
+    if (reduced.last != points.last) {
+      reduced.add(points.last);
+    }
+    
+    return reduced;
   }
 
   @override

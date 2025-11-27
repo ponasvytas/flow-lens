@@ -37,8 +37,8 @@ class _LaserPointerOverlayState extends State<LaserPointerOverlay>
   // Animation management - each trail gets its own controller
   final Map<LaserTrail, AnimationController> _animationControllers = {};
   
-  static const Duration _animationDelay = Duration(seconds: 3);
-  static const Duration _animationDuration = Duration(seconds: 1);
+  static const Duration _animationDelay = Duration(milliseconds: 2000);
+  static const Duration _animationDuration = Duration(milliseconds: 500);
 
   @override
   void didUpdateWidget(LaserPointerOverlay oldWidget) {
