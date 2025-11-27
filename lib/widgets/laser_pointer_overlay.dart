@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../main.dart'; // For DrawingPoint, LaserTrail, LaserPainter
+import '../models/drawing_models.dart';
+import '../painters/laser_painter.dart';
 
 /// Laser pointer overlay with cursor tracking and trail drawing
 /// Manages its own cursor position state AND animations to avoid parent rebuilds
@@ -27,30 +28,30 @@ class LaserPointerOverlay extends StatefulWidget {
   State<LaserPointerOverlay> createState() => _LaserPointerOverlayState();
 }
 
-class _LaserPointerOverlayState extends State<LaserPointerOverlay> 
+class _LaserPointerOverlayState extends State<LaserPointerOverlay>
     with TickerProviderStateMixin {
   Offset? _cursorPosition;
   List<DrawingPoint> _currentStroke = [];
   DateTime? _lastCursorUpdate;
   DateTime? _lastDragUpdate;
-  
+
   // Animation management - each trail gets its own controller
   final Map<LaserTrail, AnimationController> _animationControllers = {};
-  
+
   static const Duration _animationDelay = Duration(milliseconds: 2000);
   static const Duration _animationDuration = Duration(milliseconds: 500);
 
   @override
   void didUpdateWidget(LaserPointerOverlay oldWidget) {
     super.didUpdateWidget(oldWidget);
-    
+
     // Check for new trails that need animation
     for (var trail in widget.trails) {
       if (!_animationControllers.containsKey(trail) && !trail.isAnimating) {
         _scheduleAnimation(trail);
       }
     }
-    
+
     // Clean up controllers for removed trails
     final removedTrails = _animationControllers.keys
         .where((trail) => !widget.trails.contains(trail))
@@ -64,19 +65,19 @@ class _LaserPointerOverlayState extends State<LaserPointerOverlay>
   void _scheduleAnimation(LaserTrail trail) {
     // Mark as animating immediately to prevent duplicate scheduling
     trail.isAnimating = true;
-    
+
     // Wait 3 seconds before starting animation
     Future.delayed(_animationDelay, () {
       if (!mounted || !widget.trails.contains(trail)) return;
-      
+
       // Create AnimationController with vsync for smooth frame rendering
       final controller = AnimationController(
         vsync: this,
         duration: _animationDuration,
       );
-      
+
       _animationControllers[trail] = controller;
-      
+
       // Update trail progress on each animation frame
       controller.addListener(() {
         if (mounted) {
@@ -86,7 +87,7 @@ class _LaserPointerOverlayState extends State<LaserPointerOverlay>
           });
         }
       });
-      
+
       // Remove trail when animation completes
       controller.addStatusListener((status) {
         if (status == AnimationStatus.completed) {
@@ -96,7 +97,7 @@ class _LaserPointerOverlayState extends State<LaserPointerOverlay>
           widget.onRemoveTrail(trail);
         }
       });
-      
+
       // Start the animation
       controller.forward();
     });
@@ -121,13 +122,16 @@ class _LaserPointerOverlayState extends State<LaserPointerOverlay>
         child: IgnorePointer(
           ignoring: !widget.isActive || !widget.isDrawingMode,
           child: MouseRegion(
-            cursor: widget.isActive && widget.isDrawingMode ? SystemMouseCursors.none : SystemMouseCursors.basic,
+            cursor: widget.isActive && widget.isDrawingMode
+                ? SystemMouseCursors.none
+                : SystemMouseCursors.basic,
             onHover: (event) {
               if (widget.isActive && widget.isDrawingMode) {
                 // Throttle cursor updates to max 20 updates/sec for performance
                 final now = DateTime.now();
                 if (_lastCursorUpdate == null ||
-                    now.difference(_lastCursorUpdate!) > const Duration(milliseconds: 50)) {
+                    now.difference(_lastCursorUpdate!) >
+                        const Duration(milliseconds: 50)) {
                   setState(() {
                     // ⭐ Only rebuilds THIS widget, not parent!
                     _cursorPosition = event.localPosition;
@@ -148,11 +152,13 @@ class _LaserPointerOverlayState extends State<LaserPointerOverlay>
                 if (widget.isActive && widget.isDrawingMode) {
                   setState(() {
                     _cursorPosition = details.localPosition;
-                    _currentStroke = [DrawingPoint(
-                      details.localPosition,
-                      widget.color,
-                      widget.strokeWidth,
-                    )];
+                    _currentStroke = [
+                      DrawingPoint(
+                        details.localPosition,
+                        widget.color,
+                        widget.strokeWidth,
+                      ),
+                    ];
                   });
                 }
               },
@@ -161,28 +167,35 @@ class _LaserPointerOverlayState extends State<LaserPointerOverlay>
                   // Throttle setState updates during drawing for performance
                   final now = DateTime.now();
                   if (_lastDragUpdate == null ||
-                      now.difference(_lastDragUpdate!) > const Duration(milliseconds: 16)) {
+                      now.difference(_lastDragUpdate!) >
+                          const Duration(milliseconds: 16)) {
                     setState(() {
                       _cursorPosition = details.localPosition;
-                      _currentStroke.add(DrawingPoint(
-                        details.localPosition,
-                        widget.color,
-                        widget.strokeWidth,
-                      ));
+                      _currentStroke.add(
+                        DrawingPoint(
+                          details.localPosition,
+                          widget.color,
+                          widget.strokeWidth,
+                        ),
+                      );
                     });
                     _lastDragUpdate = now;
                   } else {
                     // Still update stroke without setState for smoothness
-                    _currentStroke.add(DrawingPoint(
-                      details.localPosition,
-                      widget.color,
-                      widget.strokeWidth,
-                    ));
+                    _currentStroke.add(
+                      DrawingPoint(
+                        details.localPosition,
+                        widget.color,
+                        widget.strokeWidth,
+                      ),
+                    );
                   }
                 }
               },
               onPanEnd: (details) {
-                if (widget.isActive && widget.isDrawingMode && _currentStroke.isNotEmpty) {
+                if (widget.isActive &&
+                    widget.isDrawingMode &&
+                    _currentStroke.isNotEmpty) {
                   // Pass complete stroke to parent
                   widget.onCompleteDrawing(List.from(_currentStroke));
                   setState(() {

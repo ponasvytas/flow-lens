@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit_video/media_kit_video.dart';
-import '../main.dart'; // For DrawingTool, DrawingStroke, LineShape, ArrowShape, DrawingPoint, DrawingPainter
+import '../models/drawing_models.dart';
+import '../painters/drawing_painter.dart';
 
 /// Video canvas with zoom/pan and drawing layer for non-laser tools
 class VideoCanvas extends StatelessWidget {
@@ -47,7 +48,8 @@ class VideoCanvas extends StatelessWidget {
       child: InteractiveViewer(
         transformationController: transformationController,
         panEnabled: !isDrawingMode, // Disable pan when drawing
-        scaleEnabled: !isDrawingMode, // Enable default scroll zoom when not drawing
+        scaleEnabled:
+            !isDrawingMode, // Enable default scroll zoom when not drawing
         minScale: 1.0,
         maxScale: 10.0, // Increased max zoom
         child: SizedBox(
@@ -59,7 +61,8 @@ class VideoCanvas extends StatelessWidget {
               MaterialVideoControlsTheme(
                 normal: MaterialVideoControlsThemeData(
                   // Hide unwanted buttons
-                  topButtonBar: [], // Remove all top buttons (PIP, enhance, transcribe, etc.)
+                  topButtonBar:
+                      [], // Remove all top buttons (PIP, enhance, transcribe, etc.)
                   displaySeekBar: true,
                   automaticallyImplySkipNextButton: false,
                   automaticallyImplySkipPreviousButton: false,
@@ -72,7 +75,7 @@ class VideoCanvas extends StatelessWidget {
                   controls: MaterialDesktopVideoControls,
                 ),
               ),
-              
+
               // Drawing layer - always show existing drawings
               Positioned.fill(
                 child: IgnorePointer(
@@ -93,21 +96,24 @@ class VideoCanvas extends StatelessWidget {
                   ),
                 ),
               ),
-              
+
               // Gesture layer - only for non-laser tools
               if (currentTool != DrawingTool.laser)
                 Positioned.fill(
                   child: IgnorePointer(
                     ignoring: !isDrawingMode,
                     child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,  // Opaque to intercept all gestures when active
+                      behavior: HitTestBehavior
+                          .opaque, // Opaque to intercept all gestures when active
                       onDoubleTap: () {
                         if (isDrawingMode) {
                           onClearDrawing();
                         }
                       },
-                      onPanStart: (details) => onStartDrawing(details.localPosition),
-                      onPanUpdate: (details) => onUpdateDrawing(details.localPosition),
+                      onPanStart: (details) =>
+                          onStartDrawing(details.localPosition),
+                      onPanUpdate: (details) =>
+                          onUpdateDrawing(details.localPosition),
                       onPanEnd: (details) => onEndDrawing(),
                     ),
                   ),

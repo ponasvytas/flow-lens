@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../main.dart'; // For DrawingTool enum
+import '../models/drawing_models.dart';
 
 /// Drawing tools panel with tool selection, color picker, and controls
 class DrawingToolsPanel extends StatelessWidget {
@@ -36,9 +36,7 @@ class DrawingToolsPanel extends StatelessWidget {
             onPressed: onToggleDrawingMode,
             backgroundColor: isDrawingMode ? Colors.orange : Colors.grey,
             tooltip: isDrawingMode ? 'Disable Drawing' : 'Enable Drawing',
-            child: Icon(
-              isDrawingMode ? Icons.draw : Icons.touch_app,
-            ),
+            child: Icon(isDrawingMode ? Icons.draw : Icons.touch_app),
           ),
           const SizedBox(height: 8),
           // Reset Zoom
@@ -88,13 +86,28 @@ class DrawingToolsPanel extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             // Tool Selection
-            _buildToolButton(DrawingTool.freehand, Icons.gesture, 'Freehand (1)', '1'),
+            _buildToolButton(
+              DrawingTool.freehand,
+              Icons.gesture,
+              'Freehand (1)',
+              '1',
+            ),
             const SizedBox(height: 8),
             _buildToolButton(DrawingTool.line, Icons.remove, 'Line (2)', '2'),
             const SizedBox(height: 8),
-            _buildToolButton(DrawingTool.arrow, Icons.arrow_forward, 'Arrow (3)', '3'),
+            _buildToolButton(
+              DrawingTool.arrow,
+              Icons.arrow_forward,
+              'Arrow (3)',
+              '3',
+            ),
             const SizedBox(height: 8),
-            _buildToolButton(DrawingTool.laser, Icons.flash_on, 'Laser Pointer (K)', 'K'),
+            _buildToolButton(
+              DrawingTool.laser,
+              Icons.flash_on,
+              'Laser Pointer (K)',
+              'K',
+            ),
             const SizedBox(height: 8),
             // Color Options
             ...[
@@ -103,37 +116,48 @@ class DrawingToolsPanel extends StatelessWidget {
               Colors.blue,
               Colors.yellow,
               Colors.white,
-            ].map((color) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: GestureDetector(
-                onTap: () => onColorChange(color),
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: color,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: drawingColor == color ? Colors.white : Colors.grey,
-                      width: drawingColor == color ? 3 : 1,
+            ].map(
+              (color) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: GestureDetector(
+                  onTap: () => onColorChange(color),
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: drawingColor == color
+                            ? Colors.white
+                            : Colors.grey,
+                        width: drawingColor == color ? 3 : 1,
+                      ),
                     ),
                   ),
                 ),
               ),
-            )),
+            ),
           ],
         ],
       ),
     );
   }
 
-  Widget _buildToolButton(DrawingTool tool, IconData icon, String tooltip, String? shortcut) {
+  Widget _buildToolButton(
+    DrawingTool tool,
+    IconData icon,
+    String tooltip,
+    String? shortcut,
+  ) {
     return Stack(
       clipBehavior: Clip.none,
       children: [
         FloatingActionButton(
           onPressed: () => onToolChange(tool),
-          backgroundColor: currentTool == tool ? Colors.orange : Colors.grey.shade700,
+          backgroundColor: currentTool == tool
+              ? Colors.orange
+              : Colors.grey.shade700,
           mini: true,
           tooltip: tooltip,
           child: Icon(icon, size: 20),
