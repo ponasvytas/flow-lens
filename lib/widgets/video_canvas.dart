@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import '../models/drawing_models.dart';
 import '../painters/drawing_painter.dart';
+import 'drawing_interaction_overlay.dart';
 
 /// Video canvas with zoom/pan and drawing layer for non-laser tools
 class VideoCanvas extends StatelessWidget {
@@ -12,14 +13,11 @@ class VideoCanvas extends StatelessWidget {
   final List<DrawingStroke> drawingStrokes;
   final List<LineShape> lineShapes;
   final List<ArrowShape> arrowShapes;
-  final List<DrawingPoint> currentStroke;
-  final Offset? lineStart;
-  final Offset? currentDrawPosition;
   final Color drawingColor;
   final double strokeWidth;
-  final Function(Offset) onStartDrawing;
-  final Function(Offset) onUpdateDrawing;
-  final VoidCallback onEndDrawing;
+  final Function(DrawingStroke) onStrokeCompleted;
+  final Function(LineShape) onLineCompleted;
+  final Function(ArrowShape) onArrowCompleted;
   final VoidCallback onClearDrawing;
 
   const VideoCanvas({
@@ -30,14 +28,11 @@ class VideoCanvas extends StatelessWidget {
     required this.drawingStrokes,
     required this.lineShapes,
     required this.arrowShapes,
-    required this.currentStroke,
-    required this.lineStart,
-    required this.currentDrawPosition,
     required this.drawingColor,
     required this.strokeWidth,
-    required this.onStartDrawing,
-    required this.onUpdateDrawing,
-    required this.onEndDrawing,
+    required this.onStrokeCompleted,
+    required this.onLineCompleted,
+    required this.onArrowCompleted,
     required this.onClearDrawing,
     super.key,
   });
@@ -85,9 +80,9 @@ class VideoCanvas extends StatelessWidget {
                         drawingStrokes,
                         lineShapes,
                         arrowShapes,
-                        currentStroke,
-                        lineStart,
-                        currentDrawPosition,
+                        [],
+                        null,
+                        null,
                         drawingColor,
                         strokeWidth,
                         currentTool,
@@ -97,25 +92,18 @@ class VideoCanvas extends StatelessWidget {
                 ),
               ),
 
-              // Gesture layer - only for non-laser tools
-              if (currentTool != DrawingTool.laser)
+              // Interaction Layer (Active drawing)
+              if (isDrawingMode && currentTool != DrawingTool.laser)
                 Positioned.fill(
-                  child: IgnorePointer(
-                    ignoring: !isDrawingMode,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior
-                          .opaque, // Opaque to intercept all gestures when active
-                      onDoubleTap: () {
-                        if (isDrawingMode) {
-                          onClearDrawing();
-                        }
-                      },
-                      onPanStart: (details) =>
-                          onStartDrawing(details.localPosition),
-                      onPanUpdate: (details) =>
-                          onUpdateDrawing(details.localPosition),
-                      onPanEnd: (details) => onEndDrawing(),
-                    ),
+                  child: DrawingInteractionOverlay(
+                    isDrawingMode: isDrawingMode,
+                    currentTool: currentTool,
+                    drawingColor: drawingColor,
+                    strokeWidth: strokeWidth,
+                    onStrokeCompleted: onStrokeCompleted,
+                    onLineCompleted: onLineCompleted,
+                    onArrowCompleted: onArrowCompleted,
+                    onClearDrawing: onClearDrawing,
                   ),
                 ),
             ],

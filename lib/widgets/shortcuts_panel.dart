@@ -17,7 +17,7 @@ class ShortcutsPanel extends StatelessWidget {
       children: [
         // Shortcuts Toggle Button
         Positioned(
-          bottom: 110,
+          bottom: 140,
           left: 20,
           child: FloatingActionButton(
             onPressed: onToggle,
@@ -33,10 +33,7 @@ class ShortcutsPanel extends StatelessWidget {
           Positioned(
             top: 100,
             left: 20,
-            child: Material(
-              color: Colors.transparent,
-              child: _buildPanel(),
-            ),
+            child: Material(color: Colors.transparent, child: _buildPanel()),
           ),
       ],
     );
@@ -131,10 +128,7 @@ class ShortcutsPanel extends StatelessWidget {
         Expanded(
           child: Text(
             description,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-            ),
+            style: const TextStyle(color: Colors.white, fontSize: 14),
           ),
         ),
       ],

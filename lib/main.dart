@@ -43,9 +43,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
   List<DrawingStroke> drawingStrokes = [];
   List<LineShape> lineShapes = [];
   List<ArrowShape> arrowShapes = [];
-  List<DrawingPoint> currentStroke = [];
-  Offset? lineStart;
-  Offset? currentDrawPosition;
+  // Active drawing state moved to DrawingInteractionOverlay
   bool isDrawingMode = false;
   DrawingTool currentTool = DrawingTool.freehand;
   Color drawingColor = const Color(0xFF753b8f); // const Color(0xFF753b8f)
@@ -180,66 +178,21 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
     );
   }
 
-  void _startDrawing(Offset position) {
-    if (!isDrawingMode) return;
+  void _onStrokeCompleted(DrawingStroke stroke) {
     setState(() {
-      if (currentTool == DrawingTool.freehand) {
-        currentStroke = [DrawingPoint(position, drawingColor, strokeWidth)];
-      } else if (currentTool == DrawingTool.line ||
-          currentTool == DrawingTool.arrow) {
-        lineStart = position;
-      }
-      // Laser tool handled by LaserPointerOverlay widget
+      drawingStrokes.add(stroke);
     });
   }
 
-  void _updateDrawing(Offset position) {
-    if (!isDrawingMode) return;
+  void _onLineCompleted(LineShape line) {
     setState(() {
-      currentDrawPosition = position;
-      if (currentTool == DrawingTool.freehand && currentStroke.isNotEmpty) {
-        currentStroke.add(DrawingPoint(position, drawingColor, strokeWidth));
-      }
-      // Laser tool handled by LaserPointerOverlay widget
-      // For line/arrow tools, we don't update until drag ends
+      lineShapes.add(line);
     });
   }
 
-  void _endDrawing() {
-    if (!isDrawingMode) return;
+  void _onArrowCompleted(ArrowShape arrow) {
     setState(() {
-      if (currentTool == DrawingTool.freehand && currentStroke.isNotEmpty) {
-        drawingStrokes.add(
-          DrawingStroke(List.from(currentStroke), drawingColor, strokeWidth),
-        );
-        currentStroke = [];
-      } else if (currentTool == DrawingTool.line &&
-          lineStart != null &&
-          currentDrawPosition != null) {
-        lineShapes.add(
-          LineShape(
-            lineStart!,
-            currentDrawPosition!,
-            drawingColor,
-            strokeWidth,
-          ),
-        );
-        lineStart = null;
-      } else if (currentTool == DrawingTool.arrow &&
-          lineStart != null &&
-          currentDrawPosition != null) {
-        arrowShapes.add(
-          ArrowShape(
-            lineStart!,
-            currentDrawPosition!,
-            drawingColor,
-            strokeWidth,
-          ),
-        );
-        lineStart = null;
-      }
-      // Laser tool handled by LaserPointerOverlay widget
-      currentDrawPosition = null;
+      arrowShapes.add(arrow);
     });
   }
 
@@ -268,8 +221,6 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
       drawingStrokes.clear();
       lineShapes.clear();
       arrowShapes.clear();
-      currentStroke = [];
-      lineStart = null;
       laserTrails.clear();
     });
   }
@@ -473,14 +424,11 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
                 drawingStrokes: drawingStrokes,
                 lineShapes: lineShapes,
                 arrowShapes: arrowShapes,
-                currentStroke: currentStroke,
-                lineStart: lineStart,
-                currentDrawPosition: currentDrawPosition,
                 drawingColor: drawingColor,
                 strokeWidth: strokeWidth,
-                onStartDrawing: _startDrawing,
-                onUpdateDrawing: _updateDrawing,
-                onEndDrawing: _endDrawing,
+                onStrokeCompleted: _onStrokeCompleted,
+                onLineCompleted: _onLineCompleted,
+                onArrowCompleted: _onArrowCompleted,
                 onClearDrawing: _clearDrawing,
               ),
             ),

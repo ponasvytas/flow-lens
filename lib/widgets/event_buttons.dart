@@ -17,7 +17,7 @@ class EventButtons extends StatelessWidget {
       children: [
         // SHOT ON GOAL button (bottom right)
         Positioned(
-          bottom: 60,
+          bottom: 80,
           right: 20,
           child: FloatingActionButton.extended(
             onPressed: onShot,
@@ -29,7 +29,7 @@ class EventButtons extends StatelessWidget {
 
         // TURNOVER button (bottom left)
         Positioned(
-          bottom: 60,
+          bottom: 80,
           left: 20,
           child: FloatingActionButton.extended(
             onPressed: onTurnover,
