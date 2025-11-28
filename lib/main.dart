@@ -10,9 +10,11 @@ import 'dart:html' as html show Blob, Url;
 import 'dart:typed_data' show Uint8List;
 
 import 'models/drawing_models.dart';
+import 'models/game_event.dart';
 import 'widgets/video_canvas.dart';
 import 'widgets/drawing_tools_panel.dart';
-import 'widgets/event_buttons.dart';
+import 'widgets/event_buttons_panel.dart';
+import 'widgets/smart_hud.dart';
 import 'widgets/control_bar.dart';
 import 'widgets/laser_pointer_overlay.dart';
 import 'widgets/shortcuts_panel.dart';
@@ -58,6 +60,10 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
 
   // Video loading state
   bool hasVideoLoaded = false;
+
+  // Event Tracking State
+  List<GameEvent> gameEvents = [];
+  GameEvent? _activeEvent; // The event currently being edited in the HUD
 
   // Shortcuts panel visibility
   bool _showShortcuts = false;
@@ -250,13 +256,57 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
     });
   }
 
-  void _logEvent(String eventType) {
-    // This is where you would save the data to your database later
+  void _onEventTriggered(EventCategory category) {
     final position = player.state.position;
-    print("EVENT: $eventType at ${position.toString()}");
+    final newEvent = GameEvent(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      timestamp: position,
+      category: category,
+      label: _getDefaultLabel(category),
+      grade: _getDefaultGrade(category),
+    );
 
-    // Visual feedback: Pause briefly to let user focus?
-    // player.pause();
+    setState(() {
+      gameEvents.add(newEvent);
+      _activeEvent = newEvent; // Show HUD for this event
+    });
+
+    print("EVENT ADDED: ${newEvent.label} at ${position.toString()}");
+  }
+
+  void _updateEvent(GameEvent updatedEvent) {
+    setState(() {
+      final index = gameEvents.indexWhere((e) => e.id == updatedEvent.id);
+      if (index != -1) {
+        gameEvents[index] = updatedEvent;
+        _activeEvent = updatedEvent; // Keep HUD open/updated
+      }
+    });
+    print("EVENT UPDATED: ${updatedEvent.label} -> ${updatedEvent.grade}");
+  }
+
+  void _dismissHUD() {
+    setState(() {
+      _activeEvent = null;
+    });
+  }
+
+  String _getDefaultLabel(EventCategory category) {
+    return switch (category) {
+      EventCategory.shot => "Shot",
+      EventCategory.pass => "Pass",
+      EventCategory.battle => "Battle",
+      EventCategory.defense => "Defense",
+      EventCategory.teamPlay => "Team Play",
+      EventCategory.penalty => "Penalty",
+    };
+  }
+
+  EventGrade _getDefaultGrade(EventCategory category) {
+    return switch (category) {
+      EventCategory.defense || EventCategory.penalty => EventGrade.negative,
+      _ => EventGrade.neutral,
+    };
   }
 
   @override
@@ -470,11 +520,34 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
                 onColorChange: (color) => setState(() => drawingColor = color),
               ),
 
-            // LAYER 5: Event Buttons (Shot/Turnover tracking)
-            EventButtons(
-              onShot: () => _logEvent("SHOT"),
-              onTurnover: () => _logEvent("TURNOVER"),
-            ),
+            // LAYER 5: Event Buttons (Centered above progress bar)
+            if (hasVideoLoaded)
+              Positioned(
+                bottom:
+                    80, // Positioned above the progress bar (which is usually at bottom)
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Smart HUD (appears above buttons)
+                      if (_activeEvent != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: SmartHUD(
+                            event: _activeEvent!,
+                            onUpdateEvent: _updateEvent,
+                            onDismiss: _dismissHUD,
+                          ),
+                        ),
+
+                      // Event Buttons Row
+                      EventButtonsPanel(onEventTriggered: _onEventTriggered),
+                    ],
+                  ),
+                ),
+              ),
 
             // LAYER 6: Shortcuts Panel with Toggle Button
             if (hasVideoLoaded)

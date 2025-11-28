@@ -1,5 +1,16 @@
 # Performance Refactoring Status
 
+## ✅ Completed: Isolate Laser Pointer State
+
+**Objective**: Prevent full-app rebuilds during laser pointer usage.
+
+**Verification**:
+-   Analyzed `LaserPointerOverlay`: It is already a `StatefulWidget` that manages its own `_cursorPosition` and `_currentStroke`.
+-   It uses `MouseRegion` and `GestureDetector` internally to handle events.
+-   It uses `AnimationController` internally for trail fading.
+-   `main.dart` only receives completed trails via `onCompleteDrawing`.
+-   **Conclusion**: The laser pointer implementation was already optimized and isolated. No further changes were needed in this step.
+
 ## ✅ Completed: Isolate Active Drawing State
 
 **Objective**: Prevent full-app rebuilds during high-frequency drawing gestures.
@@ -30,9 +41,8 @@
 
 ## 🔜 Next Steps
 
-1.  **Isolate Laser Pointer State**:
-    -   Apply a similar pattern to the Laser Pointer tool.
-    -   Currently, `LaserPointerOverlay` is a separate widget, but check if it triggers parent rebuilds. (It seems to be already isolated in `LaserPointerOverlay`, but `main.dart` might still be managing some state).
+1.  **Optimize Control Bar**:
+    -   Ensure the draggable control bar doesn't rebuild the video player when moved. (Verified: `DraggableControlBar` manages its own position state).
 
-2.  **Optimize Control Bar**:
-    -   Ensure the draggable control bar doesn't rebuild the video player when moved.
+2.  **Final Verification**:
+    -   Run the app and test all tools.
