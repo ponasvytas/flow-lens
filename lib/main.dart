@@ -6,9 +6,9 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:file_picker/file_picker.dart';
 // Conditional imports for web
-import 'dart:html' as html show Blob, Url;
 import 'dart:typed_data' show Uint8List;
 
+import 'utils/video_loader.dart';
 import 'models/drawing_models.dart';
 import 'models/game_event.dart';
 import 'widgets/video_canvas.dart';
@@ -108,10 +108,13 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
         // Web: Use bytes to create a blob URL
         final Uint8List? bytes = result.files.single.bytes;
         if (bytes != null) {
-          final blob = html.Blob([bytes]);
-          final url = html.Url.createObjectUrlFromBlob(blob);
-          await player.open(Media(url));
-          print("Loaded video from blob URL: $url");
+          final url = await createUrlFromBytes(bytes);
+          if (url != null) {
+            await player.open(Media(url));
+            print("Loaded video from blob URL: $url");
+          } else {
+            print("Error: Failed to create URL from bytes");
+          }
         } else {
           print("Error: No bytes available from file picker on web");
         }
