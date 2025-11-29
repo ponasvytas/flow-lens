@@ -20,6 +20,7 @@ import 'widgets/laser_pointer_overlay.dart';
 import 'widgets/shortcuts_panel.dart';
 import 'widgets/branded_title_bar.dart';
 import 'widgets/video_picker.dart';
+import 'widgets/video_progress_bar.dart';
 
 void main() {
   // 1. Initialize MediaKit (Crucial for the native video engine)
@@ -526,8 +527,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
             // LAYER 5: Event Buttons (Centered above progress bar)
             if (hasVideoLoaded)
               Positioned(
-                bottom:
-                    80, // Positioned above the progress bar (which is usually at bottom)
+                bottom: 140, // Positioned above the progress bar
                 left: 0,
                 right: 0,
                 child: Center(
@@ -552,7 +552,20 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
                 ),
               ),
 
-            // LAYER 6: Shortcuts Panel with Toggle Button
+            // LAYER 6: Video Progress Bar
+            if (hasVideoLoaded)
+              VideoProgressBar(
+                player: player,
+                events: gameEvents,
+                onEventTap: (event) {
+                  player.seek(event.timestamp);
+                  setState(() {
+                    _activeEvent = event;
+                  });
+                },
+              ),
+
+            // LAYER 7: Shortcuts Panel with Toggle Button
             if (hasVideoLoaded)
               ShortcutsPanel(
                 isVisible: _showShortcuts,

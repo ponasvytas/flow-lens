@@ -23,8 +23,8 @@ class ShortcutsPanel extends StatelessWidget {
             onPressed: onToggle,
             backgroundColor: isVisible ? Colors.blue : Colors.grey.shade700,
             mini: true,
-            child: const Icon(Icons.keyboard),
             tooltip: 'Show Keyboard Shortcuts',
+            child: const Icon(Icons.keyboard),
           ),
         ),
 

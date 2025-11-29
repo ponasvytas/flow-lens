@@ -1,19 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
+import '../models/game_event.dart';
+import 'event_timeline.dart';
 
 /// Video progress bar with seek functionality
 class VideoProgressBar extends StatelessWidget {
   final Player player;
+  final List<GameEvent> events;
+  final Function(GameEvent) onEventTap;
 
   const VideoProgressBar({
     required this.player,
+    required this.events,
+    required this.onEventTap,
     super.key,
   });
 
   @override
   Widget build(BuildContext context) {
     return Positioned(
-      bottom: 60, // Position above control bar
+      bottom: 20, // Position at the bottom
       left: 20,
       right: 20,
       child: Container(
@@ -25,6 +31,23 @@ class VideoProgressBar extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Timeline Events
+            StreamBuilder<Duration>(
+              stream: player.stream.duration,
+              builder: (context, durationSnapshot) {
+                final duration = durationSnapshot.data ?? Duration.zero;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24.0,
+                  ), // Match slider padding roughly
+                  child: EventTimeline(
+                    events: events,
+                    totalDuration: duration,
+                    onEventTap: onEventTap,
+                  ),
+                );
+              },
+            ),
             // Progress bar
             StreamBuilder<Duration>(
               stream: player.stream.position,
@@ -56,7 +79,8 @@ class VideoProgressBar extends StatelessWidget {
                         inactiveColor: Colors.grey.shade700,
                         onChanged: (newValue) {
                           final newPosition = Duration(
-                            milliseconds: (newValue * duration.inMilliseconds).round(),
+                            milliseconds: (newValue * duration.inMilliseconds)
+                                .round(),
                           );
                           player.seek(newPosition);
                         },
