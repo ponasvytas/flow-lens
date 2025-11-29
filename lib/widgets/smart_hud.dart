@@ -197,7 +197,7 @@ class _SmartHUDState extends State<SmartHUD>
       case EventCategory.defense:
         return ["Goal Against", "Save", "Block", "Clear", "Breakdown"];
       case EventCategory.teamPlay:
-        return ["Breakout", "Zone Entry", "Regroup", "Forecheck"];
+        return ["Breakout", "Zone Entry", "Regroup", "Forecheck", "Face Off"];
       case EventCategory.penalty:
         return ["Us", "Them"];
     }
