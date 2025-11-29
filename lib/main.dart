@@ -21,6 +21,7 @@ import 'widgets/shortcuts_panel.dart';
 import 'widgets/branded_title_bar.dart';
 import 'widgets/video_picker.dart';
 import 'widgets/video_progress_bar.dart';
+import 'services/event_storage_service.dart';
 
 void main() {
   // 1. Initialize MediaKit (Crucial for the native video engine)
@@ -72,6 +73,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
   // Speed control state for hold-to-speed shortcuts
   double _previousPlaybackSpeed = 1.0;
   bool _isSpeedShortcutActive = false;
+
+  final EventStorageService _storageService = EventStorageService();
 
   @override
   void initState() {
@@ -128,6 +131,47 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
         } else {
           print("Error: No file path available");
         }
+      }
+    }
+  }
+
+  Future<void> _saveEvents() async {
+    try {
+      await _storageService.saveEvents(gameEvents);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Events saved successfully')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save events: $e')));
+      }
+    }
+  }
+
+  Future<void> _loadEvents() async {
+    try {
+      final events = await _storageService.loadEvents();
+      if (events.isNotEmpty) {
+        setState(() {
+          gameEvents.clear();
+          gameEvents.addAll(events);
+          _activeEvent = null; // Clear active selection
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Loaded ${events.length} events')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to load events: $e')));
       }
     }
   }
@@ -464,6 +508,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
                 onShowShortcuts: () =>
                     setState(() => _showShortcuts = !_showShortcuts),
                 showShortcuts: _showShortcuts,
+                onSaveEvents: hasVideoLoaded ? _saveEvents : null,
+                onLoadEvents: hasVideoLoaded ? _loadEvents : null,
               ),
             ),
 

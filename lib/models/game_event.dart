@@ -57,4 +57,33 @@ class GameEvent {
       detail: detail ?? this.detail,
     );
   }
+
+  // JSON Serialization
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'timestamp': timestamp.inMilliseconds,
+      'category': category.name,
+      'grade': grade.name,
+      'label': label,
+      'detail': detail,
+    };
+  }
+
+  factory GameEvent.fromJson(Map<String, dynamic> json) {
+    return GameEvent(
+      id: json['id'] as String,
+      timestamp: Duration(milliseconds: json['timestamp'] as int),
+      category: EventCategory.values.firstWhere(
+        (e) => e.name == json['category'],
+        orElse: () => EventCategory.shot,
+      ),
+      grade: EventGrade.values.firstWhere(
+        (e) => e.name == json['grade'],
+        orElse: () => EventGrade.neutral,
+      ),
+      label: json['label'] as String,
+      detail: json['detail'] as String?,
+    );
+  }
 }

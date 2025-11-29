@@ -4,10 +4,14 @@ import 'package:flutter/material.dart';
 class BrandedTitleBar extends StatelessWidget {
   final VoidCallback onShowShortcuts;
   final bool showShortcuts;
+  final VoidCallback? onSaveEvents;
+  final VoidCallback? onLoadEvents;
 
   const BrandedTitleBar({
     required this.onShowShortcuts,
     required this.showShortcuts,
+    this.onSaveEvents,
+    this.onLoadEvents,
     super.key,
   });
 
@@ -65,7 +69,7 @@ class BrandedTitleBar extends StatelessWidget {
             },
           ),
           const SizedBox(width: 12),
-          
+
           // Brand Text
           const Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -90,9 +94,25 @@ class BrandedTitleBar extends StatelessWidget {
               ),
             ],
           ),
-          
+
           const Spacer(),
-          
+
+          // Save/Load Actions
+          if (onSaveEvents != null)
+            IconButton(
+              onPressed: onSaveEvents,
+              tooltip: 'Save Events',
+              icon: const Icon(Icons.save_alt, color: Colors.white70),
+            ),
+          if (onLoadEvents != null)
+            IconButton(
+              onPressed: onLoadEvents,
+              tooltip: 'Load Events',
+              icon: const Icon(Icons.upload_file, color: Colors.white70),
+            ),
+
+          const SizedBox(width: 8),
+
           // Shortcuts Toggle Button
           IconButton(
             onPressed: onShowShortcuts,
