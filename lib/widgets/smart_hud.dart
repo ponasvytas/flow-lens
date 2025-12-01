@@ -5,11 +5,13 @@ import '../models/game_event.dart';
 class SmartHUD extends StatefulWidget {
   final GameEvent event;
   final Function(GameEvent) onUpdateEvent;
+  final Function(GameEvent) onDeleteEvent;
   final VoidCallback onDismiss;
 
   const SmartHUD({
     required this.event,
     required this.onUpdateEvent,
+    required this.onDeleteEvent,
     required this.onDismiss,
     super.key,
   });
@@ -82,6 +84,7 @@ class _SmartHUDState extends State<SmartHUD>
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                // Left: Label
                 Text(
                   widget.event.label,
                   style: const TextStyle(
@@ -90,6 +93,8 @@ class _SmartHUDState extends State<SmartHUD>
                     fontSize: 16,
                   ),
                 ),
+
+                // Right: Controls (Grade + Delete)
                 Row(
                   children: [
                     _buildGradeButton(
@@ -108,6 +113,29 @@ class _SmartHUDState extends State<SmartHUD>
                       EventGrade.negative,
                       Icons.thumb_down,
                       Colors.red,
+                    ),
+                    const SizedBox(width: 12), // Spacer before delete
+                    // Delete Button
+                    InkWell(
+                      onTap: () {
+                        _dismissTimer.cancel();
+                        widget.onDeleteEvent(widget.event);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: Colors.red.withOpacity(0.5),
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.delete_outline,
+                          size: 16,
+                          color: Colors.redAccent,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -158,7 +186,7 @@ class _SmartHUDState extends State<SmartHUD>
       onTap: () {
         _handleInteraction();
         // Auto-grade logic based on tag
-        EventGrade newGrade = widget.event.grade;
+        EventGrade? newGrade = widget.event.grade;
         if (_isPositiveTag(tag)) newGrade = EventGrade.positive;
         if (_isNegativeTag(tag)) newGrade = EventGrade.negative;
 

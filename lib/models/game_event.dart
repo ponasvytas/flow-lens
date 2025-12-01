@@ -19,7 +19,7 @@ class GameEvent {
   final String id;
   final Duration timestamp;
   final EventCategory category;
-  final EventGrade grade;
+  final EventGrade? grade;
   final String label; // e.g., "Breakout", "Wrist Shot", "Goal"
   final String? detail; // Optional context e.g., "Intercepted", "Wide"
 
@@ -27,7 +27,7 @@ class GameEvent {
     required this.id,
     required this.timestamp,
     required this.category,
-    this.grade = EventGrade.neutral,
+    this.grade,
     required this.label,
     this.detail,
   });
@@ -37,6 +37,7 @@ class GameEvent {
     EventGrade.positive => Colors.green,
     EventGrade.negative => Colors.red,
     EventGrade.neutral => Colors.grey,
+    null => Colors.white,
   };
 
   // CopyWith for immutability updates
@@ -64,7 +65,7 @@ class GameEvent {
       'id': id,
       'timestamp': timestamp.inMilliseconds,
       'category': category.name,
-      'grade': grade.name,
+      'grade': grade?.name,
       'label': label,
       'detail': detail,
     };
@@ -78,10 +79,12 @@ class GameEvent {
         (e) => e.name == json['category'],
         orElse: () => EventCategory.shot,
       ),
-      grade: EventGrade.values.firstWhere(
-        (e) => e.name == json['grade'],
-        orElse: () => EventGrade.neutral,
-      ),
+      grade: json['grade'] != null
+          ? EventGrade.values.firstWhere(
+              (e) => e.name == json['grade'],
+              orElse: () => EventGrade.neutral,
+            )
+          : null,
       label: json['label'] as String,
       detail: json['detail'] as String?,
     );

@@ -83,8 +83,9 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
     player = Player(
       configuration: PlayerConfiguration(
         title: 'Hockey Analyzer',
-        // Enable GPU acceleration for better performance
-        vo: kIsWeb ? 'gpu,wgpu' : 'gpu',
+        // Enable GPU acceleration for better performance (Native only)
+        // On Web, let the browser/media_kit handle the rendering backend
+        vo: kIsWeb ? null : 'gpu',
         // Enable logging for debugging
         logLevel: MPVLogLevel.info,
       ),
@@ -114,8 +115,16 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
         if (bytes != null) {
           final url = await createUrlFromBytes(bytes);
           if (url != null) {
-            await player.open(Media(url));
-            print("Loaded video from blob URL: $url");
+            try {
+              // Open without auto-play to avoid immediate WakeLock/Play restrictions
+              await player.open(Media(url), play: false);
+              print("Loaded video from blob URL: $url");
+
+              // Attempt to play
+              await player.play();
+            } catch (e) {
+              print("Error opening/playing video: $e");
+            }
           } else {
             print("Error: Failed to create URL from bytes");
           }
@@ -311,30 +320,51 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
       timestamp: position,
       category: category,
       label: _getDefaultLabel(category),
-      grade: _getDefaultGrade(category),
+      grade: null, // Start with no grade
     );
 
     setState(() {
-      gameEvents.add(newEvent);
-      _activeEvent = newEvent; // Show HUD for this event
+      // Do NOT add to gameEvents yet. Wait for confirmation (detail + grade).
+      _activeEvent = newEvent;
     });
 
-    print("EVENT ADDED: ${newEvent.label} at ${position.toString()}");
+    print("EVENT DRAFTED: ${newEvent.label} at ${position.toString()}");
   }
 
   void _updateEvent(GameEvent updatedEvent) {
     setState(() {
-      final index = gameEvents.indexWhere((e) => e.id == updatedEvent.id);
-      if (index != -1) {
-        gameEvents[index] = updatedEvent;
-        _activeEvent = updatedEvent; // Keep HUD open/updated
+      // Check if the event is now "complete" (has detail and grade)
+      final isComplete =
+          updatedEvent.detail != null && updatedEvent.grade != null;
+
+      if (isComplete) {
+        final index = gameEvents.indexWhere((e) => e.id == updatedEvent.id);
+        if (index != -1) {
+          // Update existing
+          gameEvents[index] = updatedEvent;
+        } else {
+          // Add new confirmed event
+          gameEvents.add(updatedEvent);
+          print("EVENT CONFIRMED: ${updatedEvent.label}");
+        }
       }
+
+      // Always update active event state so HUD reflects changes
+      _activeEvent = updatedEvent;
     });
-    print("EVENT UPDATED: ${updatedEvent.label} -> ${updatedEvent.grade}");
+  }
+
+  void _deleteEvent(GameEvent event) {
+    setState(() {
+      gameEvents.removeWhere((e) => e.id == event.id);
+      _activeEvent = null; // Close HUD
+    });
+    print("EVENT DELETED: ${event.label}");
   }
 
   void _dismissHUD() {
     setState(() {
+      // If the event wasn't saved (not in list), it's discarded
       _activeEvent = null;
     });
   }
@@ -347,13 +377,6 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
       EventCategory.defense => "Defense",
       EventCategory.teamPlay => "Team Play",
       EventCategory.penalty => "Penalty",
-    };
-  }
-
-  EventGrade _getDefaultGrade(EventCategory category) {
-    return switch (category) {
-      EventCategory.defense || EventCategory.penalty => EventGrade.negative,
-      _ => EventGrade.neutral,
     };
   }
 
@@ -573,7 +596,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
             // LAYER 5: Event Buttons (Centered above progress bar)
             if (hasVideoLoaded)
               Positioned(
-                bottom: 140, // Positioned above the progress bar
+                bottom: 110, // Positioned above the progress bar
                 left: 0,
                 right: 0,
                 child: Center(
@@ -587,6 +610,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
                           child: SmartHUD(
                             event: _activeEvent!,
                             onUpdateEvent: _updateEvent,
+                            onDeleteEvent: _deleteEvent,
                             onDismiss: _dismissHUD,
                           ),
                         ),
