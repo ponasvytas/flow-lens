@@ -193,7 +193,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
     try {
       // Using a reliable test video that works well on mobile browsers
       const testVideoUrl =
-          "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+          // "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+          "https://firebasestorage.googleapis.com/v0/b/flow-video-analyzer.firebasestorage.app/o/12U%20Storm%20Select%20vs%2012U%20Pelicans%20Mexico.mp4?alt=media&token=efa9d272-61e6-445c-972c-f444970d494e";
       // Alternative: Your GitHub video
       // const testVideoUrl = "https://github.com/ponasvytas/hockey-video-analyst/releases/download/v0.0.1-alpha/part5.mp4";
 
