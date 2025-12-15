@@ -209,6 +209,28 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
     }
   }
 
+  Future<void> _loadUrl(String url) async {
+    setState(() {
+      hasVideoLoaded = true;
+    });
+
+    try {
+      print("Loading video from URL: $url");
+      await player.open(Media(url));
+      print("Successfully loaded video");
+    } catch (e) {
+      print("Error loading video: $e");
+      setState(() {
+        hasVideoLoaded = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to load video: $e')));
+      }
+    }
+  }
+
   void _changeSpeed(double speed) {
     player.setRate(speed);
     print("Playback speed: ${speed}x");
@@ -648,6 +670,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
               VideoPicker(
                 onPickVideo: _pickVideo,
                 onLoadTestVideo: _loadTestVideo,
+                onLoadUrl: _loadUrl,
               ),
           ],
         ),
