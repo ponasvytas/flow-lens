@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
+import '../models/sport_profile.dart';
+import 'sport_profile_selector.dart';
 
-/// Initial video loading screen with file picker and test video options
+/// Initial video loading screen with sport selection and file picker
 class VideoPicker extends StatefulWidget {
   final VoidCallback onPickVideo;
   final VoidCallback onLoadTestVideo;
   final ValueChanged<String> onLoadUrl;
+  final ValueChanged<SportProfile> onSportSelected;
 
   const VideoPicker({
     required this.onPickVideo,
     required this.onLoadTestVideo,
     required this.onLoadUrl,
+    required this.onSportSelected,
     super.key,
   });
 
@@ -19,6 +23,7 @@ class VideoPicker extends StatefulWidget {
 
 class _VideoPickerState extends State<VideoPicker> {
   final TextEditingController _urlController = TextEditingController();
+  SportProfile? _selectedSport;
 
   @override
   void dispose() {
@@ -26,8 +31,31 @@ class _VideoPickerState extends State<VideoPicker> {
     super.dispose();
   }
 
+  void _onSportSelected(SportProfile profile) {
+    setState(() {
+      _selectedSport = profile;
+    });
+    widget.onSportSelected(profile);
+  }
+
+  void _onBackToSportSelection() {
+    setState(() {
+      _selectedSport = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_selectedSport == null) {
+      return SportProfileSelector(
+        onProfileSelected: _onSportSelected,
+      );
+    }
+
+    return _buildVideoSelector(context);
+  }
+
+  Widget _buildVideoSelector(BuildContext context) {
     return Center(
       child: Container(
         constraints: const BoxConstraints(maxWidth: 400),
@@ -36,6 +64,31 @@ class _VideoPickerState extends State<VideoPicker> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  onPressed: _onBackToSportSelection,
+                  tooltip: 'Change sport',
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  _selectedSport!.iconData,
+                  color: const Color(0xFF753b8f),
+                  size: 32,
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  _selectedSport!.displayName,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: widget.onPickVideo,
               icon: const Icon(Icons.file_upload),
