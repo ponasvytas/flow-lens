@@ -1,5 +1,10 @@
 # Project-level configuration.
 cmake_minimum_required(VERSION 3.14)
+
+# Allow older cmake_minimum_required() in subdirectories (e.g., Firebase C++ SDK)
+# This is needed for CMake 4.x compatibility with older SDKs
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "Minimum CMake policy version")
+
 project(coach_flow_video_analyzer LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
