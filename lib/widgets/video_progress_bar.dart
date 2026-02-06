@@ -19,11 +19,11 @@ class VideoProgressBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Positioned(
-      bottom: 20, // Position at the bottom
+      bottom: 10, // Lower position to show more video
       left: 20,
       right: 20,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         decoration: BoxDecoration(
           color: Colors.black.withOpacity(0.5),
           borderRadius: BorderRadius.circular(8),
@@ -37,9 +37,11 @@ class VideoProgressBar extends StatelessWidget {
               builder: (context, durationSnapshot) {
                 final duration = durationSnapshot.data ?? Duration.zero;
                 return Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24.0,
-                  ), // Match slider padding roughly
+                  padding: const EdgeInsets.only(
+                    left: 60.0,
+                    right: 60.0,
+                    top: 2.0,
+                  ), // Match time label width (45px each + 10px padding)
                   child: EventTimeline(
                     events: events,
                     totalDuration: duration,
@@ -48,7 +50,7 @@ class VideoProgressBar extends StatelessWidget {
                 );
               },
             ),
-            // Progress bar
+            // Progress bar with time labels on sides
             StreamBuilder<Duration>(
               stream: player.stream.position,
               builder: (context, positionSnapshot) {
@@ -61,66 +63,62 @@ class VideoProgressBar extends StatelessWidget {
                         ? position.inMilliseconds / duration.inMilliseconds
                         : 0.0;
 
-                    return SliderTheme(
-                      data: SliderThemeData(
-                        trackHeight: 4.0,
-                        thumbShape: const RoundSliderThumbShape(
-                          enabledThumbRadius: 6.0,
-                        ),
-                        overlayShape: const RoundSliderOverlayShape(
-                          overlayRadius: 14.0,
-                        ),
-                      ),
-                      child: Slider(
-                        value: value.clamp(0.0, 1.0),
-                        min: 0.0,
-                        max: 1.0,
-                        activeColor: Colors.blue,
-                        inactiveColor: Colors.grey.shade700,
-                        onChanged: (newValue) {
-                          final newPosition = Duration(
-                            milliseconds: (newValue * duration.inMilliseconds)
-                                .round(),
-                          );
-                          player.seek(newPosition);
-                        },
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-            // Time display
-            StreamBuilder<Duration>(
-              stream: player.stream.position,
-              builder: (context, positionSnapshot) {
-                return StreamBuilder<Duration>(
-                  stream: player.stream.duration,
-                  builder: (context, durationSnapshot) {
-                    final position = positionSnapshot.data ?? Duration.zero;
-                    final duration = durationSnapshot.data ?? Duration.zero;
-
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
+                    return Row(
+                      children: [
+                        // Current time (left)
+                        SizedBox(
+                          width: 45,
+                          child: Text(
                             _formatDuration(position),
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 12,
+                              fontSize: 11,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                        // Seekbar (center, expanded)
+                        Expanded(
+                          child: SliderTheme(
+                            data: SliderThemeData(
+                              trackHeight: 4.0,
+                              thumbShape: const RoundSliderThumbShape(
+                                enabledThumbRadius: 6.0,
+                              ),
+                              overlayShape: const RoundSliderOverlayShape(
+                                overlayRadius: 14.0,
+                              ),
+                            ),
+                            child: Slider(
+                              value: value.clamp(0.0, 1.0),
+                              min: 0.0,
+                              max: 1.0,
+                              activeColor: Colors.blue,
+                              inactiveColor: Colors.grey.shade700,
+                              onChanged: (newValue) {
+                                final newPosition = Duration(
+                                  milliseconds:
+                                      (newValue * duration.inMilliseconds)
+                                          .round(),
+                                );
+                                player.seek(newPosition);
+                              },
                             ),
                           ),
-                          Text(
+                        ),
+                        // Duration (right)
+                        SizedBox(
+                          width: 45,
+                          child: Text(
                             _formatDuration(duration),
                             style: const TextStyle(
                               color: Colors.white70,
-                              fontSize: 12,
+                              fontSize: 11,
                             ),
+                            textAlign: TextAlign.center,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     );
                   },
                 );

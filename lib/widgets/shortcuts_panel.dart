@@ -1,41 +1,37 @@
 import 'package:flutter/material.dart';
 
-/// Keyboard shortcuts panel with toggle button
+/// Keyboard shortcuts panel - toggleable and draggable
 class ShortcutsPanel extends StatelessWidget {
   final bool isVisible;
   final VoidCallback onToggle;
+  final double positionX;
+  final double positionY;
+  final Function(double dx, double dy) onPositionChanged;
+  final VoidCallback? onResetPosition;
 
   const ShortcutsPanel({
     required this.isVisible,
     required this.onToggle,
+    required this.positionX,
+    required this.positionY,
+    required this.onPositionChanged,
+    this.onResetPosition,
     super.key,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        // Shortcuts Toggle Button
-        Positioned(
-          bottom: 140,
-          left: 20,
-          child: FloatingActionButton(
-            onPressed: onToggle,
-            backgroundColor: isVisible ? Colors.blue : Colors.grey.shade700,
-            mini: true,
-            tooltip: 'Show Keyboard Shortcuts',
-            child: const Icon(Icons.keyboard),
-          ),
-        ),
-
-        // Shortcuts Panel
-        if (isVisible)
-          Positioned(
-            top: 100,
-            left: 20,
-            child: Material(color: Colors.transparent, child: _buildPanel()),
-          ),
-      ],
+    if (!isVisible) return const SizedBox.shrink();
+    
+    return Positioned(
+      left: positionX,
+      top: positionY,
+      child: GestureDetector(
+        onPanUpdate: (details) {
+          onPositionChanged(details.delta.dx, details.delta.dy);
+        },
+        child: Material(color: Colors.transparent, child: _buildPanel()),
+      ),
     );
   }
 
@@ -54,7 +50,9 @@ class ShortcutsPanel extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.keyboard, color: Colors.blue, size: 24),
+              const Icon(Icons.drag_handle, color: Colors.blue, size: 24),
+              const SizedBox(width: 8),
+              const Icon(Icons.keyboard, color: Colors.blue, size: 20),
               const SizedBox(width: 8),
               const Text(
                 'Keyboard Shortcuts',
@@ -65,11 +63,21 @@ class ShortcutsPanel extends StatelessWidget {
                 ),
               ),
               const Spacer(),
+              if (onResetPosition != null)
+                IconButton(
+                  icon: const Icon(Icons.refresh, color: Colors.white70, size: 18),
+                  onPressed: onResetPosition,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  tooltip: 'Reset position',
+                ),
+              const SizedBox(width: 4),
               IconButton(
                 icon: const Icon(Icons.close, color: Colors.white70, size: 20),
                 onPressed: onToggle,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
+                tooltip: 'Close',
               ),
             ],
           ),
@@ -78,7 +86,7 @@ class ShortcutsPanel extends StatelessWidget {
           const SizedBox(height: 8),
           _buildShortcutRow('←/→', 'Jump ±3 seconds'),
           const SizedBox(height: 8),
-          _buildShortcutRow('Alt+←/→', 'Jump ±10 seconds'),
+          _buildShortcutRow('Shift+←/→', 'Jump ±10 seconds'),
           const SizedBox(height: 8),
           _buildShortcutRow('Ctrl+←/→', 'Jump ±30 seconds'),
           const SizedBox(height: 8),
@@ -90,13 +98,15 @@ class ShortcutsPanel extends StatelessWidget {
           const SizedBox(height: 8),
           _buildShortcutRow('C', 'Clear all drawings'),
           const SizedBox(height: 8),
-          _buildShortcutRow('S', 'Set speed to 0.33x (slow)'),
+          _buildShortcutRow('S', 'Set speed to slow (settings)'),
           const SizedBox(height: 8),
-          _buildShortcutRow('D', 'Set speed to 1.0x (normal)'),
+          _buildShortcutRow('D', 'Set speed to default (settings)'),
           const SizedBox(height: 8),
           _buildShortcutRow('A', 'Jump back 5 seconds'),
           const SizedBox(height: 8),
           _buildShortcutRow('F (Hold)', '3x forward speed'),
+          const SizedBox(height: 8),
+          _buildShortcutRow('M', 'Toggle mute/unmute'),
           const SizedBox(height: 8),
           _buildShortcutRow('Scroll', 'Zoom in/out (when not drawing)'),
         ],

@@ -1,14 +1,5 @@
 import 'package:flutter/material.dart';
 
-enum EventCategory {
-  shot, // Offensive chances (Us)
-  pass, // Puck movement
-  battle, // 1v1, Hits, Board play
-  defense, // Defensive plays / Shots Against
-  teamPlay, // Macro: Breakouts, Entries, Regroups
-  penalty, // Stoppages / Infractions
-}
-
 enum EventGrade {
   positive, // Good (Green)
   negative, // Bad (Red)
@@ -18,18 +9,23 @@ enum EventGrade {
 class GameEvent {
   final String id;
   final Duration timestamp;
-  final EventCategory category;
   final EventGrade? grade;
   final String label; // e.g., "Breakout", "Wrist Shot", "Goal"
   final String? detail; // Optional context e.g., "Intercepted", "Wide"
+  
+  final String sportId;
+  final String categoryId;
+  final String? eventTypeId;
 
   GameEvent({
     required this.id,
     required this.timestamp,
-    required this.category,
     this.grade,
     required this.label,
     this.detail,
+    this.sportId = 'hockey',
+    required this.categoryId,
+    this.eventTypeId,
   });
 
   // Helper to determine color based on grade
@@ -44,18 +40,22 @@ class GameEvent {
   GameEvent copyWith({
     String? id,
     Duration? timestamp,
-    EventCategory? category,
     EventGrade? grade,
     String? label,
     String? detail,
+    String? sportId,
+    String? categoryId,
+    String? eventTypeId,
   }) {
     return GameEvent(
       id: id ?? this.id,
       timestamp: timestamp ?? this.timestamp,
-      category: category ?? this.category,
       grade: grade ?? this.grade,
       label: label ?? this.label,
       detail: detail ?? this.detail,
+      sportId: sportId ?? this.sportId,
+      categoryId: categoryId ?? this.categoryId,
+      eventTypeId: eventTypeId ?? this.eventTypeId,
     );
   }
 
@@ -64,10 +64,12 @@ class GameEvent {
     return {
       'id': id,
       'timestamp': timestamp.inMilliseconds,
-      'category': category.name,
       'grade': grade?.name,
       'label': label,
       'detail': detail,
+      'sportId': sportId,
+      'categoryId': categoryId,
+      if (eventTypeId != null) 'eventTypeId': eventTypeId,
     };
   }
 
@@ -75,10 +77,6 @@ class GameEvent {
     return GameEvent(
       id: json['id'] as String,
       timestamp: Duration(milliseconds: json['timestamp'] as int),
-      category: EventCategory.values.firstWhere(
-        (e) => e.name == json['category'],
-        orElse: () => EventCategory.shot,
-      ),
       grade: json['grade'] != null
           ? EventGrade.values.firstWhere(
               (e) => e.name == json['grade'],
@@ -87,6 +85,9 @@ class GameEvent {
           : null,
       label: json['label'] as String,
       detail: json['detail'] as String?,
+      sportId: json['sportId'] as String? ?? 'hockey',
+      categoryId: json['categoryId'] as String,
+      eventTypeId: json['eventTypeId'] as String?,
     );
   }
 }

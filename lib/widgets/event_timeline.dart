@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import '../models/game_event.dart';
+import '../models/sport_taxonomy.dart';
 
 class EventTimeline extends StatelessWidget {
   final List<GameEvent> events;
   final Duration totalDuration;
   final Function(GameEvent) onEventTap;
+  final SportTaxonomy? taxonomy;
 
   const EventTimeline({
     required this.events,
     required this.totalDuration,
     required this.onEventTap,
+    this.taxonomy,
     super.key,
   });
 
@@ -36,8 +39,10 @@ class EventTimeline extends StatelessWidget {
               final clampedPercent = percent.clamp(0.0, 1.0);
 
               // Calculate left offset
-              // Subtract half the icon width (e.g., 8px) to center it on the timestamp
-              final left = (width * clampedPercent) - 8;
+              // Icon width is 16px, so subtract half (8px) to center it on the timestamp
+              // The padding is already applied by video_progress_bar.dart, so use full width
+              const iconWidth = 16.0;
+              final left = (width * clampedPercent) - (iconWidth / 2);
 
               return Positioned(
                 left: left,
@@ -58,15 +63,14 @@ class EventTimeline extends StatelessWidget {
   }
 
   Widget _buildEventMarker(GameEvent event) {
-    // Map category to icon
-    final iconData = switch (event.category) {
-      EventCategory.shot => Icons.sports_hockey,
-      EventCategory.pass => Icons.sync_alt,
-      EventCategory.battle => Icons.close,
-      EventCategory.defense => Icons.shield,
-      EventCategory.teamPlay => Icons.groups,
-      EventCategory.penalty => Icons.gavel,
-    };
+    // Get icon from taxonomy
+    IconData iconData = Icons.circle;
+    if (taxonomy != null) {
+      final category = taxonomy!.getCategoryById(event.categoryId);
+      if (category != null) {
+        iconData = category.getIcon();
+      }
+    }
 
     // Map grade to color
     final color = event.color; // Uses the getter from GameEvent

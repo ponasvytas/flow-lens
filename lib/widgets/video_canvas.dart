@@ -1,8 +1,33 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import '../models/drawing_models.dart';
 import '../painters/drawing_painter.dart';
 import 'drawing_interaction_overlay.dart';
+
+/// Widget that intercepts scroll events and prevents them from propagating
+class _ScrollInterceptor extends StatelessWidget {
+  final void Function(PointerScrollEvent) onScroll;
+
+  const _ScrollInterceptor({required this.onScroll});
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerSignal: (event) {
+        if (event is PointerScrollEvent) {
+          // Resolve/claim this scroll event so it doesn't propagate
+          GestureBinding.instance.pointerSignalResolver.register(
+            event,
+            (event) => onScroll(event as PointerScrollEvent),
+          );
+        }
+      },
+      child: const SizedBox.expand(),
+    );
+  }
+}
 
 /// Video canvas with zoom/pan and drawing layer for non-laser tools
 class VideoCanvas extends StatelessWidget {
@@ -37,6 +62,45 @@ class VideoCanvas extends StatelessWidget {
     super.key,
   });
 
+  void _handlePointerSignal(PointerSignalEvent event, BuildContext context) {
+    if (isDrawingMode) return; // Don't zoom when drawing
+
+    if (event is PointerScrollEvent) {
+      final renderBox = context.findRenderObject() as RenderBox?;
+      if (renderBox == null) return;
+
+      final localPosition = renderBox.globalToLocal(event.position);
+      final currentScale = transformationController.value.getMaxScaleOnAxis();
+
+      // Determine zoom direction and calculate new scale
+      const zoomFactor = 0.1;
+      double newScale;
+      if (event.scrollDelta.dy < 0) {
+        // Scroll up = zoom in
+        newScale = (currentScale * (1 + zoomFactor)).clamp(1.0, 10.0);
+      } else {
+        // Scroll down = zoom out
+        newScale = (currentScale * (1 - zoomFactor)).clamp(1.0, 10.0);
+      }
+
+      if (newScale == currentScale) return;
+
+      // Calculate the focal point for zoom
+      final scaleChange = newScale / currentScale;
+      final focalPoint = localPosition;
+
+      // Apply the transformation
+      final matrix = transformationController.value.clone();
+
+      // Translate to focal point, scale, then translate back
+      matrix.translate(focalPoint.dx, focalPoint.dy);
+      matrix.scale(scaleChange);
+      matrix.translate(-focalPoint.dx, -focalPoint.dy);
+
+      transformationController.value = matrix;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Center(
@@ -44,32 +108,28 @@ class VideoCanvas extends StatelessWidget {
         transformationController: transformationController,
         panEnabled: !isDrawingMode, // Disable pan when drawing
         scaleEnabled:
-            !isDrawingMode, // Enable default scroll zoom when not drawing
+            !isDrawingMode, // Enable pinch-to-zoom for trackpad gestures
         minScale: 1.0,
-        maxScale: 10.0, // Increased max zoom
+        maxScale: 6.0, // Increased max zoom
         child: SizedBox(
           width: MediaQuery.of(context).size.width,
           height: MediaQuery.of(context).size.width * (9 / 16),
           child: Stack(
             children: [
-              // Video layer with built-in controls and progress bar
-              MaterialVideoControlsTheme(
-                normal: MaterialVideoControlsThemeData(
-                  // Hide unwanted buttons
-                  topButtonBar:
-                      [], // Remove all top buttons (PIP, enhance, transcribe, etc.)
-                  displaySeekBar: true,
-                  automaticallyImplySkipNextButton: false,
-                  automaticallyImplySkipPreviousButton: false,
-                ),
-                fullscreen: const MaterialVideoControlsThemeData(
-                  topButtonBar: [], // Also hide in fullscreen
-                ),
-                child: Video(
-                  controller: controller,
-                  controls: MaterialDesktopVideoControls,
-                ),
+              // Video layer - no built-in controls (we have our own UI)
+              Video(
+                controller: controller,
+                controls: NoVideoControls, // Disable all built-in controls
               ),
+
+              // Scroll intercept layer - captures scroll events for zoom
+              // and prevents them from reaching video controls (which use scroll for volume)
+              if (!isDrawingMode)
+                Positioned.fill(
+                  child: _ScrollInterceptor(
+                    onScroll: (event) => _handlePointerSignal(event, context),
+                  ),
+                ),
 
               // Drawing layer - always show existing drawings
               Positioned.fill(
