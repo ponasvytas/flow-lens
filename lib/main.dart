@@ -5,8 +5,6 @@ import 'dart:async';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:file_picker/file_picker.dart';
-// Conditional imports for web
-import 'dart:typed_data' show Uint8List;
 
 import 'utils/video_loader.dart';
 import 'models/drawing_models.dart';
@@ -20,8 +18,16 @@ import 'widgets/laser_pointer_overlay.dart';
 import 'widgets/shortcuts_panel.dart';
 import 'widgets/branded_title_bar.dart';
 import 'widgets/video_picker.dart';
+import 'models/sport_profile.dart';
 import 'widgets/video_progress_bar.dart';
+import 'widgets/events_table_view.dart';
 import 'services/event_storage_service.dart';
+import 'services/taxonomy_repository.dart';
+import 'services/settings_repository.dart';
+import 'models/sport_taxonomy.dart';
+import 'controllers/events_controller.dart';
+import 'controllers/settings_controller.dart';
+import 'widgets/settings_view.dart';
 
 void main() {
   // 1. Initialize MediaKit (Crucial for the native video engine)
@@ -64,11 +70,23 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
   bool hasVideoLoaded = false;
 
   // Event Tracking State
-  List<GameEvent> gameEvents = [];
-  GameEvent? _activeEvent; // The event currently being edited in the HUD
+  final EventsController _eventsController = EventsController();
+  final TaxonomyRepository _taxonomyRepository = TaxonomyRepository();
+  SportTaxonomy? _taxonomy;
+  SportProfile? _selectedSportProfile;
 
-  // Shortcuts panel visibility
+  // Settings
+  final SettingsController _settingsController = SettingsController(
+    SharedPreferencesSettingsRepository(),
+  );
+
+  // Shortcuts panel visibility and position
   bool _showShortcuts = false;
+  double _shortcutsPanelX = 0.0; // Will be set to right side in initState
+  double _shortcutsPanelY = 100.0;
+
+  // Alt+number workflow state
+  bool _isAltPressed = false;
 
   // Speed control state for hold-to-speed shortcuts
   double _previousPlaybackSpeed = 1.0;
@@ -79,6 +97,16 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
   @override
   void initState() {
     super.initState();
+    
+    // Initialize shortcuts panel position (right side after first frame)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() {
+          _shortcutsPanelX = MediaQuery.of(context).size.width - 340; // 320 width + 20 margin
+        });
+      }
+    });
+    
     // 2. Configure the player with web-friendly and performance settings
     player = Player(
       configuration: PlayerConfiguration(
@@ -91,51 +119,78 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
       ),
     );
     controller = VideoController(player);
+    _eventsController.addListener(_onEventsChanged);
+
+    _settingsController.loadSettings();
+  }
+
+  void _onEventsChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _loadTaxonomy() async {
+    if (_selectedSportProfile == null) return;
+    
+    try {
+      final taxonomy = await _taxonomyRepository.loadSportTaxonomy(_selectedSportProfile!.name);
+      setState(() {
+        _taxonomy = taxonomy;
+      });
+    } catch (e) {
+      print('Error loading taxonomy: $e');
+    }
+  }
+
+  void _onSportSelected(SportProfile profile) {
+    setState(() {
+      _selectedSportProfile = profile;
+    });
+    _loadTaxonomy();
   }
 
   @override
   void dispose() {
     player.dispose(); // Always clean up video memory!
+    _eventsController.removeListener(_onEventsChanged);
+    _eventsController.dispose();
     super.dispose();
   }
 
   Future<void> _pickVideo() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.video,
-    );
-
-    if (result != null) {
-      setState(() {
-        hasVideoLoaded = true;
-      });
-
-      if (kIsWeb) {
-        // Web: Use bytes to create a blob URL
-        final Uint8List? bytes = result.files.single.bytes;
-        if (bytes != null) {
-          final url = await createUrlFromBytes(bytes);
-          if (url != null) {
-            try {
-              // Open without auto-play to avoid immediate WakeLock/Play restrictions
-              await player.open(Media(url), play: false);
-              print("Loaded video from blob URL: $url");
-
-              // Attempt to play
-              await player.play();
-            } catch (e) {
-              print("Error opening/playing video: $e");
-            }
-          } else {
-            print("Error: Failed to create URL from bytes");
-          }
-        } else {
-          print("Error: No bytes available from file picker on web");
+    if (kIsWeb) {
+      // Web: Use native HTML file picker to avoid loading file into memory
+      // This allows files >2GB to be loaded
+      final url = await pickVideoFileWeb();
+      if (url != null) {
+        setState(() {
+          hasVideoLoaded = true;
+        });
+        try {
+          await player.open(Media(url), play: false);
+          print("Loaded video from blob URL: $url");
+          player.setRate(_settingsController.settings.defaultPlaybackSpeed);
+          await player.play();
+        } catch (e) {
+          print("Error opening/playing video: $e");
         }
-      } else {
-        // Native platforms: Use file path
+      }
+    } else {
+      // Native platforms: Use file_picker with path
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.video,
+      );
+
+      if (result != null) {
+        setState(() {
+          hasVideoLoaded = true;
+        });
+
         final String? path = result.files.single.path;
         if (path != null) {
           await player.open(Media(path));
+          player.setRate(_settingsController.settings.defaultPlaybackSpeed);
           print("Loaded video from path: $path");
         } else {
           print("Error: No file path available");
@@ -146,7 +201,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
 
   Future<void> _saveEvents() async {
     try {
-      await _storageService.saveEvents(gameEvents);
+      await _storageService.saveEvents(_eventsController.allEvents);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Events saved successfully')),
@@ -165,11 +220,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
     try {
       final events = await _storageService.loadEvents();
       if (events.isNotEmpty) {
-        setState(() {
-          gameEvents.clear();
-          gameEvents.addAll(events);
-          _activeEvent = null; // Clear active selection
-        });
+        _eventsController.setEvents(events);
+        _eventsController.selectEvent(null);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Loaded ${events.length} events')),
@@ -200,6 +252,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
 
       print("Loading test video from: $testVideoUrl");
       await player.open(Media(testVideoUrl));
+      player.setRate(_settingsController.settings.defaultPlaybackSpeed);
       print("Successfully loaded test video");
     } catch (e) {
       print("Error loading test video: $e");
@@ -217,6 +270,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
     try {
       print("Loading video from URL: $url");
       await player.open(Media(url));
+      player.setRate(_settingsController.settings.defaultPlaybackSpeed);
       print("Successfully loaded video");
     } catch (e) {
       print("Error loading video: $e");
@@ -329,79 +383,256 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
     }
   }
 
+  void _showEventsTable() {
+    if (_taxonomy == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Loading taxonomy...')),
+      );
+      return;
+    }
+
+    final isDesktop = MediaQuery.of(context).size.width > 600;
+
+    if (isDesktop) {
+      showDialog(
+        context: context,
+        builder: (context) => EventsTableView(
+          controller: _eventsController,
+          taxonomy: _taxonomy!,
+          onEventTap: (event) {
+            final leadIn = _settingsController.settings.leadIn;
+            final seekTime = event.timestamp - leadIn;
+            player.seek(seekTime > Duration.zero ? seekTime : Duration.zero);
+            _eventsController.selectEvent(event);
+            Navigator.of(context).pop();
+          },
+          onClose: () => Navigator.of(context).pop(),
+        ),
+      );
+    } else {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => EventsTableView(
+            controller: _eventsController,
+            taxonomy: _taxonomy!,
+            onEventTap: (event) {
+              final leadIn = _settingsController.settings.leadIn;
+              final seekTime = event.timestamp - leadIn;
+              player.seek(seekTime > Duration.zero ? seekTime : Duration.zero);
+              _eventsController.selectEvent(event);
+              Navigator.of(context).pop();
+            },
+            onClose: () => Navigator.of(context).pop(),
+          ),
+        ),
+      );
+    }
+  }
+
+  void _showSettings() {
+    final isDesktop = MediaQuery.of(context).size.width > 600;
+
+    if (isDesktop) {
+      showDialog(
+        context: context,
+        builder: (context) => SettingsView(
+          controller: _settingsController,
+        ),
+      );
+    } else {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => SettingsView(
+            controller: _settingsController,
+          ),
+        ),
+      );
+    }
+  }
+
   void _toggleShortcutsPanel() {
     setState(() {
       _showShortcuts = !_showShortcuts;
-      print('Shortcuts panel toggled: $_showShortcuts');
     });
   }
 
-  void _onEventTriggered(EventCategory category) {
+  void _onShortcutsPanelDragged(double dx, double dy) {
+    setState(() {
+      // Get screen size for boundary constraints
+      final screenWidth = MediaQuery.of(context).size.width;
+      final screenHeight = MediaQuery.of(context).size.height;
+      
+      // Panel dimensions (approximate)
+      const panelWidth = 320.0;
+      const panelHeight = 500.0; // Approximate height
+      
+      // Update position with delta
+      _shortcutsPanelX += dx;
+      _shortcutsPanelY += dy;
+      
+      // Constrain to screen boundaries
+      _shortcutsPanelX = _shortcutsPanelX.clamp(0.0, screenWidth - panelWidth);
+      _shortcutsPanelY = _shortcutsPanelY.clamp(64.0, screenHeight - panelHeight); // 64 for title bar
+    });
+  }
+
+  void _resetShortcutsPanelPosition() {
+    setState(() {
+      final screenWidth = MediaQuery.of(context).size.width;
+      _shortcutsPanelX = screenWidth - 320 - 20; // 320px panel width + 20px margin
+      _shortcutsPanelY = 100.0;
+    });
+  }
+
+  void _createEventFromAltNumber(int number) {
+    final taxonomy = _taxonomy;
+    if (taxonomy == null) return;
+
+    final categories = taxonomy.categories;
+    
+    // Check if number is valid (1-based index)
+    if (number < 1 || number > categories.length) {
+      return; // Invalid number, ignore
+    }
+    
+    // Get category (convert to 0-based index)
+    final categoryId = categories[number - 1].categoryId;
+    
+    // Create event using existing logic
+    _onEventTriggered(categoryId);
+  }
+
+  void _handleSmartHudNumber(int number) {
+    final activeEvent = _eventsController.activeEvent;
+    if (activeEvent == null) return;
+
+    // If no detail selected yet, treat as tag selection
+    if (activeEvent.detail == null || activeEvent.detail!.isEmpty) {
+      _selectTagByNumber(number);
+    } else {
+      // If detail already selected, treat as grade selection
+      _selectGradeByNumber(number);
+    }
+  }
+
+  void _selectTagByNumber(int number) {
+    final activeEvent = _eventsController.activeEvent;
+    if (activeEvent == null) return;
+
+    final taxonomy = _taxonomy;
+    if (taxonomy == null) return;
+
+    final category = taxonomy.getCategoryById(activeEvent.categoryId);
+    final eventTypes = category?.eventTypes ?? const <EventTypeTaxonomy>[];
+
+    if (number < 1 || number > eventTypes.length) {
+      return;
+    }
+
+    final eventType = eventTypes[number - 1];
+    _updateEvent(
+      activeEvent.copyWith(
+        detail: eventType.name,
+        eventTypeId: eventType.eventTypeId,
+        grade: eventType.defaultImpact ?? activeEvent.grade,
+      ),
+    );
+  }
+
+  void _selectGradeByNumber(int number) {
+    final activeEvent = _eventsController.activeEvent;
+    if (activeEvent == null) return;
+
+    // Map number to grade (1=Positive, 2=Neutral, 3=Negative)
+    EventGrade? grade;
+    switch (number) {
+      case 1:
+        grade = EventGrade.positive;
+        break;
+      case 2:
+        grade = EventGrade.neutral;
+        break;
+      case 3:
+        grade = EventGrade.negative;
+        break;
+      default:
+        return; // Invalid number, ignore
+    }
+
+    // Update event with selected grade
+    _updateEvent(activeEvent.copyWith(grade: grade));
+  }
+
+  void _saveAndCloseSmartHud() {
+    final activeEvent = _eventsController.activeEvent;
+    if (activeEvent == null) return;
+
+    // If event has a grade, it's complete - just dismiss
+    if (activeEvent.grade != null) {
+      _dismissHUD();
+    }
+  }
+
+  void _cancelAndCloseSmartHud() {
+    final activeEvent = _eventsController.activeEvent;
+    if (activeEvent == null) return;
+
+    // Delete the event and close HUD
+    _deleteEvent(activeEvent);
+  }
+
+
+  void _onEventTriggered(String categoryId) {
+    final taxonomy = _taxonomy;
+    if (taxonomy == null) return;
+
+    final category = taxonomy.getCategoryById(categoryId);
+    if (category == null) return;
+
     final position = player.state.position;
     final newEvent = GameEvent(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       timestamp: position,
-      category: category,
-      label: _getDefaultLabel(category),
+      categoryId: categoryId,
+      label: category.name,
       grade: null, // Start with no grade
     );
 
-    setState(() {
-      // Do NOT add to gameEvents yet. Wait for confirmation (detail + grade).
-      _activeEvent = newEvent;
-    });
+    _eventsController.selectEvent(newEvent);
 
     print("EVENT DRAFTED: ${newEvent.label} at ${position.toString()}");
   }
 
   void _updateEvent(GameEvent updatedEvent) {
-    setState(() {
-      // Check if the event is now "complete" (has detail and grade)
-      final isComplete =
-          updatedEvent.detail != null && updatedEvent.grade != null;
+    // Check if the event is now "complete" (has detail and grade)
+    final isComplete =
+        updatedEvent.detail != null && updatedEvent.grade != null;
 
-      if (isComplete) {
-        final index = gameEvents.indexWhere((e) => e.id == updatedEvent.id);
-        if (index != -1) {
-          // Update existing
-          gameEvents[index] = updatedEvent;
-        } else {
-          // Add new confirmed event
-          gameEvents.add(updatedEvent);
-          print("EVENT CONFIRMED: ${updatedEvent.label}");
-        }
+    if (isComplete) {
+      final existingIndex = _eventsController.allEvents.indexWhere((e) => e.id == updatedEvent.id);
+      if (existingIndex != -1) {
+        // Update existing
+        _eventsController.updateEvent(updatedEvent);
+      } else {
+        // Add new confirmed event
+        _eventsController.addEvent(updatedEvent);
+        print("EVENT CONFIRMED: ${updatedEvent.label}");
       }
+    }
 
-      // Always update active event state so HUD reflects changes
-      _activeEvent = updatedEvent;
-    });
+    // Always update active event state so HUD reflects changes
+    _eventsController.selectEvent(updatedEvent);
   }
 
   void _deleteEvent(GameEvent event) {
-    setState(() {
-      gameEvents.removeWhere((e) => e.id == event.id);
-      _activeEvent = null; // Close HUD
-    });
+    _eventsController.deleteEvent(event);
     print("EVENT DELETED: ${event.label}");
   }
 
   void _dismissHUD() {
-    setState(() {
-      // If the event wasn't saved (not in list), it's discarded
-      _activeEvent = null;
-    });
+    _eventsController.selectEvent(null);
   }
 
-  String _getDefaultLabel(EventCategory category) {
-    return switch (category) {
-      EventCategory.shot => "Shot",
-      EventCategory.pass => "Pass",
-      EventCategory.battle => "Battle",
-      EventCategory.defense => "Defense",
-      EventCategory.teamPlay => "Team Play",
-      EventCategory.penalty => "Penalty",
-    };
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -420,6 +651,47 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
           if (event.logicalKey == LogicalKeyboardKey.keyG) {
             _toggleDrawingMode();
             return KeyEventResult.handled;
+          }
+
+          // SmartHUD keyboard shortcuts (when HUD is active)
+          if (_eventsController.activeEvent != null && !isDrawingMode) {
+            // Number keys: Select tag or grade
+            if (event.logicalKey == LogicalKeyboardKey.digit1 ||
+                event.logicalKey == LogicalKeyboardKey.numpad1) {
+              _handleSmartHudNumber(1);
+              return KeyEventResult.handled;
+            }
+            if (event.logicalKey == LogicalKeyboardKey.digit2 ||
+                event.logicalKey == LogicalKeyboardKey.numpad2) {
+              _handleSmartHudNumber(2);
+              return KeyEventResult.handled;
+            }
+            if (event.logicalKey == LogicalKeyboardKey.digit3 ||
+                event.logicalKey == LogicalKeyboardKey.numpad3) {
+              _handleSmartHudNumber(3);
+              return KeyEventResult.handled;
+            }
+            if (event.logicalKey == LogicalKeyboardKey.digit4 ||
+                event.logicalKey == LogicalKeyboardKey.numpad4) {
+              _handleSmartHudNumber(4);
+              return KeyEventResult.handled;
+            }
+            if (event.logicalKey == LogicalKeyboardKey.digit5 ||
+                event.logicalKey == LogicalKeyboardKey.numpad5) {
+              _handleSmartHudNumber(5);
+              return KeyEventResult.handled;
+            }
+            // Enter: Save event and close HUD
+            if (event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+              _saveAndCloseSmartHud();
+              return KeyEventResult.handled;
+            }
+            // Esc: Cancel and close HUD
+            if (event.logicalKey == LogicalKeyboardKey.escape) {
+              _cancelAndCloseSmartHud();
+              return KeyEventResult.handled;
+            }
           }
 
           // Tool shortcuts (only in graphics mode)
@@ -462,17 +734,61 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
             return KeyEventResult.handled;
           }
 
+          // Alt key: Show category numbers and track state
+          final isAltPressed = HardwareKeyboard.instance.isAltPressed;
+          if (event.logicalKey == LogicalKeyboardKey.altLeft ||
+              event.logicalKey == LogicalKeyboardKey.altRight) {
+            setState(() {
+              _isAltPressed = true;
+            });
+            return KeyEventResult.handled;
+          }
+
+          // Alt+number: Create event with category
+          if (isAltPressed && hasVideoLoaded && !isDrawingMode) {
+            if (event.logicalKey == LogicalKeyboardKey.digit1 ||
+                event.logicalKey == LogicalKeyboardKey.numpad1) {
+              _createEventFromAltNumber(1);
+              return KeyEventResult.handled;
+            }
+            if (event.logicalKey == LogicalKeyboardKey.digit2 ||
+                event.logicalKey == LogicalKeyboardKey.numpad2) {
+              _createEventFromAltNumber(2);
+              return KeyEventResult.handled;
+            }
+            if (event.logicalKey == LogicalKeyboardKey.digit3 ||
+                event.logicalKey == LogicalKeyboardKey.numpad3) {
+              _createEventFromAltNumber(3);
+              return KeyEventResult.handled;
+            }
+            if (event.logicalKey == LogicalKeyboardKey.digit4 ||
+                event.logicalKey == LogicalKeyboardKey.numpad4) {
+              _createEventFromAltNumber(4);
+              return KeyEventResult.handled;
+            }
+            if (event.logicalKey == LogicalKeyboardKey.digit5 ||
+                event.logicalKey == LogicalKeyboardKey.numpad5) {
+              _createEventFromAltNumber(5);
+              return KeyEventResult.handled;
+            }
+            if (event.logicalKey == LogicalKeyboardKey.digit6 ||
+                event.logicalKey == LogicalKeyboardKey.numpad6) {
+              _createEventFromAltNumber(6);
+              return KeyEventResult.handled;
+            }
+          }
+
           // Arrow key navigation shortcuts
           final isCtrlPressed = HardwareKeyboard.instance.isControlPressed;
-          final isAltPressed = HardwareKeyboard.instance.isAltPressed;
+          final isShiftPressed = HardwareKeyboard.instance.isShiftPressed;
 
           // Arrow Left: Jump backward
           if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
             if (isCtrlPressed) {
               // Ctrl+Left: Jump backward 30s
               _jumpBackward(const Duration(seconds: 30));
-            } else if (isAltPressed) {
-              // Alt+Left: Jump backward 10s
+            } else if (isShiftPressed) {
+              // Shift+Left: Jump backward 10s
               _jumpBackward(const Duration(seconds: 10));
             } else {
               // Left: Jump backward 3s
@@ -486,8 +802,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
             if (isCtrlPressed) {
               // Ctrl+Right: Jump forward 30s
               _jumpForward(const Duration(seconds: 30));
-            } else if (isAltPressed) {
-              // Alt+Right: Jump forward 10s
+            } else if (isShiftPressed) {
+              // Shift+Right: Jump forward 10s
               _jumpForward(const Duration(seconds: 10));
             } else {
               // Right: Jump forward 3s
@@ -496,17 +812,19 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
             return KeyEventResult.handled;
           }
 
-          // 'S' key: Set speed to 0.33x (slow motion)
+          // 'S' key: Set speed to slow playback speed (configurable in settings)
           if (event.logicalKey == LogicalKeyboardKey.keyS) {
-            player.setRate(0.33);
-            print("Playback speed set to 0.33x (slow motion)");
+            final slowSpeed = _settingsController.settings.slowPlaybackSpeed;
+            player.setRate(slowSpeed);
+            print("Playback speed set to ${slowSpeed}x (slow)");
             return KeyEventResult.handled;
           }
 
-          // 'D' key: Set speed to 1.0x (normal)
+          // 'D' key: Set speed to default playback speed (configurable in settings)
           if (event.logicalKey == LogicalKeyboardKey.keyD) {
-            player.setRate(1.0);
-            print("Playback speed set to 1.0x (normal)");
+            final defaultSpeed = _settingsController.settings.defaultPlaybackSpeed;
+            player.setRate(defaultSpeed);
+            print("Playback speed set to ${defaultSpeed}x (default)");
             return KeyEventResult.handled;
           }
 
@@ -516,20 +834,43 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
             return KeyEventResult.handled;
           }
 
-          // Hold 'F' for 3x forward speed
+          // 'M' key: Toggle mute/unmute
+          if (event.logicalKey == LogicalKeyboardKey.keyM) {
+            final currentVolume = player.state.volume;
+            if (currentVolume > 0) {
+              player.setVolume(0);
+              print("Muted");
+            } else {
+              player.setVolume(100);
+              print("Unmuted");
+            }
+            return KeyEventResult.handled;
+          }
+
+          // Hold 'F' for fast forward speed (configurable in settings)
           if (event.logicalKey == LogicalKeyboardKey.keyF &&
               !_isSpeedShortcutActive) {
             _previousPlaybackSpeed = player.state.rate;
             _isSpeedShortcutActive = true;
-            player.setRate(3.0);
+            final fastSpeed = _settingsController.settings.fastPlaySpeed;
+            player.setRate(fastSpeed);
             print(
-              "Fast forward: 3x speed (previous: ${_previousPlaybackSpeed}x)",
+              "Fast forward: ${fastSpeed}x speed (previous: ${_previousPlaybackSpeed}x)",
             );
             return KeyEventResult.handled;
           }
         }
         // Handle key release events
         if (event is KeyUpEvent) {
+          // Alt key released: Update state
+          if (event.logicalKey == LogicalKeyboardKey.altLeft ||
+              event.logicalKey == LogicalKeyboardKey.altRight) {
+            setState(() {
+              _isAltPressed = false;
+            });
+            return KeyEventResult.handled;
+          }
+
           // Release 'F' to restore previous speed
           if (event.logicalKey == LogicalKeyboardKey.keyF &&
               _isSpeedShortcutActive) {
@@ -551,11 +892,12 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
               left: 0,
               right: 0,
               child: BrandedTitleBar(
-                onShowShortcuts: () =>
-                    setState(() => _showShortcuts = !_showShortcuts),
+                onShowShortcuts: _toggleShortcutsPanel,
                 showShortcuts: _showShortcuts,
                 onSaveEvents: hasVideoLoaded ? _saveEvents : null,
                 onLoadEvents: hasVideoLoaded ? _loadEvents : null,
+                onShowEventsTable: hasVideoLoaded ? _showEventsTable : null,
+                onShowSettings: hasVideoLoaded ? _showSettings : null,
               ),
             ),
 
@@ -616,10 +958,10 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
                 onColorChange: (color) => setState(() => drawingColor = color),
               ),
 
-            // LAYER 5: Event Buttons (Centered above progress bar)
+            // LAYER 5: Event Buttons with SmartHUD (Centered, lower position)
             if (hasVideoLoaded)
               Positioned(
-                bottom: 110, // Positioned above the progress bar
+                bottom: 75, // Lower position - closer to progress bar
                 left: 0,
                 right: 0,
                 child: Center(
@@ -627,19 +969,25 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       // Smart HUD (appears above buttons)
-                      if (_activeEvent != null)
+                      if (_eventsController.activeEvent != null)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: SmartHUD(
-                            event: _activeEvent!,
+                            event: _eventsController.activeEvent!,
                             onUpdateEvent: _updateEvent,
                             onDeleteEvent: _deleteEvent,
                             onDismiss: _dismissHUD,
+                            isAltPressed: _isAltPressed,
+                            taxonomy: _taxonomy,
                           ),
                         ),
 
-                      // Event Buttons Row
-                      EventButtonsPanel(onEventTriggered: _onEventTriggered),
+                      // Event Buttons Row (with optional number badges)
+                      EventButtonsPanel(
+                        onEventTriggered: _onEventTriggered,
+                        taxonomy: _taxonomy,
+                        showNumbers: _isAltPressed,
+                      ),
                     ],
                   ),
                 ),
@@ -649,20 +997,24 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
             if (hasVideoLoaded)
               VideoProgressBar(
                 player: player,
-                events: gameEvents,
+                events: _eventsController.filteredEvents,
                 onEventTap: (event) {
-                  player.seek(event.timestamp);
-                  setState(() {
-                    _activeEvent = event;
-                  });
+                  final leadIn = _settingsController.settings.leadIn;
+                  final seekTime = event.timestamp - leadIn;
+                  player.seek(seekTime > Duration.zero ? seekTime : Duration.zero);
+                  _eventsController.selectEvent(event);
                 },
               ),
 
-            // LAYER 7: Shortcuts Panel with Toggle Button
+            // LAYER 7: Shortcuts Panel (toggleable and draggable)
             if (hasVideoLoaded)
               ShortcutsPanel(
                 isVisible: _showShortcuts,
                 onToggle: _toggleShortcutsPanel,
+                positionX: _shortcutsPanelX,
+                positionY: _shortcutsPanelY,
+                onPositionChanged: _onShortcutsPanelDragged,
+                onResetPosition: _resetShortcutsPanelPosition,
               ),
 
             // Video Picker (shown when no video is loaded)
@@ -671,6 +1023,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
                 onPickVideo: _pickVideo,
                 onLoadTestVideo: _loadTestVideo,
                 onLoadUrl: _loadUrl,
+                onSportSelected: _onSportSelected,
               ),
           ],
         ),

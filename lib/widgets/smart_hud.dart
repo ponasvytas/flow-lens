@@ -1,18 +1,29 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import '../models/game_event.dart';
+import '../models/sport_taxonomy.dart';
 
 class SmartHUD extends StatefulWidget {
   final GameEvent event;
   final Function(GameEvent) onUpdateEvent;
   final Function(GameEvent) onDeleteEvent;
   final VoidCallback onDismiss;
+  final Function(int)? onNumberPressed; // Callback for number key presses
+  final VoidCallback? onEnterPressed; // Callback for Enter key
+  final VoidCallback? onEscPressed; // Callback for Esc key
+  final bool isAltPressed; // Whether Alt key is currently held
+  final SportTaxonomy? taxonomy;
 
   const SmartHUD({
     required this.event,
     required this.onUpdateEvent,
     required this.onDeleteEvent,
     required this.onDismiss,
+    this.onNumberPressed,
+    this.onEnterPressed,
+    this.onEscPressed,
+    this.isAltPressed = false,
+    this.taxonomy,
     super.key,
   });
 
@@ -22,8 +33,9 @@ class SmartHUD extends StatefulWidget {
 
 class _SmartHUDState extends State<SmartHUD>
     with SingleTickerProviderStateMixin {
-  late Timer _dismissTimer;
+  Timer? _dismissTimer;
   late AnimationController _fadeController;
+  bool _wasAltPressed = false;
 
   @override
   void initState() {
@@ -36,8 +48,29 @@ class _SmartHUDState extends State<SmartHUD>
     _resetTimer();
   }
 
+  @override
+  void didUpdateWidget(SmartHUD oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    
+    // If Alt key state changed, handle timer accordingly
+    if (widget.isAltPressed != _wasAltPressed) {
+      _wasAltPressed = widget.isAltPressed;
+      
+      if (widget.isAltPressed) {
+        // Alt pressed: cancel timer to keep HUD visible
+        _dismissTimer?.cancel();
+      } else {
+        // Alt released: restart timer
+        _resetTimer();
+      }
+    }
+  }
+
   void _resetTimer() {
-    if (mounted) {
+    _dismissTimer?.cancel();
+    
+    // Don't start timer if Alt is held
+    if (!widget.isAltPressed && mounted) {
       _dismissTimer = Timer(const Duration(seconds: 4), () {
         if (mounted) {
           _fadeController.reverse().then((_) => widget.onDismiss());
@@ -47,19 +80,21 @@ class _SmartHUDState extends State<SmartHUD>
   }
 
   void _handleInteraction() {
-    _dismissTimer.cancel();
+    _dismissTimer?.cancel();
     _resetTimer();
   }
 
   @override
   void dispose() {
-    _dismissTimer.cancel();
+    _dismissTimer?.cancel();
     _fadeController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final eventTypeOptions = _getEventTypeOptions();
+
     return FadeTransition(
       opacity: _fadeController,
       child: Container(
@@ -101,24 +136,27 @@ class _SmartHUDState extends State<SmartHUD>
                       EventGrade.positive,
                       Icons.thumb_up,
                       Colors.green,
+                      1,
                     ),
                     const SizedBox(width: 4),
                     _buildGradeButton(
                       EventGrade.neutral,
                       Icons.remove,
                       Colors.grey,
+                      2,
                     ),
                     const SizedBox(width: 4),
                     _buildGradeButton(
                       EventGrade.negative,
                       Icons.thumb_down,
                       Colors.red,
+                      3,
                     ),
                     const SizedBox(width: 12), // Spacer before delete
                     // Delete Button
                     InkWell(
                       onTap: () {
-                        _dismissTimer.cancel();
+                        _dismissTimer?.cancel();
                         widget.onDeleteEvent(widget.event);
                       },
                       child: Container(
@@ -144,20 +182,28 @@ class _SmartHUDState extends State<SmartHUD>
             const Divider(color: Colors.white24),
 
             // Context Tags
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _getContextTags()
-                  .map((tag) => _buildTagButton(tag))
-                  .toList(),
-            ),
+            if (eventTypeOptions.isEmpty)
+              const Text(
+                'Loading taxonomy…',
+                style: TextStyle(color: Colors.white70, fontSize: 12),
+              )
+            else
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: eventTypeOptions
+                    .asMap()
+                    .entries
+                    .map((entry) => _buildTagButton(entry.value, entry.key))
+                    .toList(),
+              ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildGradeButton(EventGrade grade, IconData icon, Color color) {
+  Widget _buildGradeButton(EventGrade grade, IconData icon, Color color, int number) {
     final isSelected = widget.event.grade == grade;
     return InkWell(
       onTap: () {
@@ -171,88 +217,118 @@ class _SmartHUDState extends State<SmartHUD>
           border: Border.all(color: isSelected ? color : Colors.white38),
           borderRadius: BorderRadius.circular(4),
         ),
-        child: Icon(
-          icon,
-          size: 16,
-          color: isSelected ? Colors.white : Colors.white70,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: isSelected ? Colors.white : Colors.white70,
+            ),
+            // Number badge in top-right corner
+            Positioned(
+              top: -16,
+              right: -16,
+              child: Container(
+                width: 16,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: Colors.blue,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 1),
+                ),
+                child: Center(
+                  child: Text(
+                    number.toString(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildTagButton(String tag) {
-    final isSelected = widget.event.detail == tag;
+  Widget _buildTagButton(EventTypeTaxonomy eventType, int index) {
+    final isSelected = widget.event.eventTypeId == eventType.eventTypeId ||
+        (widget.event.eventTypeId == null && widget.event.detail == eventType.name);
     return InkWell(
       onTap: () {
         _handleInteraction();
-        // Auto-grade logic based on tag
-        EventGrade? newGrade = widget.event.grade;
-        if (_isPositiveTag(tag)) newGrade = EventGrade.positive;
-        if (_isNegativeTag(tag)) newGrade = EventGrade.negative;
-
         widget.onUpdateEvent(
-          widget.event.copyWith(detail: tag, grade: newGrade),
+          widget.event.copyWith(
+            detail: eventType.name,
+            eventTypeId: eventType.eventTypeId,
+            grade: eventType.defaultImpact ?? widget.event.grade,
+          ),
         );
       },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.blueAccent : Colors.white10,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isSelected ? Colors.blueAccent : Colors.white24,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: isSelected ? Colors.blueAccent : Colors.white10,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isSelected ? Colors.blueAccent : Colors.white24,
+              ),
+            ),
+            child: Text(
+              eventType.name,
+              style: TextStyle(
+                color: isSelected ? Colors.white : Colors.white70,
+                fontSize: 12,
+              ),
+            ),
           ),
-        ),
-        child: Text(
-          tag,
-          style: TextStyle(
-            color: isSelected ? Colors.white : Colors.white70,
-            fontSize: 12,
+          // Number badge in top-right corner
+          Positioned(
+            top: -8,
+            right: -8,
+            child: Container(
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                color: Colors.blue,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 1),
+              ),
+              child: Center(
+                child: Text(
+                  '${index + 1}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 
-  List<String> _getContextTags() {
-    switch (widget.event.category) {
-      case EventCategory.shot:
-        return ["Goal", "On Net", "Wide", "Blocked"];
-      case EventCategory.pass:
-        return ["Tape-to-Tape", "Stretch", "Turnover", "Icing"];
-      case EventCategory.battle:
-        return ["Won", "Lost", "Hit Given", "Hit Taken"];
-      case EventCategory.defense:
-        return ["Goal Against", "Save", "Block", "Clear", "Breakdown"];
-      case EventCategory.teamPlay:
-        return ["Breakout", "Zone Entry", "Regroup", "Forecheck", "Face Off"];
-      case EventCategory.penalty:
-        return ["Us", "Them"];
+  List<EventTypeTaxonomy> _getEventTypeOptions() {
+    final taxonomy = widget.taxonomy;
+    if (taxonomy == null) {
+      return const [];
     }
-  }
 
-  bool _isPositiveTag(String tag) {
-    return [
-      "Goal",
-      "Tape-to-Tape",
-      "Won",
-      "Hit Given",
-      "Save",
-      "Block",
-      "Clear",
-      "Them",
-    ].contains(tag);
-  }
+    final category = taxonomy.getCategoryById(widget.event.categoryId);
+    if (category == null) {
+      return const [];
+    }
 
-  bool _isNegativeTag(String tag) {
-    return [
-      "Goal Against",
-      "Turnover",
-      "Icing",
-      "Lost",
-      "Hit Taken",
-      "Breakdown",
-      "Us",
-    ].contains(tag);
+    return category.eventTypes;
   }
 }

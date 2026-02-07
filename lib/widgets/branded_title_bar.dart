@@ -6,12 +6,16 @@ class BrandedTitleBar extends StatelessWidget {
   final bool showShortcuts;
   final VoidCallback? onSaveEvents;
   final VoidCallback? onLoadEvents;
+  final VoidCallback? onShowEventsTable;
+  final VoidCallback? onShowSettings;
 
   const BrandedTitleBar({
     required this.onShowShortcuts,
     required this.showShortcuts,
     this.onSaveEvents,
     this.onLoadEvents,
+    this.onShowEventsTable,
+    this.onShowSettings,
     super.key,
   });
 
@@ -109,6 +113,18 @@ class BrandedTitleBar extends StatelessWidget {
               onPressed: onLoadEvents,
               tooltip: 'Load Events',
               icon: const Icon(Icons.upload_file, color: Colors.white70),
+            ),
+          if (onShowEventsTable != null)
+            IconButton(
+              onPressed: onShowEventsTable,
+              tooltip: 'Events Table',
+              icon: const Icon(Icons.table_chart, color: Colors.white70),
+            ),
+          if (onShowSettings != null)
+            IconButton(
+              onPressed: onShowSettings,
+              tooltip: 'Settings',
+              icon: const Icon(Icons.settings, color: Colors.white70),
             ),
 
           const SizedBox(width: 8),

@@ -1,0 +1,218 @@
+{
+  "schemaVersion": 1,
+  "sportId": "hockey",
+  "name": "Hockey",
+  "categories": [
+    {
+      "categoryId": "shot",
+      "name": "Shot",
+      "iconKey": "sports_hockey",
+      "colorKey": "orange",
+      "eventTypes": [
+        {
+          "eventTypeId": "shot_goal",
+          "name": "Goal",
+          "defaultImpact": "positive"
+        },
+        {
+          "eventTypeId": "shot_on_net",
+          "name": "On Net",
+          "defaultImpact": "positive"
+        },
+        {
+          "eventTypeId": "shot_wide",
+          "name": "Wide",
+          "defaultImpact": "negative"
+        },
+        {
+          "eventTypeId": "shot_blocked",
+          "name": "Blocked",
+          "defaultImpact": "negative"
+        },
+        {
+          "eventTypeId": "shot_rebound",
+          "name": "Rebound",
+          "defaultImpact": "neutral"
+        }
+      ]
+    },
+    {
+      "categoryId": "pass",
+      "name": "Pass",
+      "iconKey": "sync_alt",
+      "colorKey": "cyan",
+      "eventTypes": [
+        {
+          "eventTypeId": "pass_tape_to_tape",
+          "name": "Tape-to-Tape",
+          "defaultImpact": "positive"
+        },
+        {
+          "eventTypeId": "pass_turnover",
+          "name": "Turnover",
+          "defaultImpact": "negative"
+        },
+        {
+          "eventTypeId": "pass_stretch",
+          "name": "Stretch",
+          "defaultImpact": "neutral"
+        },
+        {
+          "eventTypeId": "pass_icing",
+          "name": "Icing",
+          "defaultImpact": "negative"
+        }
+      ]
+    },
+    {
+      "categoryId": "battle",
+      "name": "Battle",
+      "iconKey": "close",
+      "colorKey": "redAccent",
+      "eventTypes": [
+        {
+          "eventTypeId": "battle_won",
+          "name": "Won",
+          "defaultImpact": "positive"
+        },
+        {
+          "eventTypeId": "battle_lost",
+          "name": "Lost",
+          "defaultImpact": "negative"
+        },
+        {
+          "eventTypeId": "battle_hit_given",
+          "name": "Hit Given",
+          "defaultImpact": "positive"
+        },
+        {
+          "eventTypeId": "battle_hit_taken",
+          "name": "Hit Taken",
+          "defaultImpact": "negative"
+        }
+      ]
+    },
+    {
+      "categoryId": "defense",
+      "name": "Defense",
+      "iconKey": "shield",
+      "colorKey": "blue",
+      "eventTypes": [
+        {
+          "eventTypeId": "defense_block",
+          "name": "Block",
+          "defaultImpact": "positive"
+        },
+        {
+          "eventTypeId": "defense_takeaway",
+          "name": "Takeaway",
+          "defaultImpact": "positive"
+        },
+        {
+          "eventTypeId": "defense_intercept",
+          "name": "Intercept",
+          "defaultImpact": "positive"
+        },
+        {
+          "eventTypeId": "defense_giveaway",
+          "name": "Giveaway",
+          "defaultImpact": "negative"
+        },
+        {
+          "eventTypeId": "defense_clear",
+          "name": "Clear",
+          "defaultImpact": "positive"
+        },
+        {
+          "eventTypeId": "defense_breakdown",
+          "name": "Breakdown",
+          "defaultImpact": "negative"
+        }
+      ]
+    },
+    {
+      "categoryId": "goalie",
+      "name": "Goalie",
+      "iconKey": "security",
+      "colorKey": "teal",
+      "eventTypes": [
+        {
+          "eventTypeId": "goalie_goal_against",
+          "name": "Goal Against",
+          "defaultImpact": "negative"
+        },
+        {
+          "eventTypeId": "goalie_save",
+          "name": "Save",
+          "defaultImpact": "positive"
+        },
+        {
+          "eventTypeId": "goalie_rebound_control",
+          "name": "Rebound Control",
+          "defaultImpact": "negative"
+        },
+        {
+          "eventTypeId": "goalie_puck_play",
+          "name": "Puck Play",
+          "defaultImpact": "neutral"
+        },
+        {
+          "eventTypeId": "goalie_positioning",
+          "name": "Positioning",
+          "defaultImpact": "neutral"
+        }
+      ]
+    },
+    {
+      "categoryId": "teamPlay",
+      "name": "Team Play",
+      "iconKey": "groups",
+      "colorKey": "purple",
+      "eventTypes": [
+        {
+          "eventTypeId": "teamplay_breakout",
+          "name": "Breakout",
+          "defaultImpact": "neutral"
+        },
+        {
+          "eventTypeId": "teamplay_zone_entry",
+          "name": "Zone Entry",
+          "defaultImpact": "neutral"
+        },
+        {
+          "eventTypeId": "teamplay_regroup",
+          "name": "Regroup",
+          "defaultImpact": "neutral"
+        },
+        {
+          "eventTypeId": "teamplay_forecheck",
+          "name": "Forecheck",
+          "defaultImpact": "neutral"
+        },
+        {
+          "eventTypeId": "teamplay_faceoff",
+          "name": "Face Off",
+          "defaultImpact": "neutral"
+        }
+      ]
+    },
+    {
+      "categoryId": "penalty",
+      "name": "Penalty",
+      "iconKey": "gavel",
+      "colorKey": "amber",
+      "eventTypes": [
+        {
+          "eventTypeId": "penalty_us",
+          "name": "Us",
+          "defaultImpact": "negative"
+        },
+        {
+          "eventTypeId": "penalty_them",
+          "name": "Them",
+          "defaultImpact": "positive"
+        }
+      ]
+    }
+  ]
+}
