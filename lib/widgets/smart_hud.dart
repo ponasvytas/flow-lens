@@ -12,6 +12,8 @@ class SmartHUD extends StatefulWidget {
   final VoidCallback? onEnterPressed; // Callback for Enter key
   final VoidCallback? onEscPressed; // Callback for Esc key
   final bool isAltPressed; // Whether Alt key is currently held
+  final bool showTagNumbers;
+  final bool showGradeNumbers;
   final SportTaxonomy? taxonomy;
 
   const SmartHUD({
@@ -23,6 +25,8 @@ class SmartHUD extends StatefulWidget {
     this.onEnterPressed,
     this.onEscPressed,
     this.isAltPressed = false,
+    this.showTagNumbers = false,
+    this.showGradeNumbers = false,
     this.taxonomy,
     super.key,
   });
@@ -226,29 +230,30 @@ class _SmartHUDState extends State<SmartHUD>
               color: isSelected ? Colors.white : Colors.white70,
             ),
             // Number badge in top-right corner
-            Positioned(
-              top: -16,
-              right: -16,
-              child: Container(
-                width: 16,
-                height: 16,
-                decoration: BoxDecoration(
-                  color: Colors.blue,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 1),
-                ),
-                child: Center(
-                  child: Text(
-                    number.toString(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
+            if (widget.showGradeNumbers)
+              Positioned(
+                top: -16,
+                right: -16,
+                child: Container(
+                  width: 16,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: Colors.blue,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 1),
+                  ),
+                  child: Center(
+                    child: Text(
+                      number.toString(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
           ],
         ),
       ),
@@ -290,29 +295,30 @@ class _SmartHUDState extends State<SmartHUD>
             ),
           ),
           // Number badge in top-right corner
-          Positioned(
-            top: -8,
-            right: -8,
-            child: Container(
-              width: 18,
-              height: 18,
-              decoration: BoxDecoration(
-                color: Colors.blue,
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 1),
-              ),
-              child: Center(
-                child: Text(
-                  '${index + 1}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
+          if (widget.showTagNumbers)
+            Positioned(
+              top: -8,
+              right: -8,
+              child: Container(
+                width: 18,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: Colors.blue,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 1),
+                ),
+                child: Center(
+                  child: Text(
+                    '${index + 1}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
         ],
       ),
     );

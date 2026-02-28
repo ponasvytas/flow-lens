@@ -37,6 +37,13 @@ void main() {
   runApp(const MaterialApp(home: HockeyAnalyzerScreen()));
 }
 
+enum _AltEntryStage {
+  none,
+  categories,
+  labels,
+  grades,
+}
+
 class HockeyAnalyzerScreen extends StatefulWidget {
   const HockeyAnalyzerScreen({super.key});
 
@@ -87,6 +94,9 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
 
   // Alt+number workflow state
   bool _isAltPressed = false;
+
+  bool _isAltEntryActive = false;
+  _AltEntryStage _altEntryStage = _AltEntryStage.none;
 
   // Speed control state for hold-to-speed shortcuts
   double _previousPlaybackSpeed = 1.0;
@@ -484,15 +494,15 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
     });
   }
 
-  void _createEventFromAltNumber(int number) {
+  bool _createEventFromAltNumber(int number) {
     final taxonomy = _taxonomy;
-    if (taxonomy == null) return;
+    if (taxonomy == null) return false;
 
     final categories = taxonomy.categories;
     
     // Check if number is valid (1-based index)
     if (number < 1 || number > categories.length) {
-      return; // Invalid number, ignore
+      return false; // Invalid number, ignore
     }
     
     // Get category (convert to 0-based index)
@@ -500,33 +510,50 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
     
     // Create event using existing logic
     _onEventTriggered(categoryId);
+
+    return true;
   }
 
   void _handleSmartHudNumber(int number) {
     final activeEvent = _eventsController.activeEvent;
     if (activeEvent == null) return;
 
-    // If no detail selected yet, treat as tag selection
-    if (activeEvent.detail == null || activeEvent.detail!.isEmpty) {
-      _selectTagByNumber(number);
-    } else {
-      // If detail already selected, treat as grade selection
-      _selectGradeByNumber(number);
+    if (!_isAltEntryActive || !_isAltPressed) return;
+
+    if (_altEntryStage == _AltEntryStage.labels) {
+      final didSelect = _selectTagByNumber(number);
+      if (didSelect) {
+        setState(() {
+          _altEntryStage = _AltEntryStage.grades;
+        });
+      }
+      return;
+    }
+
+    if (_altEntryStage == _AltEntryStage.grades) {
+      final didSelect = _selectGradeByNumber(number);
+      if (didSelect) {
+        setState(() {
+          _altEntryStage = _AltEntryStage.categories;
+        });
+
+        _dismissHUD();
+      }
     }
   }
 
-  void _selectTagByNumber(int number) {
+  bool _selectTagByNumber(int number) {
     final activeEvent = _eventsController.activeEvent;
-    if (activeEvent == null) return;
+    if (activeEvent == null) return false;
 
     final taxonomy = _taxonomy;
-    if (taxonomy == null) return;
+    if (taxonomy == null) return false;
 
     final category = taxonomy.getCategoryById(activeEvent.categoryId);
     final eventTypes = category?.eventTypes ?? const <EventTypeTaxonomy>[];
 
     if (number < 1 || number > eventTypes.length) {
-      return;
+      return false;
     }
 
     final eventType = eventTypes[number - 1];
@@ -537,11 +564,13 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
         grade: eventType.defaultImpact ?? activeEvent.grade,
       ),
     );
+
+    return true;
   }
 
-  void _selectGradeByNumber(int number) {
+  bool _selectGradeByNumber(int number) {
     final activeEvent = _eventsController.activeEvent;
-    if (activeEvent == null) return;
+    if (activeEvent == null) return false;
 
     // Map number to grade (1=Positive, 2=Neutral, 3=Negative)
     EventGrade? grade;
@@ -556,11 +585,13 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
         grade = EventGrade.negative;
         break;
       default:
-        return; // Invalid number, ignore
+        return false; // Invalid number, ignore
     }
 
     // Update event with selected grade
     _updateEvent(activeEvent.copyWith(grade: grade));
+
+    return true;
   }
 
   void _saveAndCloseSmartHud() {
@@ -636,11 +667,17 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final showCategoryNumbers = _isAltEntryActive && _isAltPressed && _altEntryStage == _AltEntryStage.categories;
+    final showLabelNumbers = _isAltEntryActive && _isAltPressed && _altEntryStage == _AltEntryStage.labels;
+    final showGradeNumbers = _isAltEntryActive && _isAltPressed && _altEntryStage == _AltEntryStage.grades;
+
     return Focus(
       autofocus: true,
       onKeyEvent: (node, event) {
         // Handle key press events
         if (event is KeyDownEvent) {
+          final isAltPressed = HardwareKeyboard.instance.isAltPressed;
+
           // Toggle play/pause          // Space bar: Play/Pause
           if (event.logicalKey == LogicalKeyboardKey.space) {
             _togglePlayPause();
@@ -655,32 +692,37 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
 
           // SmartHUD keyboard shortcuts (when HUD is active)
           if (_eventsController.activeEvent != null && !isDrawingMode) {
-            // Number keys: Select tag or grade
-            if (event.logicalKey == LogicalKeyboardKey.digit1 ||
-                event.logicalKey == LogicalKeyboardKey.numpad1) {
-              _handleSmartHudNumber(1);
-              return KeyEventResult.handled;
+            // Alt+Number keys: staged selection only during Alt entry workflow
+            if (_isAltEntryActive && isAltPressed) {
+              if (event.logicalKey == LogicalKeyboardKey.digit1 ||
+                  event.logicalKey == LogicalKeyboardKey.numpad1) {
+                _handleSmartHudNumber(1);
+                return KeyEventResult.handled;
+              }
+              if (event.logicalKey == LogicalKeyboardKey.digit2 ||
+                  event.logicalKey == LogicalKeyboardKey.numpad2) {
+                _handleSmartHudNumber(2);
+                return KeyEventResult.handled;
+              }
+              if (event.logicalKey == LogicalKeyboardKey.digit3 ||
+                  event.logicalKey == LogicalKeyboardKey.numpad3) {
+                _handleSmartHudNumber(3);
+                return KeyEventResult.handled;
+              }
+              if (_altEntryStage == _AltEntryStage.labels) {
+                if (event.logicalKey == LogicalKeyboardKey.digit4 ||
+                    event.logicalKey == LogicalKeyboardKey.numpad4) {
+                  _handleSmartHudNumber(4);
+                  return KeyEventResult.handled;
+                }
+                if (event.logicalKey == LogicalKeyboardKey.digit5 ||
+                    event.logicalKey == LogicalKeyboardKey.numpad5) {
+                  _handleSmartHudNumber(5);
+                  return KeyEventResult.handled;
+                }
+              }
             }
-            if (event.logicalKey == LogicalKeyboardKey.digit2 ||
-                event.logicalKey == LogicalKeyboardKey.numpad2) {
-              _handleSmartHudNumber(2);
-              return KeyEventResult.handled;
-            }
-            if (event.logicalKey == LogicalKeyboardKey.digit3 ||
-                event.logicalKey == LogicalKeyboardKey.numpad3) {
-              _handleSmartHudNumber(3);
-              return KeyEventResult.handled;
-            }
-            if (event.logicalKey == LogicalKeyboardKey.digit4 ||
-                event.logicalKey == LogicalKeyboardKey.numpad4) {
-              _handleSmartHudNumber(4);
-              return KeyEventResult.handled;
-            }
-            if (event.logicalKey == LogicalKeyboardKey.digit5 ||
-                event.logicalKey == LogicalKeyboardKey.numpad5) {
-              _handleSmartHudNumber(5);
-              return KeyEventResult.handled;
-            }
+
             // Enter: Save event and close HUD
             if (event.logicalKey == LogicalKeyboardKey.enter ||
                 event.logicalKey == LogicalKeyboardKey.numpadEnter) {
@@ -735,45 +777,80 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
           }
 
           // Alt key: Show category numbers and track state
-          final isAltPressed = HardwareKeyboard.instance.isAltPressed;
           if (event.logicalKey == LogicalKeyboardKey.altLeft ||
               event.logicalKey == LogicalKeyboardKey.altRight) {
             setState(() {
               _isAltPressed = true;
+              _isAltEntryActive = true;
+              _altEntryStage = _AltEntryStage.categories;
             });
             return KeyEventResult.handled;
           }
 
           // Alt+number: Create event with category
-          if (isAltPressed && hasVideoLoaded && !isDrawingMode) {
+          if (_isAltEntryActive &&
+              isAltPressed &&
+              _altEntryStage == _AltEntryStage.categories &&
+              hasVideoLoaded &&
+              !isDrawingMode) {
             if (event.logicalKey == LogicalKeyboardKey.digit1 ||
                 event.logicalKey == LogicalKeyboardKey.numpad1) {
-              _createEventFromAltNumber(1);
+              final didCreate = _createEventFromAltNumber(1);
+              if (didCreate) {
+                setState(() {
+                  _altEntryStage = _AltEntryStage.labels;
+                });
+              }
               return KeyEventResult.handled;
             }
             if (event.logicalKey == LogicalKeyboardKey.digit2 ||
                 event.logicalKey == LogicalKeyboardKey.numpad2) {
-              _createEventFromAltNumber(2);
+              final didCreate = _createEventFromAltNumber(2);
+              if (didCreate) {
+                setState(() {
+                  _altEntryStage = _AltEntryStage.labels;
+                });
+              }
               return KeyEventResult.handled;
             }
             if (event.logicalKey == LogicalKeyboardKey.digit3 ||
                 event.logicalKey == LogicalKeyboardKey.numpad3) {
-              _createEventFromAltNumber(3);
+              final didCreate = _createEventFromAltNumber(3);
+              if (didCreate) {
+                setState(() {
+                  _altEntryStage = _AltEntryStage.labels;
+                });
+              }
               return KeyEventResult.handled;
             }
             if (event.logicalKey == LogicalKeyboardKey.digit4 ||
                 event.logicalKey == LogicalKeyboardKey.numpad4) {
-              _createEventFromAltNumber(4);
+              final didCreate = _createEventFromAltNumber(4);
+              if (didCreate) {
+                setState(() {
+                  _altEntryStage = _AltEntryStage.labels;
+                });
+              }
               return KeyEventResult.handled;
             }
             if (event.logicalKey == LogicalKeyboardKey.digit5 ||
                 event.logicalKey == LogicalKeyboardKey.numpad5) {
-              _createEventFromAltNumber(5);
+              final didCreate = _createEventFromAltNumber(5);
+              if (didCreate) {
+                setState(() {
+                  _altEntryStage = _AltEntryStage.labels;
+                });
+              }
               return KeyEventResult.handled;
             }
             if (event.logicalKey == LogicalKeyboardKey.digit6 ||
                 event.logicalKey == LogicalKeyboardKey.numpad6) {
-              _createEventFromAltNumber(6);
+              final didCreate = _createEventFromAltNumber(6);
+              if (didCreate) {
+                setState(() {
+                  _altEntryStage = _AltEntryStage.labels;
+                });
+              }
               return KeyEventResult.handled;
             }
           }
@@ -867,6 +944,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
               event.logicalKey == LogicalKeyboardKey.altRight) {
             setState(() {
               _isAltPressed = false;
+              _isAltEntryActive = false;
+              _altEntryStage = _AltEntryStage.none;
             });
             return KeyEventResult.handled;
           }
@@ -961,23 +1040,25 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
             // LAYER 5: Event Buttons with SmartHUD (Centered, lower position)
             if (hasVideoLoaded)
               Positioned(
-                bottom: 75, // Lower position - closer to progress bar
+                bottom: 80,
                 left: 0,
                 right: 0,
                 child: Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Smart HUD (appears above buttons)
+                      // Smart HUD
                       if (_eventsController.activeEvent != null)
                         Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.only(bottom: 10),
                           child: SmartHUD(
                             event: _eventsController.activeEvent!,
                             onUpdateEvent: _updateEvent,
                             onDeleteEvent: _deleteEvent,
                             onDismiss: _dismissHUD,
                             isAltPressed: _isAltPressed,
+                            showTagNumbers: showLabelNumbers,
+                            showGradeNumbers: showGradeNumbers,
                             taxonomy: _taxonomy,
                           ),
                         ),
@@ -986,7 +1067,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
                       EventButtonsPanel(
                         onEventTriggered: _onEventTriggered,
                         taxonomy: _taxonomy,
-                        showNumbers: _isAltPressed,
+                        showNumbers: showCategoryNumbers,
                       ),
                     ],
                   ),
