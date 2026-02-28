@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import '../models/app_mode.dart';
 
-/// Branded title bar for Coach Flow Video Analyzer
+/// Branded title bar for Flow Lens
 class BrandedTitleBar extends StatelessWidget {
   final VoidCallback onShowShortcuts;
   final bool showShortcuts;
@@ -9,9 +10,15 @@ class BrandedTitleBar extends StatelessWidget {
   final VoidCallback? onShowEventsTable;
   final VoidCallback? onShowSettings;
 
+  // Mode switching
+  final AppMode currentMode;
+  final ValueChanged<AppMode> onModeChanged;
+
   const BrandedTitleBar({
     required this.onShowShortcuts,
     required this.showShortcuts,
+    required this.currentMode,
+    required this.onModeChanged,
     this.onSaveEvents,
     this.onLoadEvents,
     this.onShowEventsTable,
@@ -80,7 +87,7 @@ class BrandedTitleBar extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'COACH FLOW',
+                'FLOW LENS',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 18,
@@ -89,7 +96,7 @@ class BrandedTitleBar extends StatelessWidget {
                 ),
               ),
               Text(
-                'Video Analyzer',
+                'by Coach Flow',
                 style: TextStyle(
                   color: Colors.white70,
                   fontSize: 12,
@@ -98,6 +105,11 @@ class BrandedTitleBar extends StatelessWidget {
               ),
             ],
           ),
+
+          const Spacer(),
+
+          // Mode tabs
+          _ModeTabs(currentMode: currentMode, onModeChanged: onModeChanged),
 
           const Spacer(),
 
@@ -139,6 +151,112 @@ class BrandedTitleBar extends StatelessWidget {
             tooltip: showShortcuts ? 'Hide Shortcuts' : 'Show Shortcuts',
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Mode tab strip
+// ---------------------------------------------------------------------------
+
+class _ModeTabs extends StatelessWidget {
+  final AppMode currentMode;
+  final ValueChanged<AppMode> onModeChanged;
+
+  const _ModeTabs({required this.currentMode, required this.onModeChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 32,
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.25),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      padding: const EdgeInsets.all(3),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: AppMode.values
+            .map((mode) => _ModeTab(
+                  mode: mode,
+                  isActive: mode == currentMode,
+                  onTap: () => onModeChanged(mode),
+                ))
+            .toList(),
+      ),
+    );
+  }
+}
+
+class _ModeTab extends StatelessWidget {
+  final AppMode mode;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _ModeTab({
+    required this.mode,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  static String _label(AppMode mode) {
+    switch (mode) {
+      case AppMode.record:
+        return 'Record';
+      case AppMode.review:
+        return 'Review';
+      case AppMode.tracking:
+        return 'Track';
+    }
+  }
+
+  static IconData _icon(AppMode mode) {
+    switch (mode) {
+      case AppMode.record:
+        return Icons.fiber_manual_record;
+      case AppMode.review:
+        return Icons.search;
+      case AppMode.tracking:
+        return Icons.people;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeInOut,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        decoration: BoxDecoration(
+          color: isActive
+              ? Colors.white.withOpacity(0.18)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              _icon(mode),
+              size: 13,
+              color: isActive ? Colors.white : Colors.white54,
+            ),
+            const SizedBox(width: 5),
+            Text(
+              _label(mode),
+              style: TextStyle(
+                color: isActive ? Colors.white : Colors.white54,
+                fontSize: 12,
+                fontWeight:
+                    isActive ? FontWeight.bold : FontWeight.normal,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

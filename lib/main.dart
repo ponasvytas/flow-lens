@@ -27,7 +27,12 @@ import 'services/settings_repository.dart';
 import 'models/sport_taxonomy.dart';
 import 'controllers/events_controller.dart';
 import 'controllers/settings_controller.dart';
+import 'controllers/ui_controller.dart';
+import 'models/app_mode.dart';
+import 'widgets/dock_layout.dart';
 import 'widgets/settings_view.dart';
+import 'widgets/event_navigation_panel.dart';
+import 'widgets/player_tracking_panel.dart';
 
 void main() {
   // 1. Initialize MediaKit (Crucial for the native video engine)
@@ -87,6 +92,9 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
     SharedPreferencesSettingsRepository(),
   );
 
+  // UI mode & panel management
+  final UIController _uiController = UIController();
+
   // Shortcuts panel visibility and position
   bool _showShortcuts = false;
   double _shortcutsPanelX = 0.0; // Will be set to right side in initState
@@ -120,7 +128,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
     // 2. Configure the player with web-friendly and performance settings
     player = Player(
       configuration: PlayerConfiguration(
-        title: 'Hockey Analyzer',
+        title: 'Flow Lens',
         // Enable GPU acceleration for better performance (Native only)
         // On Web, let the browser/media_kit handle the rendering backend
         vo: kIsWeb ? null : 'gpu',
@@ -130,11 +138,18 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
     );
     controller = VideoController(player);
     _eventsController.addListener(_onEventsChanged);
+    _uiController.addListener(_onUIChanged);
 
     _settingsController.loadSettings();
   }
 
   void _onEventsChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _onUIChanged() {
     if (mounted) {
       setState(() {});
     }
@@ -165,6 +180,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
     player.dispose(); // Always clean up video memory!
     _eventsController.removeListener(_onEventsChanged);
     _eventsController.dispose();
+    _uiController.removeListener(_onUIChanged);
+    _uiController.dispose();
     super.dispose();
   }
 
@@ -690,6 +707,13 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
             return KeyEventResult.handled;
           }
 
+          // Ctrl+M: Cycle through app modes
+          if (event.logicalKey == LogicalKeyboardKey.keyM &&
+              HardwareKeyboard.instance.isControlPressed) {
+            _uiController.cycleMode();
+            return KeyEventResult.handled;
+          }
+
           // SmartHUD keyboard shortcuts (when HUD is active)
           if (_eventsController.activeEvent != null && !isDrawingMode) {
             // Alt+Number keys: staged selection only during Alt entry workflow
@@ -739,17 +763,20 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
           // Tool shortcuts (only in graphics mode)
           if (isDrawingMode) {
             // '1' key: Freehand tool
-            if (event.logicalKey == LogicalKeyboardKey.digit1) {
+            if (event.logicalKey == LogicalKeyboardKey.digit1 ||
+                event.logicalKey == LogicalKeyboardKey.numpad1) {
               setState(() => currentTool = DrawingTool.freehand);
               return KeyEventResult.handled;
             }
             // '2' key: Line tool
-            if (event.logicalKey == LogicalKeyboardKey.digit2) {
+            if (event.logicalKey == LogicalKeyboardKey.digit2 ||
+                event.logicalKey == LogicalKeyboardKey.numpad2) {
               setState(() => currentTool = DrawingTool.line);
               return KeyEventResult.handled;
             }
             // '3' key: Arrow tool
-            if (event.logicalKey == LogicalKeyboardKey.digit3) {
+            if (event.logicalKey == LogicalKeyboardKey.digit3 ||
+                event.logicalKey == LogicalKeyboardKey.numpad3) {
               setState(() => currentTool = DrawingTool.arrow);
               return KeyEventResult.handled;
             }
@@ -973,6 +1000,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
               child: BrandedTitleBar(
                 onShowShortcuts: _toggleShortcutsPanel,
                 showShortcuts: _showShortcuts,
+                currentMode: _uiController.currentMode,
+                onModeChanged: _uiController.setMode,
                 onSaveEvents: hasVideoLoaded ? _saveEvents : null,
                 onLoadEvents: hasVideoLoaded ? _loadEvents : null,
                 onShowEventsTable: hasVideoLoaded ? _showEventsTable : null,
@@ -1014,31 +1043,80 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
                 onRemoveTrail: _removeTrail,
               ),
 
-            // LAYER 3: Playback Controls (Centered at top) - Draggable
+            // LAYER 3–5c: All dockable panels via DockLayout
             if (hasVideoLoaded)
-              DraggableControlBar(
-                player: player,
-                onSpeedChange: _changeSpeed,
-                onJumpForward: _jumpForward,
-                onJumpBackward: _jumpBackward,
-                onTogglePlayPause: _togglePlayPause,
+              DockLayout(
+                uiController: _uiController,
+                panels: [
+                  // Playback Controls
+                  DockPanelEntry(
+                    id: PanelId.playbackControls,
+                    title: 'Playback',
+                    icon: Icons.play_circle_outline,
+                    defaultFloatingPosition: const Offset(20, 80),
+                    builder: (dockEdge) => DraggableControlBar(
+                      player: player,
+                      onSpeedChange: _changeSpeed,
+                      onJumpForward: _jumpForward,
+                      onJumpBackward: _jumpBackward,
+                      onTogglePlayPause: _togglePlayPause,
+                      dockEdge: dockEdge,
+                    ),
+                  ),
+                  // Drawing Tools
+                  DockPanelEntry(
+                    id: PanelId.drawingTools,
+                    title: 'Drawing',
+                    icon: Icons.draw,
+                    defaultFloatingPosition: Offset(
+                      MediaQuery.of(context).size.width - 240,
+                      200,
+                    ),
+                    builder: (dockEdge) => DrawingToolsPanel(
+                      isDrawingMode: isDrawingMode,
+                      currentTool: currentTool,
+                      drawingColor: drawingColor,
+                      onToggleDrawingMode: _toggleDrawingMode,
+                      onResetZoom: _resetZoom,
+                      onClearDrawing: _clearDrawing,
+                      onToolChange: (tool) =>
+                          setState(() => currentTool = tool),
+                      onColorChange: (color) =>
+                          setState(() => drawingColor = color),
+                      dockEdge: dockEdge,
+                    ),
+                  ),
+                  // Event Navigation (Review mode)
+                  DockPanelEntry(
+                    id: PanelId.eventNavigation,
+                    title: 'Event Navigation',
+                    icon: Icons.search,
+                    defaultFloatingPosition: const Offset(20, 200),
+                    builder: (dockEdge) => EventNavigationPanel(
+                      controller: _eventsController,
+                      onOpenEventsTable: _showEventsTable,
+                      onNavigateTo: (event) {
+                        final leadIn = _settingsController.settings.leadIn;
+                        final seekTime = event.timestamp - leadIn;
+                        player.seek(seekTime > Duration.zero
+                            ? seekTime
+                            : Duration.zero);
+                      },
+                    ),
+                  ),
+                  // Player Tracking (Tracking mode)
+                  DockPanelEntry(
+                    id: PanelId.playerTracking,
+                    title: 'Player Tracking',
+                    icon: Icons.people,
+                    defaultFloatingPosition: const Offset(20, 200),
+                    builder: (dockEdge) => const PlayerTrackingPanel(),
+                  ),
+                ],
               ),
 
-            // LAYER 4: Drawing Controls (Right Side)
-            if (hasVideoLoaded)
-              DrawingToolsPanel(
-                isDrawingMode: isDrawingMode,
-                currentTool: currentTool,
-                drawingColor: drawingColor,
-                onToggleDrawingMode: _toggleDrawingMode,
-                onResetZoom: _resetZoom,
-                onClearDrawing: _clearDrawing,
-                onToolChange: (tool) => setState(() => currentTool = tool),
-                onColorChange: (color) => setState(() => drawingColor = color),
-              ),
-
-            // LAYER 5: Event Buttons with SmartHUD (Centered, lower position)
-            if (hasVideoLoaded)
+            // LAYER 5: Event Buttons with SmartHUD (Record mode)
+            if (hasVideoLoaded && _uiController.panelVisible(PanelId.eventButtons))
               Positioned(
                 bottom: 80,
                 left: 0,
@@ -1088,7 +1166,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
               ),
 
             // LAYER 7: Shortcuts Panel (toggleable and draggable)
-            if (hasVideoLoaded)
+            if (hasVideoLoaded && _showShortcuts)
               ShortcutsPanel(
                 isVisible: _showShortcuts,
                 onToggle: _toggleShortcutsPanel,

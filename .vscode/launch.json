@@ -5,20 +5,20 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "flutter_video_analyzer",
+            "name": "flow_lens",
             "request": "launch",
             "type": "dart",
             "deviceId": "web-server",
             "args": ["--web-hostname=localhost", "--web-port=43888"]
         },
         {
-            "name": "flutter_video_analyzer (profile mode)",
+            "name": "flow_lens (profile mode)",
             "request": "launch",
             "type": "dart",
             "flutterMode": "profile"
         },
         {
-            "name": "flutter_video_analyzer (release mode)",
+            "name": "flow_lens (release mode)",
             "request": "launch",
             "type": "dart",
             "flutterMode": "release"

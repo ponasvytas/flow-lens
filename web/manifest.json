@@ -1,6 +1,6 @@
 {
-    "name": "flutter_video_analyzer",
-    "short_name": "flutter_video_analyzer",
+    "name": "Flow Lens",
+    "short_name": "Flow Lens",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#hex_code",
