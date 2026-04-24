@@ -1,9 +1,12 @@
 import 'dart:async';
-import 'dart:html' as html;
+import 'dart:js_interop';
+import 'dart:typed_data';
+import 'package:web/web.dart' as web;
 
 Future<String?> getUrlFromBytes(List<int> bytes) async {
-  final blob = html.Blob([bytes]);
-  return html.Url.createObjectUrlFromBlob(blob);
+  final uint8List = Uint8List.fromList(bytes);
+  final blob = web.Blob(<JSAny>[uint8List.toJS].toJS);
+  return web.URL.createObjectURL(blob);
 }
 
 /// Creates a blob URL directly from the browser's native File object.
@@ -15,10 +18,12 @@ Future<String?> createUrlFromPlatformFile(dynamic platformFile) async {
 
 /// Creates a blob URL from an HTML File input element's file.
 String? createUrlFromHtmlFile(dynamic file) {
-  if (file is html.File) {
-    return html.Url.createObjectUrlFromBlob(file);
+  if (file == null) return null;
+  try {
+    return web.URL.createObjectURL(file as web.Blob);
+  } catch (_) {
+    return null;
   }
-  return null;
 }
 
 /// Pick a video file using native HTML file input and return a blob URL.
@@ -26,31 +31,40 @@ String? createUrlFromHtmlFile(dynamic file) {
 Future<String?> pickVideoFileWeb() async {
   final completer = Completer<String?>();
 
-  final input = html.FileUploadInputElement()..accept = 'video/*';
+  final input = web.document.createElement('input') as web.HTMLInputElement;
+  input.type = 'file';
+  input.accept = 'video/*';
 
-  input.onChange.listen((event) {
-    final files = input.files;
-    if (files != null && files.isNotEmpty) {
-      final file = files[0];
-      final url = html.Url.createObjectUrlFromBlob(file);
-      completer.complete(url);
-    } else {
-      completer.complete(null);
-    }
-  });
-
-  // Handle cancel (user closes dialog without selecting)
-  input.onAbort.listen((_) => completer.complete(null));
-
-  // Also handle if user doesn't select anything
-  html.window.addEventListener('focus', (event) {
-    // Give a small delay for the file dialog result
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (!completer.isCompleted) {
+  input.addEventListener(
+    'change',
+    (web.Event event) {
+      final files = input.files;
+      if (files != null && files.length > 0) {
+        final file = files.item(0);
+        if (file != null) {
+          final url = web.URL.createObjectURL(file);
+          completer.complete(url);
+        } else {
+          completer.complete(null);
+        }
+      } else {
         completer.complete(null);
       }
-    });
-  });
+    }.toJS,
+  );
+
+  // Also handle if user doesn't select anything (cancel)
+  web.window.addEventListener(
+    'focus',
+    (web.Event event) {
+      // Give a small delay for the file dialog result
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (!completer.isCompleted) {
+          completer.complete(null);
+        }
+      });
+    }.toJS,
+  );
 
   input.click();
 
