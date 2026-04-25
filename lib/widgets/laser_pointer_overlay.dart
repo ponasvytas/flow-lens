@@ -32,8 +32,6 @@ class _LaserPointerOverlayState extends State<LaserPointerOverlay>
     with TickerProviderStateMixin {
   Offset? _cursorPosition;
   List<DrawingPoint> _currentStroke = [];
-  DateTime? _lastCursorUpdate;
-  DateTime? _lastDragUpdate;
 
   // Animation management - each trail gets its own controller
   final Map<LaserTrail, AnimationController> _animationControllers = {};
@@ -127,17 +125,9 @@ class _LaserPointerOverlayState extends State<LaserPointerOverlay>
                 : SystemMouseCursors.basic,
             onHover: (event) {
               if (widget.isActive && widget.isDrawingMode) {
-                // Throttle cursor updates to max 20 updates/sec for performance
-                final now = DateTime.now();
-                if (_lastCursorUpdate == null ||
-                    now.difference(_lastCursorUpdate!) >
-                        const Duration(milliseconds: 50)) {
-                  setState(() {
-                    // ⭐ Only rebuilds THIS widget, not parent!
-                    _cursorPosition = event.localPosition;
-                  });
-                  _lastCursorUpdate = now;
-                }
+                setState(() {
+                  _cursorPosition = event.localPosition;
+                });
               }
             },
             onExit: (event) {
@@ -164,24 +154,8 @@ class _LaserPointerOverlayState extends State<LaserPointerOverlay>
               },
               onPanUpdate: (details) {
                 if (widget.isActive && widget.isDrawingMode) {
-                  // Throttle setState updates during drawing for performance
-                  final now = DateTime.now();
-                  if (_lastDragUpdate == null ||
-                      now.difference(_lastDragUpdate!) >
-                          const Duration(milliseconds: 16)) {
-                    setState(() {
-                      _cursorPosition = details.localPosition;
-                      _currentStroke.add(
-                        DrawingPoint(
-                          details.localPosition,
-                          widget.color,
-                          widget.strokeWidth,
-                        ),
-                      );
-                    });
-                    _lastDragUpdate = now;
-                  } else {
-                    // Still update stroke without setState for smoothness
+                  setState(() {
+                    _cursorPosition = details.localPosition;
                     _currentStroke.add(
                       DrawingPoint(
                         details.localPosition,
@@ -189,7 +163,7 @@ class _LaserPointerOverlayState extends State<LaserPointerOverlay>
                         widget.strokeWidth,
                       ),
                     );
-                  }
+                  });
                 }
               },
               onPanEnd: (details) {

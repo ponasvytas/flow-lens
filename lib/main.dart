@@ -7,6 +7,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:file_picker/file_picker.dart';
 
 import 'utils/video_loader.dart';
+import 'utils/perf.dart';
 import 'models/drawing_models.dart';
 import 'models/game_event.dart';
 import 'widgets/video_canvas.dart';
@@ -49,6 +50,115 @@ enum _AltEntryStage {
   grades,
 }
 
+// ---------------------------------------------------------------------------
+// Scoped ChangeNotifiers — mutations here do NOT trigger a parent setState.
+// ---------------------------------------------------------------------------
+
+/// All drawing / annotation state in one notifier.
+class _DrawingState extends ChangeNotifier {
+  bool isDrawingMode = false;
+  DrawingTool currentTool = DrawingTool.freehand;
+  Color drawingColor = const Color(0xFF753b8f);
+  double strokeWidth = 5.0;
+  final List<DrawingStroke> strokes = [];
+  final List<LineShape> lines = [];
+  final List<ArrowShape> arrows = [];
+  final List<LaserTrail> laserTrails = [];
+
+  void toggleDrawingMode() {
+    isDrawingMode = !isDrawingMode;
+    notifyListeners();
+  }
+
+  void setTool(DrawingTool tool) {
+    if (tool == currentTool) return;
+    currentTool = tool;
+    notifyListeners();
+  }
+
+  void setColor(Color color) {
+    if (color == drawingColor) return;
+    drawingColor = color;
+    notifyListeners();
+  }
+
+  void toggleLaser() {
+    if (currentTool == DrawingTool.laser) {
+      currentTool = DrawingTool.freehand;
+    } else {
+      currentTool = DrawingTool.laser;
+      if (!isDrawingMode) isDrawingMode = true;
+    }
+    notifyListeners();
+  }
+
+  void addStroke(DrawingStroke stroke) {
+    strokes.add(stroke);
+    notifyListeners();
+  }
+
+  void addLine(LineShape line) {
+    lines.add(line);
+    notifyListeners();
+  }
+
+  void addArrow(ArrowShape arrow) {
+    arrows.add(arrow);
+    notifyListeners();
+  }
+
+  void addLaserTrail(LaserTrail trail) {
+    laserTrails.add(trail);
+    notifyListeners();
+  }
+
+  void removeTrail(LaserTrail trail) {
+    laserTrails.remove(trail);
+    notifyListeners();
+  }
+
+  void clearAll() {
+    strokes.clear();
+    lines.clear();
+    arrows.clear();
+    laserTrails.clear();
+    notifyListeners();
+  }
+}
+
+/// Alt+number workflow state — only consumed by event buttons / SmartHUD.
+class _AltKeyState extends ChangeNotifier {
+  bool isPressed = false;
+  bool isEntryActive = false;
+  _AltEntryStage stage = _AltEntryStage.none;
+
+  bool get showCategoryNumbers =>
+      isEntryActive && isPressed && stage == _AltEntryStage.categories;
+  bool get showLabelNumbers =>
+      isEntryActive && isPressed && stage == _AltEntryStage.labels;
+  bool get showGradeNumbers =>
+      isEntryActive && isPressed && stage == _AltEntryStage.grades;
+
+  void onAltPressed() {
+    isPressed = true;
+    isEntryActive = true;
+    stage = _AltEntryStage.categories;
+    notifyListeners();
+  }
+
+  void onAltReleased() {
+    isPressed = false;
+    isEntryActive = false;
+    stage = _AltEntryStage.none;
+    notifyListeners();
+  }
+
+  void setStage(_AltEntryStage newStage) {
+    stage = newStage;
+    notifyListeners();
+  }
+}
+
 class HockeyAnalyzerScreen extends StatefulWidget {
   const HockeyAnalyzerScreen({super.key});
 
@@ -62,17 +172,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
   late final VideoController controller;
 
   // Drawing state
-  List<DrawingStroke> drawingStrokes = [];
-  List<LineShape> lineShapes = [];
-  List<ArrowShape> arrowShapes = [];
-  // Active drawing state moved to DrawingInteractionOverlay
-  bool isDrawingMode = false;
-  DrawingTool currentTool = DrawingTool.freehand;
-  Color drawingColor = const Color(0xFF753b8f); // const Color(0xFF753b8f)
-  double strokeWidth = 5.0;
-
-  // Laser pointer state
-  List<LaserTrail> laserTrails = [];
+  final _drawing = _DrawingState();
 
   // Zoom/Pan state
   final TransformationController _transformationController =
@@ -101,10 +201,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
   double _shortcutsPanelY = 100.0;
 
   // Alt+number workflow state
-  bool _isAltPressed = false;
-
-  bool _isAltEntryActive = false;
-  _AltEntryStage _altEntryStage = _AltEntryStage.none;
+  final _altKey = _AltKeyState();
 
   // Speed control state for hold-to-speed shortcuts
   double _previousPlaybackSpeed = 1.0;
@@ -137,22 +234,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
       ),
     );
     controller = VideoController(player);
-    _eventsController.addListener(_onEventsChanged);
-    _uiController.addListener(_onUIChanged);
 
     _settingsController.loadSettings();
-  }
-
-  void _onEventsChanged() {
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
-  void _onUIChanged() {
-    if (mounted) {
-      setState(() {});
-    }
   }
 
   Future<void> _loadTaxonomy() async {
@@ -178,10 +261,10 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
   @override
   void dispose() {
     player.dispose(); // Always clean up video memory!
-    _eventsController.removeListener(_onEventsChanged);
     _eventsController.dispose();
-    _uiController.removeListener(_onUIChanged);
     _uiController.dispose();
+    _drawing.dispose();
+    _altKey.dispose();
     super.dispose();
   }
 
@@ -346,56 +429,37 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
   }
 
   void _onStrokeCompleted(DrawingStroke stroke) {
-    setState(() {
-      drawingStrokes.add(stroke);
-    });
+    _drawing.addStroke(stroke);
   }
 
   void _onLineCompleted(LineShape line) {
-    setState(() {
-      lineShapes.add(line);
-    });
+    _drawing.addLine(line);
   }
 
   void _onArrowCompleted(ArrowShape arrow) {
-    setState(() {
-      arrowShapes.add(arrow);
-    });
+    _drawing.addArrow(arrow);
   }
 
   void _completeLaserDrawing(List<DrawingPoint> strokePoints) {
     if (strokePoints.isEmpty) return;
-    setState(() {
-      // Create laser trail - animation handled by LaserPointerOverlay
-      final trail = LaserTrail(
-        strokePoints,
-        drawingColor,
-        strokeWidth,
-        DateTime.now(),
-      );
-      laserTrails.add(trail);
-    });
+    _drawing.addLaserTrail(LaserTrail(
+      strokePoints,
+      _drawing.drawingColor,
+      _drawing.strokeWidth,
+      DateTime.now(),
+    ));
   }
 
   void _removeTrail(LaserTrail trail) {
-    setState(() {
-      laserTrails.remove(trail);
-    });
+    _drawing.removeTrail(trail);
   }
 
   void _clearDrawing() {
-    setState(() {
-      drawingStrokes.clear();
-      lineShapes.clear();
-      arrowShapes.clear();
-      laserTrails.clear();
-    });
+    _drawing.clearAll();
   }
 
   void _toggleDrawingMode() {
-    setState(() {
-      isDrawingMode = !isDrawingMode;
-    });
+    _drawing.toggleDrawingMode();
   }
 
   void _resetZoom() {
@@ -535,25 +599,20 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
     final activeEvent = _eventsController.activeEvent;
     if (activeEvent == null) return;
 
-    if (!_isAltEntryActive || !_isAltPressed) return;
+    if (!_altKey.isEntryActive || !_altKey.isPressed) return;
 
-    if (_altEntryStage == _AltEntryStage.labels) {
+    if (_altKey.stage == _AltEntryStage.labels) {
       final didSelect = _selectTagByNumber(number);
       if (didSelect) {
-        setState(() {
-          _altEntryStage = _AltEntryStage.grades;
-        });
+        _altKey.setStage(_AltEntryStage.grades);
       }
       return;
     }
 
-    if (_altEntryStage == _AltEntryStage.grades) {
+    if (_altKey.stage == _AltEntryStage.grades) {
       final didSelect = _selectGradeByNumber(number);
       if (didSelect) {
-        setState(() {
-          _altEntryStage = _AltEntryStage.categories;
-        });
-
+        _altKey.setStage(_AltEntryStage.categories);
         _dismissHUD();
       }
     }
@@ -684,9 +743,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final showCategoryNumbers = _isAltEntryActive && _isAltPressed && _altEntryStage == _AltEntryStage.categories;
-    final showLabelNumbers = _isAltEntryActive && _isAltPressed && _altEntryStage == _AltEntryStage.labels;
-    final showGradeNumbers = _isAltEntryActive && _isAltPressed && _altEntryStage == _AltEntryStage.grades;
+    Perf.rebuildCount('HockeyAnalyzerScreen');
 
     return Focus(
       autofocus: true,
@@ -715,9 +772,9 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
           }
 
           // SmartHUD keyboard shortcuts (when HUD is active)
-          if (_eventsController.activeEvent != null && !isDrawingMode) {
+          if (_eventsController.activeEvent != null && !_drawing.isDrawingMode) {
             // Alt+Number keys: staged selection only during Alt entry workflow
-            if (_isAltEntryActive && isAltPressed) {
+            if (_altKey.isEntryActive && isAltPressed) {
               if (event.logicalKey == LogicalKeyboardKey.digit1 ||
                   event.logicalKey == LogicalKeyboardKey.numpad1) {
                 _handleSmartHudNumber(1);
@@ -733,7 +790,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
                 _handleSmartHudNumber(3);
                 return KeyEventResult.handled;
               }
-              if (_altEntryStage == _AltEntryStage.labels) {
+              if (_altKey.stage == _AltEntryStage.labels) {
                 if (event.logicalKey == LogicalKeyboardKey.digit4 ||
                     event.logicalKey == LogicalKeyboardKey.numpad4) {
                   _handleSmartHudNumber(4);
@@ -761,23 +818,23 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
           }
 
           // Tool shortcuts (only in graphics mode)
-          if (isDrawingMode) {
+          if (_drawing.isDrawingMode) {
             // '1' key: Freehand tool
             if (event.logicalKey == LogicalKeyboardKey.digit1 ||
                 event.logicalKey == LogicalKeyboardKey.numpad1) {
-              setState(() => currentTool = DrawingTool.freehand);
+              _drawing.setTool(DrawingTool.freehand);
               return KeyEventResult.handled;
             }
             // '2' key: Line tool
             if (event.logicalKey == LogicalKeyboardKey.digit2 ||
                 event.logicalKey == LogicalKeyboardKey.numpad2) {
-              setState(() => currentTool = DrawingTool.line);
+              _drawing.setTool(DrawingTool.line);
               return KeyEventResult.handled;
             }
             // '3' key: Arrow tool
             if (event.logicalKey == LogicalKeyboardKey.digit3 ||
                 event.logicalKey == LogicalKeyboardKey.numpad3) {
-              setState(() => currentTool = DrawingTool.arrow);
+              _drawing.setTool(DrawingTool.arrow);
               return KeyEventResult.handled;
             }
           }
@@ -790,43 +847,28 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
 
           // 'K' key: Toggle laser pointer when 'K' key is pressed
           if (event.logicalKey == LogicalKeyboardKey.keyK) {
-            setState(() {
-              if (currentTool == DrawingTool.laser) {
-                currentTool = DrawingTool.freehand;
-              } else {
-                currentTool = DrawingTool.laser;
-                if (!isDrawingMode) {
-                  isDrawingMode = true;
-                }
-              }
-            });
+            _drawing.toggleLaser();
             return KeyEventResult.handled;
           }
 
           // Alt key: Show category numbers and track state
           if (event.logicalKey == LogicalKeyboardKey.altLeft ||
               event.logicalKey == LogicalKeyboardKey.altRight) {
-            setState(() {
-              _isAltPressed = true;
-              _isAltEntryActive = true;
-              _altEntryStage = _AltEntryStage.categories;
-            });
+            _altKey.onAltPressed();
             return KeyEventResult.handled;
           }
 
           // Alt+number: Create event with category
-          if (_isAltEntryActive &&
+          if (_altKey.isEntryActive &&
               isAltPressed &&
-              _altEntryStage == _AltEntryStage.categories &&
+              _altKey.stage == _AltEntryStage.categories &&
               hasVideoLoaded &&
-              !isDrawingMode) {
+              !_drawing.isDrawingMode) {
             if (event.logicalKey == LogicalKeyboardKey.digit1 ||
                 event.logicalKey == LogicalKeyboardKey.numpad1) {
               final didCreate = _createEventFromAltNumber(1);
               if (didCreate) {
-                setState(() {
-                  _altEntryStage = _AltEntryStage.labels;
-                });
+                _altKey.setStage(_AltEntryStage.labels);
               }
               return KeyEventResult.handled;
             }
@@ -834,9 +876,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
                 event.logicalKey == LogicalKeyboardKey.numpad2) {
               final didCreate = _createEventFromAltNumber(2);
               if (didCreate) {
-                setState(() {
-                  _altEntryStage = _AltEntryStage.labels;
-                });
+                _altKey.setStage(_AltEntryStage.labels);
               }
               return KeyEventResult.handled;
             }
@@ -844,9 +884,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
                 event.logicalKey == LogicalKeyboardKey.numpad3) {
               final didCreate = _createEventFromAltNumber(3);
               if (didCreate) {
-                setState(() {
-                  _altEntryStage = _AltEntryStage.labels;
-                });
+                _altKey.setStage(_AltEntryStage.labels);
               }
               return KeyEventResult.handled;
             }
@@ -854,9 +892,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
                 event.logicalKey == LogicalKeyboardKey.numpad4) {
               final didCreate = _createEventFromAltNumber(4);
               if (didCreate) {
-                setState(() {
-                  _altEntryStage = _AltEntryStage.labels;
-                });
+                _altKey.setStage(_AltEntryStage.labels);
               }
               return KeyEventResult.handled;
             }
@@ -864,9 +900,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
                 event.logicalKey == LogicalKeyboardKey.numpad5) {
               final didCreate = _createEventFromAltNumber(5);
               if (didCreate) {
-                setState(() {
-                  _altEntryStage = _AltEntryStage.labels;
-                });
+                _altKey.setStage(_AltEntryStage.labels);
               }
               return KeyEventResult.handled;
             }
@@ -874,9 +908,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
                 event.logicalKey == LogicalKeyboardKey.numpad6) {
               final didCreate = _createEventFromAltNumber(6);
               if (didCreate) {
-                setState(() {
-                  _altEntryStage = _AltEntryStage.labels;
-                });
+                _altKey.setStage(_AltEntryStage.labels);
               }
               return KeyEventResult.handled;
             }
@@ -938,6 +970,12 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
             return KeyEventResult.handled;
           }
 
+          // 'P' key: Dump perf stats (debug only)
+          if (event.logicalKey == LogicalKeyboardKey.keyP) {
+            Perf.dump();
+            return KeyEventResult.handled;
+          }
+
           // 'M' key: Toggle mute/unmute
           if (event.logicalKey == LogicalKeyboardKey.keyM) {
             final currentVolume = player.state.volume;
@@ -969,11 +1007,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
           // Alt key released: Update state
           if (event.logicalKey == LogicalKeyboardKey.altLeft ||
               event.logicalKey == LogicalKeyboardKey.altRight) {
-            setState(() {
-              _isAltPressed = false;
-              _isAltEntryActive = false;
-              _altEntryStage = _AltEntryStage.none;
-            });
+            _altKey.onAltReleased();
             return KeyEventResult.handled;
           }
 
@@ -993,61 +1027,77 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
         body: Stack(
           children: [
             // LAYER 0: Branded Title Bar (Top)
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: BrandedTitleBar(
-                onShowShortcuts: _toggleShortcutsPanel,
-                showShortcuts: _showShortcuts,
-                currentMode: _uiController.currentMode,
-                onModeChanged: _uiController.setMode,
-                onSaveEvents: hasVideoLoaded ? _saveEvents : null,
-                onLoadEvents: hasVideoLoaded ? _loadEvents : null,
-                onShowEventsTable: hasVideoLoaded ? _showEventsTable : null,
-                onShowSettings: hasVideoLoaded ? _showSettings : null,
+            ListenableBuilder(
+              listenable: _uiController,
+              builder: (context, _) => Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: BrandedTitleBar(
+                  onShowShortcuts: _toggleShortcutsPanel,
+                  showShortcuts: _showShortcuts,
+                  currentMode: _uiController.currentMode,
+                  onModeChanged: _uiController.setMode,
+                  onSaveEvents: hasVideoLoaded ? _saveEvents : null,
+                  onLoadEvents: hasVideoLoaded ? _loadEvents : null,
+                  onShowEventsTable: hasVideoLoaded ? _showEventsTable : null,
+                  onShowSettings: hasVideoLoaded ? _showSettings : null,
+                ),
               ),
             ),
 
             // LAYER 1: Video Canvas with Zoom/Pan and Drawing (with top padding)
-            Padding(
-              padding: const EdgeInsets.only(top: 64),
-              child: VideoCanvas(
-                controller: controller,
-                transformationController: _transformationController,
-                isDrawingMode: isDrawingMode,
-                currentTool: currentTool,
-                drawingStrokes: drawingStrokes,
-                lineShapes: lineShapes,
-                arrowShapes: arrowShapes,
-                drawingColor: drawingColor,
-                strokeWidth: strokeWidth,
-                onStrokeCompleted: _onStrokeCompleted,
-                onLineCompleted: _onLineCompleted,
-                onArrowCompleted: _onArrowCompleted,
-                onClearDrawing: _clearDrawing,
+            ListenableBuilder(
+              listenable: _drawing,
+              builder: (context, _) => Padding(
+                padding: const EdgeInsets.only(top: 64),
+                child: VideoCanvas(
+                  controller: controller,
+                  transformationController: _transformationController,
+                  isDrawingMode: _drawing.isDrawingMode,
+                  currentTool: _drawing.currentTool,
+                  drawingStrokes: _drawing.strokes,
+                  lineShapes: _drawing.lines,
+                  arrowShapes: _drawing.arrows,
+                  drawingColor: _drawing.drawingColor,
+                  strokeWidth: _drawing.strokeWidth,
+                  onStrokeCompleted: _onStrokeCompleted,
+                  onLineCompleted: _onLineCompleted,
+                  onArrowCompleted: _onArrowCompleted,
+                  onClearDrawing: _clearDrawing,
+                ),
               ),
             ),
 
             // LAYER 2: Laser trails and cursor (No zoom scaling - overlay)
             // Only show when laser is active or there are trails to display
-            if (hasVideoLoaded &&
-                (currentTool == DrawingTool.laser || laserTrails.isNotEmpty))
-              LaserPointerOverlay(
-                isActive: currentTool == DrawingTool.laser,
-                isDrawingMode: isDrawingMode,
-                trails: laserTrails,
-                color: drawingColor,
-                strokeWidth: strokeWidth,
-                onCompleteDrawing: _completeLaserDrawing,
-                onRemoveTrail: _removeTrail,
+            if (hasVideoLoaded)
+              ListenableBuilder(
+                listenable: _drawing,
+                builder: (context, _) {
+                  if (_drawing.currentTool != DrawingTool.laser &&
+                      _drawing.laserTrails.isEmpty) {
+                    return const SizedBox.shrink();
+                  }
+                  return LaserPointerOverlay(
+                    isActive: _drawing.currentTool == DrawingTool.laser,
+                    isDrawingMode: _drawing.isDrawingMode,
+                    trails: _drawing.laserTrails,
+                    color: _drawing.drawingColor,
+                    strokeWidth: _drawing.strokeWidth,
+                    onCompleteDrawing: _completeLaserDrawing,
+                    onRemoveTrail: _removeTrail,
+                  );
+                },
               ),
 
             // LAYER 3–5c: All dockable panels via DockLayout
             if (hasVideoLoaded)
-              DockLayout(
-                uiController: _uiController,
-                panels: [
+              ListenableBuilder(
+                listenable: _uiController,
+                builder: (context, _) => DockLayout(
+                  uiController: _uiController,
+                  panels: [
                   // Playback Controls
                   DockPanelEntry(
                     id: PanelId.playbackControls,
@@ -1072,18 +1122,19 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
                       MediaQuery.of(context).size.width - 240,
                       200,
                     ),
-                    builder: (dockEdge) => DrawingToolsPanel(
-                      isDrawingMode: isDrawingMode,
-                      currentTool: currentTool,
-                      drawingColor: drawingColor,
-                      onToggleDrawingMode: _toggleDrawingMode,
-                      onResetZoom: _resetZoom,
-                      onClearDrawing: _clearDrawing,
-                      onToolChange: (tool) =>
-                          setState(() => currentTool = tool),
-                      onColorChange: (color) =>
-                          setState(() => drawingColor = color),
-                      dockEdge: dockEdge,
+                    builder: (dockEdge) => ListenableBuilder(
+                      listenable: _drawing,
+                      builder: (context, _) => DrawingToolsPanel(
+                        isDrawingMode: _drawing.isDrawingMode,
+                        currentTool: _drawing.currentTool,
+                        drawingColor: _drawing.drawingColor,
+                        onToggleDrawingMode: _toggleDrawingMode,
+                        onResetZoom: _resetZoom,
+                        onClearDrawing: _clearDrawing,
+                        onToolChange: _drawing.setTool,
+                        onColorChange: _drawing.setColor,
+                        dockEdge: dockEdge,
+                      ),
                     ),
                   ),
                   // Event Navigation (Review mode)
@@ -1113,56 +1164,68 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
                     builder: (dockEdge) => const PlayerTrackingPanel(),
                   ),
                 ],
+                ),
               ),
 
             // LAYER 5: Event Buttons with SmartHUD (Record mode)
-            if (hasVideoLoaded && _uiController.panelVisible(PanelId.eventButtons))
-              Positioned(
-                bottom: 80,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Smart HUD
-                      if (_eventsController.activeEvent != null)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: SmartHUD(
-                            event: _eventsController.activeEvent!,
-                            onUpdateEvent: _updateEvent,
-                            onDeleteEvent: _deleteEvent,
-                            onDismiss: _dismissHUD,
-                            isAltPressed: _isAltPressed,
-                            showTagNumbers: showLabelNumbers,
-                            showGradeNumbers: showGradeNumbers,
-                            taxonomy: _taxonomy,
-                          ),
-                        ),
+            if (hasVideoLoaded)
+              ListenableBuilder(
+                listenable: Listenable.merge([_uiController, _eventsController, _altKey]),
+                builder: (context, _) {
+                  if (!_uiController.panelVisible(PanelId.eventButtons)) {
+                    return const SizedBox.shrink();
+                  }
+                  return Positioned(
+                    bottom: 80,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Smart HUD
+                          if (_eventsController.activeEvent != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: SmartHUD(
+                                event: _eventsController.activeEvent!,
+                                onUpdateEvent: _updateEvent,
+                                onDeleteEvent: _deleteEvent,
+                                onDismiss: _dismissHUD,
+                                isAltPressed: _altKey.isPressed,
+                                showTagNumbers: _altKey.showLabelNumbers,
+                                showGradeNumbers: _altKey.showGradeNumbers,
+                                taxonomy: _taxonomy,
+                              ),
+                            ),
 
-                      // Event Buttons Row (with optional number badges)
-                      EventButtonsPanel(
-                        onEventTriggered: _onEventTriggered,
-                        taxonomy: _taxonomy,
-                        showNumbers: showCategoryNumbers,
+                          // Event Buttons Row (with optional number badges)
+                          EventButtonsPanel(
+                            onEventTriggered: _onEventTriggered,
+                            taxonomy: _taxonomy,
+                            showNumbers: _altKey.showCategoryNumbers,
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
+                    ),
+                  );
+                },
               ),
 
             // LAYER 6: Video Progress Bar
             if (hasVideoLoaded)
-              VideoProgressBar(
-                player: player,
-                events: _eventsController.filteredEvents,
-                onEventTap: (event) {
-                  final leadIn = _settingsController.settings.leadIn;
-                  final seekTime = event.timestamp - leadIn;
-                  player.seek(seekTime > Duration.zero ? seekTime : Duration.zero);
-                  _eventsController.selectEvent(event);
-                },
+              ListenableBuilder(
+                listenable: _eventsController,
+                builder: (context, _) => VideoProgressBar(
+                  player: player,
+                  events: _eventsController.filteredEvents,
+                  onEventTap: (event) {
+                    final leadIn = _settingsController.settings.leadIn;
+                    final seekTime = event.timestamp - leadIn;
+                    player.seek(seekTime > Duration.zero ? seekTime : Duration.zero);
+                    _eventsController.selectEvent(event);
+                  },
+                ),
               ),
 
             // LAYER 7: Shortcuts Panel (toggleable and draggable)
