@@ -1,16 +1,19 @@
-# flutter_video_analyzer
+# Flow Lens
 
-A new Flutter project.
+A multi-sport video analysis tool for coaches. Record events, draw annotations on video, and review plays frame-by-frame. Built with Flutter — runs on web, desktop, and mobile.
+
+## Features
+
+- **Three modes**: Record events during playback, Review with drawings and navigation, and more coming soon
+- **Event tagging**: Customizable sport taxonomies with keyboard-driven workflows (Alt+number combos)
+- **Drawing tools**: Freehand, lines, arrows, and laser pointer overlays on video
+- **Dockable panels**: Drag-to-snap UI panels to any screen edge or float freely
+- **Keyboard shortcuts**: Full playback control, speed changes, and event entry without leaving the keyboard
+- **Cross-platform**: Web, Windows, macOS, Linux, iOS, Android
 
 ## Getting Started
 
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```bash
+flutter pub get
+flutter run
+```
