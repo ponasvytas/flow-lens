@@ -93,12 +93,18 @@ class LaserPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(LaserPainter oldDelegate) {
-    // Always repaint if trails exist (they might be animating)
-    if (trails.isNotEmpty || oldDelegate.trails.isNotEmpty) {
+    // Only repaint for trails that are actively being erased (animating).
+    if (trails.any((t) => t.animationProgress > 0 && t.animationProgress < 1) ||
+        oldDelegate.trails.any((t) => t.animationProgress > 0 && t.animationProgress < 1)) {
       return true;
     }
 
-    return currentStroke != oldDelegate.currentStroke ||
+    // Trail count changed (added or removed).
+    if (trails.length != oldDelegate.trails.length) {
+      return true;
+    }
+
+    return currentStroke.length != oldDelegate.currentStroke.length ||
         cursorPosition != oldDelegate.cursorPosition ||
         cursorColor != oldDelegate.cursorColor ||
         strokeWidth != oldDelegate.strokeWidth ||

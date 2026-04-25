@@ -40,6 +40,7 @@ class VideoCanvas extends StatelessWidget {
   final List<ArrowShape> arrowShapes;
   final Color drawingColor;
   final double strokeWidth;
+  final int drawingRevision;
   final Function(DrawingStroke) onStrokeCompleted;
   final Function(LineShape) onLineCompleted;
   final Function(ArrowShape) onArrowCompleted;
@@ -55,6 +56,7 @@ class VideoCanvas extends StatelessWidget {
     required this.arrowShapes,
     required this.drawingColor,
     required this.strokeWidth,
+    required this.drawingRevision,
     required this.onStrokeCompleted,
     required this.onLineCompleted,
     required this.onArrowCompleted,
@@ -146,6 +148,7 @@ class VideoCanvas extends StatelessWidget {
                         drawingColor,
                         strokeWidth,
                         currentTool,
+                        revision: drawingRevision,
                       ),
                     ),
                   ),

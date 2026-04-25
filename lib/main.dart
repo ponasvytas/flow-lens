@@ -65,6 +65,9 @@ class _DrawingState extends ChangeNotifier {
   final List<ArrowShape> arrows = [];
   final List<LaserTrail> laserTrails = [];
 
+  /// Monotonic counter for completed-strokes content changes.
+  int revision = 0;
+
   void toggleDrawingMode() {
     isDrawingMode = !isDrawingMode;
     notifyListeners();
@@ -94,16 +97,19 @@ class _DrawingState extends ChangeNotifier {
 
   void addStroke(DrawingStroke stroke) {
     strokes.add(stroke);
+    revision++;
     notifyListeners();
   }
 
   void addLine(LineShape line) {
     lines.add(line);
+    revision++;
     notifyListeners();
   }
 
   void addArrow(ArrowShape arrow) {
     arrows.add(arrow);
+    revision++;
     notifyListeners();
   }
 
@@ -122,6 +128,7 @@ class _DrawingState extends ChangeNotifier {
     lines.clear();
     arrows.clear();
     laserTrails.clear();
+    revision++;
     notifyListeners();
   }
 }
@@ -1061,6 +1068,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
                   arrowShapes: _drawing.arrows,
                   drawingColor: _drawing.drawingColor,
                   strokeWidth: _drawing.strokeWidth,
+                  drawingRevision: _drawing.revision,
                   onStrokeCompleted: _onStrokeCompleted,
                   onLineCompleted: _onLineCompleted,
                   onArrowCompleted: _onArrowCompleted,
