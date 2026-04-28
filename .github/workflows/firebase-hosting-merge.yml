@@ -18,6 +18,7 @@ jobs:
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_FLOW_VIDEO_ANALYZER }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_FLOW_LENS_3F987 }}
           channelId: live
-          projectId: flow-video-analyzer
+          projectId: flow-lens-3f987
+          target: flow-lens-player

@@ -1,13 +1,40 @@
 {
-  "hosting": {
-    "public": "build/web",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ],
-    "rewrites": [
-      { "source": "**", "destination": "/index.html" }
-    ]
-  }
+    "hosting": {
+        "target": "flow-lens-player",
+        "public": "build/web",
+        "ignore": [
+            "firebase.json",
+            "**/.*",
+            "**/node_modules/**"
+        ],
+        "rewrites": [
+            {
+                "source": "**",
+                "destination": "/index.html"
+            }
+        ]
+    },
+    "flutter": {
+        "platforms": {
+            "android": {
+                "default": {
+                    "projectId": "flow-lens-3f987",
+                    "appId": "1:587706243824:android:6ba90d7fb6196b558d4035",
+                    "fileOutput": "android/app/google-services.json"
+                }
+            },
+            "dart": {
+                "lib/firebase_options.dart": {
+                    "projectId": "flow-lens-3f987",
+                    "configurations": {
+                        "android": "1:587706243824:android:6ba90d7fb6196b558d4035",
+                        "ios": "1:587706243824:ios:02dec6662e95334d8d4035",
+                        "macos": "1:587706243824:ios:02dec6662e95334d8d4035",
+                        "web": "1:587706243824:web:21b5c3adef3997378d4035",
+                        "windows": "1:587706243824:web:e67c9244a9f5d0a28d4035"
+                    }
+                }
+            }
+        }
+    }
 }

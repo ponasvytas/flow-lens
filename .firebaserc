@@ -1,5 +1,15 @@
 {
   "projects": {
-    "default": "flow-video-analyzer"
-  }
+    "default": "flow-lens-3f987"
+  },
+  "targets": {
+    "flow-lens-3f987": {
+      "hosting": {
+        "flow-lens-player": [
+          "flow-lens-player"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

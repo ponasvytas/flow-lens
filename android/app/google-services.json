@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "587706243824",
+    "project_id": "flow-lens-3f987",
+    "storage_bucket": "flow-lens-3f987.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:587706243824:android:6ba90d7fb6196b558d4035",
+        "android_client_info": {
+          "package_name": "com.coachflow.flowlens"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC1o6KRj7xn_iQFgUvGkodDwbQ8DMng6U4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
