@@ -14,6 +14,10 @@ class DrawingPainter extends CustomPainter {
   final double strokeWidth;
   final DrawingTool currentTool;
 
+  /// Monotonically increasing counter — bump whenever content changes.
+  /// Avoids unreliable list reference equality checks.
+  final int revision;
+
   DrawingPainter(
     this.strokes,
     this.lines,
@@ -23,8 +27,9 @@ class DrawingPainter extends CustomPainter {
     this.lineEnd,
     this.drawingColor,
     this.strokeWidth,
-    this.currentTool,
-  );
+    this.currentTool, {
+    this.revision = 0,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -203,10 +208,8 @@ class DrawingPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(DrawingPainter oldDelegate) {
-    return strokes != oldDelegate.strokes ||
-        lines != oldDelegate.lines ||
-        arrows != oldDelegate.arrows ||
-        currentStroke != oldDelegate.currentStroke ||
+    return revision != oldDelegate.revision ||
+        currentStroke.length != oldDelegate.currentStroke.length ||
         lineStart != oldDelegate.lineStart ||
         lineEnd != oldDelegate.lineEnd ||
         drawingColor != oldDelegate.drawingColor ||

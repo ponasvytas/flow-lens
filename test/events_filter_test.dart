@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_video_analyzer/models/game_event.dart';
-import 'package:flutter_video_analyzer/models/events_filter.dart';
+import 'package:flow_lens/models/game_event.dart';
+import 'package:flow_lens/models/events_filter.dart';
 
 void main() {
   group('EventsFilter', () {

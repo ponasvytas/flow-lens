@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_video_analyzer/models/game_event.dart';
+import 'package:flow_lens/models/game_event.dart';
 
 void main() {
   group('GameEvent Migration', () {

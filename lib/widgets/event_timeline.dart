@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/game_event.dart';
 import '../models/sport_taxonomy.dart';
+import '../utils/perf.dart';
 
 class EventTimeline extends StatelessWidget {
   final List<GameEvent> events;
@@ -20,6 +21,7 @@ class EventTimeline extends StatelessWidget {
   Widget build(BuildContext context) {
     if (totalDuration.inMilliseconds == 0) return const SizedBox.shrink();
 
+    Perf.rebuildCount('EventTimeline');
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import '../models/game_event.dart';
+import '../utils/perf.dart';
 import 'event_timeline.dart';
 
 /// Video progress bar with seek functionality
@@ -18,6 +19,7 @@ class VideoProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Perf.rebuildCount('VideoProgressBar');
     return Positioned(
       bottom: 10, // Lower position to show more video
       left: 20,
@@ -31,7 +33,8 @@ class VideoProgressBar extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Timeline Events
+            // Timeline Events — only rebuilds when duration changes, NOT on
+            // every position tick.
             StreamBuilder<Duration>(
               stream: player.stream.duration,
               builder: (context, durationSnapshot) {
@@ -50,83 +53,95 @@ class VideoProgressBar extends StatelessWidget {
                 );
               },
             ),
-            // Progress bar with time labels on sides
-            StreamBuilder<Duration>(
-              stream: player.stream.position,
-              builder: (context, positionSnapshot) {
-                return StreamBuilder<Duration>(
-                  stream: player.stream.duration,
-                  builder: (context, durationSnapshot) {
-                    final position = positionSnapshot.data ?? Duration.zero;
-                    final duration = durationSnapshot.data ?? Duration.zero;
-                    final value = duration.inMilliseconds > 0
-                        ? position.inMilliseconds / duration.inMilliseconds
-                        : 0.0;
-
-                    return Row(
-                      children: [
-                        // Current time (left)
-                        SizedBox(
-                          width: 45,
-                          child: Text(
-                            _formatDuration(position),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                        // Seekbar (center, expanded)
-                        Expanded(
-                          child: SliderTheme(
-                            data: SliderThemeData(
-                              trackHeight: 4.0,
-                              thumbShape: const RoundSliderThumbShape(
-                                enabledThumbRadius: 6.0,
-                              ),
-                              overlayShape: const RoundSliderOverlayShape(
-                                overlayRadius: 14.0,
-                              ),
-                            ),
-                            child: Slider(
-                              value: value.clamp(0.0, 1.0),
-                              min: 0.0,
-                              max: 1.0,
-                              activeColor: Colors.blue,
-                              inactiveColor: Colors.grey.shade700,
-                              onChanged: (newValue) {
-                                final newPosition = Duration(
-                                  milliseconds:
-                                      (newValue * duration.inMilliseconds)
-                                          .round(),
-                                );
-                                player.seek(newPosition);
-                              },
-                            ),
-                          ),
-                        ),
-                        // Duration (right)
-                        SizedBox(
-                          width: 45,
-                          child: Text(
-                            _formatDuration(duration),
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 11,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                );
-              },
-            ),
+            // Seekbar — single StreamBuilder combining position + duration
+            _SeekBar(player: player),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Extracted seekbar that owns its own stream subscriptions so rebuilds
+/// are confined here and don't propagate to [EventTimeline].
+class _SeekBar extends StatelessWidget {
+  final Player player;
+
+  const _SeekBar({required this.player});
+
+  @override
+  Widget build(BuildContext context) {
+    Perf.rebuildCount('_SeekBar');
+    return StreamBuilder<Duration>(
+      stream: player.stream.position,
+      builder: (context, positionSnapshot) {
+        Perf.rebuildCount('_SeekBar.stream');
+        final position = positionSnapshot.data ?? Duration.zero;
+        // player.state.duration is synchronously available and updated
+        // by media_kit whenever the duration stream fires, so we avoid
+        // a second nested StreamBuilder subscription.
+        final duration = player.state.duration;
+        final value = duration.inMilliseconds > 0
+            ? position.inMilliseconds / duration.inMilliseconds
+            : 0.0;
+
+        return Row(
+          children: [
+            // Current time (left)
+            SizedBox(
+              width: 45,
+              child: Text(
+                _formatDuration(position),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            // Seekbar (center, expanded)
+            Expanded(
+              child: SliderTheme(
+                data: SliderThemeData(
+                  trackHeight: 4.0,
+                  thumbShape: const RoundSliderThumbShape(
+                    enabledThumbRadius: 6.0,
+                  ),
+                  overlayShape: const RoundSliderOverlayShape(
+                    overlayRadius: 14.0,
+                  ),
+                ),
+                child: Slider(
+                  value: value.clamp(0.0, 1.0),
+                  min: 0.0,
+                  max: 1.0,
+                  activeColor: Colors.blue,
+                  inactiveColor: Colors.grey.shade700,
+                  onChanged: (newValue) {
+                    final newPosition = Duration(
+                      milliseconds:
+                          (newValue * duration.inMilliseconds).round(),
+                    );
+                    player.seek(newPosition);
+                  },
+                ),
+              ),
+            ),
+            // Duration (right)
+            SizedBox(
+              width: 45,
+              child: Text(
+                _formatDuration(duration),
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 11,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 

@@ -1,4 +1,4 @@
-package com.example.flutter_video_analyzer
+package com.coachflow.flowlens
 
 import io.flutter.embedding.android.FlutterActivity
 

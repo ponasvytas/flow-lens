@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_video_analyzer/models/sport_taxonomy.dart';
-import 'package:flutter_video_analyzer/services/taxonomy_repository.dart';
+import 'package:flow_lens/models/sport_taxonomy.dart';
+import 'package:flow_lens/services/taxonomy_repository.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
