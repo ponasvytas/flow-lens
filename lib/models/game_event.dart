@@ -1,4 +1,6 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:vector_math/vector_math_64.dart' hide Colors;
 
 enum EventGrade {
   positive, // Good (Green)
@@ -16,6 +18,7 @@ class GameEvent {
   final String sportId;
   final String categoryId;
   final String? eventTypeId;
+  final Matrix4? viewTransform;
 
   GameEvent({
     required this.id,
@@ -26,6 +29,7 @@ class GameEvent {
     this.sportId = 'hockey',
     required this.categoryId,
     this.eventTypeId,
+    this.viewTransform,
   });
 
   // Helper to determine color based on grade
@@ -46,6 +50,7 @@ class GameEvent {
     String? sportId,
     String? categoryId,
     String? eventTypeId,
+    Matrix4? viewTransform,
   }) {
     return GameEvent(
       id: id ?? this.id,
@@ -56,6 +61,7 @@ class GameEvent {
       sportId: sportId ?? this.sportId,
       categoryId: categoryId ?? this.categoryId,
       eventTypeId: eventTypeId ?? this.eventTypeId,
+      viewTransform: viewTransform ?? this.viewTransform,
     );
   }
 
@@ -70,6 +76,7 @@ class GameEvent {
       'sportId': sportId,
       'categoryId': categoryId,
       if (eventTypeId != null) 'eventTypeId': eventTypeId,
+      if (viewTransform != null) 'viewTransform': viewTransform!.storage.toList(),
     };
   }
 
@@ -88,6 +95,10 @@ class GameEvent {
       sportId: json['sportId'] as String? ?? 'hockey',
       categoryId: json['categoryId'] as String,
       eventTypeId: json['eventTypeId'] as String?,
+      viewTransform: json['viewTransform'] != null
+          ? Matrix4.fromFloat64List(Float64List.fromList(
+              (json['viewTransform'] as List).map((e) => (e as num).toDouble()).toList()))
+          : null,
     );
   }
 }

@@ -106,17 +106,21 @@ class VideoCanvas extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: InteractiveViewer(
-        transformationController: transformationController,
-        panEnabled: !isDrawingMode, // Disable pan when drawing
-        scaleEnabled:
-            !isDrawingMode, // Enable pinch-to-zoom for trackpad gestures
-        minScale: 1.0,
-        maxScale: 6.0, // Increased max zoom
-        child: SizedBox(
-          width: MediaQuery.of(context).size.width,
-          height: MediaQuery.of(context).size.width * (9 / 16),
-          child: Stack(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final availableWidth = constraints.maxWidth;
+          final videoHeight = availableWidth * (9 / 16);
+          return InteractiveViewer(
+            transformationController: transformationController,
+            panEnabled: !isDrawingMode, // Disable pan when drawing
+            scaleEnabled:
+                !isDrawingMode, // Enable pinch-to-zoom for trackpad gestures
+            minScale: 1.0,
+            maxScale: 6.0, // Increased max zoom
+            child: SizedBox(
+              width: availableWidth,
+              height: videoHeight,
+              child: Stack(
             children: [
               // Video layer - no built-in controls (we have our own UI)
               Video(
@@ -172,6 +176,8 @@ class VideoCanvas extends StatelessWidget {
             ],
           ),
         ),
+      );
+        },
       ),
     );
   }

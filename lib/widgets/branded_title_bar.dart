@@ -9,6 +9,8 @@ class BrandedTitleBar extends StatelessWidget {
   final VoidCallback? onLoadEvents;
   final VoidCallback? onShowEventsTable;
   final VoidCallback? onShowSettings;
+  final VoidCallback? onToggleDockedEvents;
+  final bool showDockedEvents;
 
   // Mode switching
   final AppMode currentMode;
@@ -23,6 +25,8 @@ class BrandedTitleBar extends StatelessWidget {
     this.onLoadEvents,
     this.onShowEventsTable,
     this.onShowSettings,
+    this.onToggleDockedEvents,
+    this.showDockedEvents = false,
     super.key,
   });
 
@@ -131,6 +135,15 @@ class BrandedTitleBar extends StatelessWidget {
               onPressed: onShowEventsTable,
               tooltip: 'Events Table',
               icon: const Icon(Icons.table_chart, color: Colors.white70),
+            ),
+          if (onToggleDockedEvents != null)
+            IconButton(
+              onPressed: onToggleDockedEvents,
+              tooltip: showDockedEvents ? 'Hide Events Panel' : 'Dock Events Panel',
+              icon: Icon(
+                showDockedEvents ? Icons.view_sidebar : Icons.view_sidebar_outlined,
+                color: showDockedEvents ? Colors.white : Colors.white70,
+              ),
             ),
           if (onShowSettings != null)
             IconButton(

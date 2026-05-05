@@ -8,33 +8,75 @@ import '../models/events_filter.dart';
 /// Shows the current position within filtered results (e.g. "3 / 12"),
 /// Prev / Next buttons, and a tappable filter summary that opens the
 /// events table for filter editing.
+///
+/// Navigation is based on the current seekbar position:
+/// - **Previous**: last event before current position (skips back further
+///   if within [proximityThreshold] of that event). Loops to last event.
+/// - **Next**: first event after current position. Loops to first event.
 class EventNavigationPanel extends StatelessWidget {
   final EventsController controller;
   final VoidCallback onOpenEventsTable;
   final void Function(GameEvent event) onNavigateTo;
+  final Duration currentPosition;
+
+  /// If the seekbar is within this duration of the nearest earlier event,
+  /// "Previous" will skip past it to the one before.
+  static const proximityThreshold = Duration(seconds: 10);
 
   const EventNavigationPanel({
     required this.controller,
     required this.onOpenEventsTable,
     required this.onNavigateTo,
+    required this.currentPosition,
     super.key,
   });
 
   @override
   Widget build(BuildContext context) {
     final filtered = controller.filteredEvents;
-    final active = controller.activeEvent;
-
-    // Find current index within filtered list
-    int currentIndex = -1;
-    if (active != null) {
-      currentIndex = filtered.indexWhere((e) => e.id == active.id);
-    }
-
     final total = filtered.length;
     final hasEvents = total > 0;
-    final hasPrev = hasEvents && currentIndex > 0;
-    final hasNext = hasEvents && currentIndex < total - 1;
+
+    // Sort by timestamp (should already be, but be safe)
+    final sorted = List<GameEvent>.from(filtered)
+      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+    // Use effective position that accounts for lead-in: if the seekbar is
+    // up to proximityThreshold *before* an event, we consider ourselves
+    // "at" that event (since navigation seeks to timestamp − leadIn).
+    final effectivePosition = currentPosition + proximityThreshold;
+
+    // Find the "current" event index: the last event at or before effectivePosition
+    int currentIndex = -1;
+    for (int i = sorted.length - 1; i >= 0; i--) {
+      if (sorted[i].timestamp <= effectivePosition) {
+        currentIndex = i;
+        break;
+      }
+    }
+
+    // Determine previous target
+    GameEvent? prevTarget;
+    if (hasEvents) {
+      if (currentIndex > 0) {
+        prevTarget = sorted[currentIndex - 1];
+      } else {
+        // At first event or before all events — loop to last
+        prevTarget = sorted.last;
+      }
+    }
+
+    // Determine next target
+    GameEvent? nextTarget;
+    if (hasEvents) {
+      final nextIndex = currentIndex + 1;
+      if (nextIndex < sorted.length) {
+        nextTarget = sorted[nextIndex];
+      } else {
+        // Past last event — loop to first
+        nextTarget = sorted.first;
+      }
+    }
 
     final positionLabel = hasEvents
         ? '${currentIndex == -1 ? '-' : currentIndex + 1} / $total'
@@ -53,12 +95,8 @@ class EventNavigationPanel extends StatelessWidget {
               _NavButton(
                 icon: Icons.skip_previous,
                 tooltip: 'Previous event',
-                enabled: hasPrev,
-                onTap: () {
-                  final event = filtered[currentIndex - 1];
-                  controller.selectEvent(event);
-                  onNavigateTo(event);
-                },
+                enabled: prevTarget != null,
+                onTap: () => onNavigateTo(prevTarget!),
               ),
 
               // Counter
@@ -75,14 +113,8 @@ class EventNavigationPanel extends StatelessWidget {
               _NavButton(
                 icon: Icons.skip_next,
                 tooltip: 'Next event',
-                enabled: hasNext,
-                onTap: () {
-                  final target = currentIndex == -1
-                      ? filtered.first
-                      : filtered[currentIndex + 1];
-                  controller.selectEvent(target);
-                  onNavigateTo(target);
-                },
+                enabled: nextTarget != null,
+                onTap: () => onNavigateTo(nextTarget!),
               ),
             ],
           ),

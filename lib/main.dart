@@ -7,6 +7,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:file_picker/file_picker.dart';
 
 import 'utils/video_loader.dart';
+import 'utils/player_config.dart';
 import 'utils/perf.dart';
 import 'models/drawing_models.dart';
 import 'models/game_event.dart';
@@ -19,6 +20,7 @@ import 'widgets/laser_pointer_overlay.dart';
 import 'widgets/shortcuts_panel.dart';
 import 'widgets/branded_title_bar.dart';
 import 'widgets/video_picker.dart';
+import 'widgets/docked_events_panel.dart';
 import 'models/sport_profile.dart';
 import 'widgets/video_progress_bar.dart';
 import 'widgets/events_table_view.dart';
@@ -173,7 +175,8 @@ class HockeyAnalyzerScreen extends StatefulWidget {
   State<HockeyAnalyzerScreen> createState() => _HockeyAnalyzerScreenState();
 }
 
-class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
+class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
+    with TickerProviderStateMixin {
   // Create the Player and Controller
   late final Player player;
   late final VideoController controller;
@@ -184,6 +187,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
   // Zoom/Pan state
   final TransformationController _transformationController =
       TransformationController();
+  AnimationController? _zoomAnimationController;
+  Animation<Matrix4>? _zoomAnimation;
 
   // Video loading state
   bool hasVideoLoaded = false;
@@ -201,6 +206,9 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
 
   // UI mode & panel management
   final UIController _uiController = UIController();
+
+  // Docked events panel
+  bool _showDockedEvents = false;
 
   // Shortcuts panel visibility and position
   bool _showShortcuts = false;
@@ -240,6 +248,10 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
         logLevel: MPVLogLevel.info,
       ),
     );
+
+    // Native-only: enable hardware decoding and demuxer cache for faster seeking
+    configureNativePlayer(player);
+
     controller = VideoController(player);
 
     _settingsController.loadSettings();
@@ -267,6 +279,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
 
   @override
   void dispose() {
+    _zoomAnimationController?.dispose();
     player.dispose(); // Always clean up video memory!
     _eventsController.dispose();
     _uiController.dispose();
@@ -469,8 +482,84 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
     _drawing.toggleDrawingMode();
   }
 
+  /// Current video container width (accounts for docked panel).
+  double get _videoWidth {
+    final screenWidth = MediaQuery.of(context).size.width;
+    return _showDockedEvents ? screenWidth - 340 : screenWidth;
+  }
+
+  /// Normalize a pixel-based transform to be resolution-independent.
+  /// Translations are stored as fractions of video width/height.
+  Matrix4 _normalizeTransform(Matrix4 transform) {
+    final w = _videoWidth;
+    final h = w * 9 / 16;
+    final normalized = transform.clone();
+    normalized.setEntry(0, 3, transform.entry(0, 3) / w);
+    normalized.setEntry(1, 3, transform.entry(1, 3) / h);
+    return normalized;
+  }
+
+  /// Convert a normalized transform back to pixel values for the current size.
+  Matrix4 _denormalizeTransform(Matrix4 transform) {
+    final w = _videoWidth;
+    final h = w * 9 / 16;
+    final denormalized = transform.clone();
+    denormalized.setEntry(0, 3, transform.entry(0, 3) * w);
+    denormalized.setEntry(1, 3, transform.entry(1, 3) * h);
+    return denormalized;
+  }
+
+  void _navigateToEvent(GameEvent event) {
+    final leadIn = _settingsController.settings.leadIn;
+    final seekTime = event.timestamp - leadIn;
+    _eventsController.selectEvent(event);
+
+    final targetTransform = event.viewTransform != null
+        ? _denormalizeTransform(event.viewTransform!)
+        : Matrix4.identity();
+    final currentTransform = _transformationController.value.clone();
+
+    // If zoom state is changing, animate it and stagger the seek
+    if (currentTransform != targetTransform) {
+      _animateZoomTo(targetTransform, onMidpoint: () {
+        player.seek(seekTime > Duration.zero ? seekTime : Duration.zero);
+      });
+    } else {
+      player.seek(seekTime > Duration.zero ? seekTime : Duration.zero);
+    }
+  }
+
+  void _animateZoomTo(Matrix4 target, {VoidCallback? onMidpoint}) {
+    _zoomAnimationController?.dispose();
+
+    _zoomAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+
+    _zoomAnimation = Matrix4Tween(
+      begin: _transformationController.value,
+      end: target,
+    ).animate(CurvedAnimation(
+      parent: _zoomAnimationController!,
+      curve: Curves.easeInOut,
+    ));
+
+    bool seekFired = false;
+    _zoomAnimationController!.addListener(() {
+      _transformationController.value = _zoomAnimation!.value;
+      // Fire seek at ~40% through the animation
+      if (!seekFired && _zoomAnimationController!.value >= 0.4) {
+        seekFired = true;
+        onMidpoint?.call();
+      }
+    });
+
+    _zoomAnimationController!.forward();
+  }
+
   void _resetZoom() {
-    _transformationController.value = Matrix4.identity();
+    _animateZoomTo(Matrix4.identity());
   }
 
   void _togglePlayPause() {
@@ -498,10 +587,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
           controller: _eventsController,
           taxonomy: _taxonomy!,
           onEventTap: (event) {
-            final leadIn = _settingsController.settings.leadIn;
-            final seekTime = event.timestamp - leadIn;
-            player.seek(seekTime > Duration.zero ? seekTime : Duration.zero);
-            _eventsController.selectEvent(event);
+            _navigateToEvent(event);
             Navigator.of(context).pop();
           },
           onClose: () => Navigator.of(context).pop(),
@@ -514,10 +600,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
             controller: _eventsController,
             taxonomy: _taxonomy!,
             onEventTap: (event) {
-              final leadIn = _settingsController.settings.leadIn;
-              final seekTime = event.timestamp - leadIn;
-              player.seek(seekTime > Duration.zero ? seekTime : Duration.zero);
-              _eventsController.selectEvent(event);
+            _navigateToEvent(event);
               Navigator.of(context).pop();
             },
             onClose: () => Navigator.of(context).pop(),
@@ -546,6 +629,14 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
         ),
       );
     }
+  }
+
+  void _toggleDockedEvents() {
+    // Reset zoom — the transform is pixel-relative and invalid at new width
+    _transformationController.value = Matrix4.identity();
+    setState(() {
+      _showDockedEvents = !_showDockedEvents;
+    });
   }
 
   void _toggleShortcutsPanel() {
@@ -704,12 +795,15 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
     if (category == null) return;
 
     final position = player.state.position;
+    final currentTransform = _transformationController.value;
+    final isZoomed = currentTransform.getMaxScaleOnAxis() > 1.01;
     final newEvent = GameEvent(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       timestamp: position,
       categoryId: categoryId,
       label: category.name,
       grade: null, // Start with no grade
+      viewTransform: isZoomed ? _normalizeTransform(currentTransform) : null,
     );
 
     _eventsController.selectEvent(newEvent);
@@ -1031,8 +1125,12 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
       },
       child: Scaffold(
         backgroundColor: Colors.black,
-        body: Stack(
+        body: Row(
           children: [
+            // Main content area (video + overlays)
+            Expanded(
+              child: Stack(
+                children: [
             // LAYER 0: Branded Title Bar (Top)
             ListenableBuilder(
               listenable: _uiController,
@@ -1049,6 +1147,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
                   onLoadEvents: hasVideoLoaded ? _loadEvents : null,
                   onShowEventsTable: hasVideoLoaded ? _showEventsTable : null,
                   onShowSettings: hasVideoLoaded ? _showSettings : null,
+                  onToggleDockedEvents: hasVideoLoaded ? _toggleDockedEvents : null,
+                  showDockedEvents: _showDockedEvents,
                 ),
               ),
             ),
@@ -1151,16 +1251,14 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
                     title: 'Event Navigation',
                     icon: Icons.search,
                     defaultFloatingPosition: const Offset(20, 200),
-                    builder: (dockEdge) => EventNavigationPanel(
-                      controller: _eventsController,
-                      onOpenEventsTable: _showEventsTable,
-                      onNavigateTo: (event) {
-                        final leadIn = _settingsController.settings.leadIn;
-                        final seekTime = event.timestamp - leadIn;
-                        player.seek(seekTime > Duration.zero
-                            ? seekTime
-                            : Duration.zero);
-                      },
+                    builder: (dockEdge) => StreamBuilder<Duration>(
+                      stream: player.stream.position,
+                      builder: (context, snapshot) => EventNavigationPanel(
+                        controller: _eventsController,
+                        onOpenEventsTable: _showEventsTable,
+                        onNavigateTo: _navigateToEvent,
+                        currentPosition: snapshot.data ?? player.state.position,
+                      ),
                     ),
                   ),
                   // Player Tracking (Tracking mode)
@@ -1227,12 +1325,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
                 builder: (context, _) => VideoProgressBar(
                   player: player,
                   events: _eventsController.filteredEvents,
-                  onEventTap: (event) {
-                    final leadIn = _settingsController.settings.leadIn;
-                    final seekTime = event.timestamp - leadIn;
-                    player.seek(seekTime > Duration.zero ? seekTime : Duration.zero);
-                    _eventsController.selectEvent(event);
-                  },
+                  onEventTap: _navigateToEvent,
                 ),
               ),
 
@@ -1254,6 +1347,25 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen> {
                 onLoadTestVideo: _loadTestVideo,
                 onLoadUrl: _loadUrl,
                 onSportSelected: _onSportSelected,
+              ),
+                ],
+              ),
+            ),
+
+            // Docked Events Panel (right side)
+            if (_showDockedEvents && hasVideoLoaded)
+              ListenableBuilder(
+                listenable: _eventsController,
+                builder: (context, _) => StreamBuilder<Duration>(
+                  stream: player.stream.position,
+                  builder: (context, snapshot) => DockedEventsPanel(
+                    controller: _eventsController,
+                    taxonomy: _taxonomy,
+                    onEventTap: _navigateToEvent,
+                    onClose: _toggleDockedEvents,
+                    currentPosition: snapshot.data ?? player.state.position,
+                  ),
+                ),
               ),
           ],
         ),

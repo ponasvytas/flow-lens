@@ -64,26 +64,43 @@ class VideoProgressBar extends StatelessWidget {
 
 /// Extracted seekbar that owns its own stream subscriptions so rebuilds
 /// are confined here and don't propagate to [EventTimeline].
-class _SeekBar extends StatelessWidget {
+///
+/// Uses local drag state so the slider thumb follows the finger/mouse
+/// immediately, and only seeks on release (onChangeEnd).
+class _SeekBar extends StatefulWidget {
   final Player player;
 
   const _SeekBar({required this.player});
 
   @override
+  State<_SeekBar> createState() => _SeekBarState();
+}
+
+class _SeekBarState extends State<_SeekBar> {
+  bool _isDragging = false;
+  double _dragValue = 0.0;
+  bool _wasPlaying = false;
+
+  @override
   Widget build(BuildContext context) {
     Perf.rebuildCount('_SeekBar');
     return StreamBuilder<Duration>(
-      stream: player.stream.position,
+      stream: widget.player.stream.position,
       builder: (context, positionSnapshot) {
         Perf.rebuildCount('_SeekBar.stream');
         final position = positionSnapshot.data ?? Duration.zero;
-        // player.state.duration is synchronously available and updated
-        // by media_kit whenever the duration stream fires, so we avoid
-        // a second nested StreamBuilder subscription.
-        final duration = player.state.duration;
-        final value = duration.inMilliseconds > 0
+        final duration = widget.player.state.duration;
+        final streamValue = duration.inMilliseconds > 0
             ? position.inMilliseconds / duration.inMilliseconds
             : 0.0;
+
+        // Use drag value while dragging, stream value otherwise
+        final displayValue = _isDragging ? _dragValue : streamValue;
+        final displayPosition = _isDragging
+            ? Duration(
+                milliseconds:
+                    (_dragValue * duration.inMilliseconds).round())
+            : position;
 
         return Row(
           children: [
@@ -91,7 +108,7 @@ class _SeekBar extends StatelessWidget {
             SizedBox(
               width: 45,
               child: Text(
-                _formatDuration(position),
+                _formatDuration(displayPosition),
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 11,
@@ -112,17 +129,40 @@ class _SeekBar extends StatelessWidget {
                   ),
                 ),
                 child: Slider(
-                  value: value.clamp(0.0, 1.0),
+                  value: displayValue.clamp(0.0, 1.0),
                   min: 0.0,
                   max: 1.0,
                   activeColor: Colors.blue,
                   inactiveColor: Colors.grey.shade700,
+                  onChangeStart: (value) {
+                    _wasPlaying = widget.player.state.playing;
+                    if (_wasPlaying) widget.player.pause();
+                    setState(() {
+                      _isDragging = true;
+                      _dragValue = value;
+                    });
+                  },
                   onChanged: (newValue) {
+                    setState(() {
+                      _dragValue = newValue;
+                    });
                     final newPosition = Duration(
                       milliseconds:
                           (newValue * duration.inMilliseconds).round(),
                     );
-                    player.seek(newPosition);
+                    widget.player.seek(newPosition);
+                  },
+                  onChangeEnd: (newValue) {
+                    final newPosition = Duration(
+                      milliseconds:
+                          (newValue * duration.inMilliseconds).round(),
+                    );
+                    widget.player.seek(newPosition).then((_) {
+                      if (_wasPlaying) widget.player.play();
+                    });
+                    setState(() {
+                      _isDragging = false;
+                    });
                   },
                 ),
               ),
