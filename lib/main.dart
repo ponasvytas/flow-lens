@@ -25,12 +25,14 @@ import 'models/sport_profile.dart';
 import 'widgets/video_progress_bar.dart';
 import 'widgets/events_table_view.dart';
 import 'services/event_storage_service.dart';
+import 'services/tracking_storage_service.dart';
 import 'services/taxonomy_repository.dart';
 import 'services/settings_repository.dart';
 import 'models/sport_taxonomy.dart';
 import 'controllers/events_controller.dart';
 import 'controllers/settings_controller.dart';
 import 'controllers/ui_controller.dart';
+import 'controllers/tracking_controller.dart';
 import 'models/app_mode.dart';
 import 'widgets/dock_layout.dart';
 import 'widgets/settings_view.dart';
@@ -207,6 +209,10 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   // UI mode & panel management
   final UIController _uiController = UIController();
 
+  // Player tracking
+  final TrackingController _trackingController = TrackingController();
+  final TrackingStorageService _trackingStorageService = TrackingStorageService();
+
   // Docked events panel
   bool _showDockedEvents = false;
 
@@ -365,6 +371,82 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
         ).showSnackBar(SnackBar(content: Text('Failed to load events: $e')));
       }
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Tracking session save / load / export
+  // ---------------------------------------------------------------------------
+
+  Future<void> _saveTrackingSession() async {
+    try {
+      await _trackingStorageService.saveSession(_trackingController.session);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tracking session saved')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save tracking: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _loadTrackingSession() async {
+    try {
+      final session = await _trackingStorageService.loadSession();
+      if (session != null) {
+        _trackingController.loadSession(session);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Loaded tracking: ${session.subjects.length} players, '
+                '${session.events.length} events',
+              ),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load tracking: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportTrackingCsv() async {
+    try {
+      await _trackingStorageService.exportCsv(_trackingController.session);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tracking CSV exported')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to export CSV: $e')),
+        );
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Mode switching (stops active timers when leaving tracking mode)
+  // ---------------------------------------------------------------------------
+
+  void _changeMode(AppMode mode) {
+    if (_uiController.currentMode == AppMode.tracking &&
+        mode != AppMode.tracking) {
+      _trackingController.stopAllTimers(
+          timestamp: player.state.position);
+    }
+    _uiController.setMode(mode);
   }
 
   Future<void> _loadTestVideo() async {
@@ -849,33 +931,56 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     return Focus(
       autofocus: true,
       onKeyEvent: (node, event) {
-        // Handle key press events
+        // =====================================================================
+        // Guard: detect whether a text field currently has focus.
+        // When typing in a TextField / EditableText we must let letter keys
+        // through to the field instead of treating them as shortcuts.
+        // EditableText internally builds a child Focus widget, so
+        // primaryFocus.context.widget is Focus, not EditableText.
+        // We walk up ancestors to find EditableText above the focused node.
+        // =====================================================================
+        final isTextFieldFocused = FocusManager.instance.primaryFocus
+                ?.context
+                ?.findAncestorWidgetOfExactType<EditableText>() !=
+            null;
+
+        final mode = _uiController.currentMode;
+        final isAltPressed = HardwareKeyboard.instance.isAltPressed;
+        final isCtrlPressed = HardwareKeyboard.instance.isControlPressed;
+        final isShiftPressed = HardwareKeyboard.instance.isShiftPressed;
+        final hasModifier = isAltPressed || isCtrlPressed;
+
+        // =====================================================================
+        // KEY DOWN
+        // =====================================================================
         if (event is KeyDownEvent) {
-          final isAltPressed = HardwareKeyboard.instance.isAltPressed;
 
-          // Toggle play/pause          // Space bar: Play/Pause
-          if (event.logicalKey == LogicalKeyboardKey.space) {
-            _togglePlayPause();
-            return KeyEventResult.handled;
-          }
-
-          // 'G' key: Toggle graphics/drawing mode
-          if (event.logicalKey == LogicalKeyboardKey.keyG) {
-            _toggleDrawingMode();
-            return KeyEventResult.handled;
-          }
+          // -----------------------------------------------------------------
+          // 1. Modifier-based shortcuts (always active, even in text fields)
+          // -----------------------------------------------------------------
 
           // Ctrl+M: Cycle through app modes
-          if (event.logicalKey == LogicalKeyboardKey.keyM &&
-              HardwareKeyboard.instance.isControlPressed) {
-            _uiController.cycleMode();
+          if (event.logicalKey == LogicalKeyboardKey.keyM && isCtrlPressed) {
+            final modes = AppMode.values;
+            final nextIndex = (modes.indexOf(mode) + 1) % modes.length;
+            _changeMode(modes[nextIndex]);
             return KeyEventResult.handled;
           }
 
-          // SmartHUD keyboard shortcuts (when HUD is active)
-          if (_eventsController.activeEvent != null && !_drawing.isDrawingMode) {
-            // Alt+Number keys: staged selection only during Alt entry workflow
-            if (_altKey.isEntryActive && isAltPressed) {
+          // Alt key press: begin alt-entry workflow (record mode)
+          if (event.logicalKey == LogicalKeyboardKey.altLeft ||
+              event.logicalKey == LogicalKeyboardKey.altRight) {
+            if (mode == AppMode.record) {
+              _altKey.onAltPressed();
+            }
+            return KeyEventResult.handled;
+          }
+
+          // Alt+number: Create event / SmartHUD grade (record mode only)
+          if (isAltPressed && _altKey.isEntryActive && mode == AppMode.record) {
+            // SmartHUD label/grade selection when HUD is active
+            if (_eventsController.activeEvent != null &&
+                !_drawing.isDrawingMode) {
               if (event.logicalKey == LogicalKeyboardKey.digit1 ||
                   event.logicalKey == LogicalKeyboardKey.numpad1) {
                 _handleSmartHudNumber(1);
@@ -905,130 +1010,91 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
               }
             }
 
-            // Enter: Save event and close HUD
+            // Alt+number: create event with category
+            if (_altKey.stage == _AltEntryStage.categories &&
+                hasVideoLoaded &&
+                !_drawing.isDrawingMode) {
+              KeyEventResult? _tryAltCreate(LogicalKeyboardKey a,
+                  LogicalKeyboardKey b, int n) {
+                if (event.logicalKey == a || event.logicalKey == b) {
+                  final didCreate = _createEventFromAltNumber(n);
+                  if (didCreate) _altKey.setStage(_AltEntryStage.labels);
+                  return KeyEventResult.handled;
+                }
+                return null;
+              }
+
+              final result = _tryAltCreate(LogicalKeyboardKey.digit1,
+                      LogicalKeyboardKey.numpad1, 1) ??
+                  _tryAltCreate(LogicalKeyboardKey.digit2,
+                      LogicalKeyboardKey.numpad2, 2) ??
+                  _tryAltCreate(LogicalKeyboardKey.digit3,
+                      LogicalKeyboardKey.numpad3, 3) ??
+                  _tryAltCreate(LogicalKeyboardKey.digit4,
+                      LogicalKeyboardKey.numpad4, 4) ??
+                  _tryAltCreate(LogicalKeyboardKey.digit5,
+                      LogicalKeyboardKey.numpad5, 5) ??
+                  _tryAltCreate(LogicalKeyboardKey.digit6,
+                      LogicalKeyboardKey.numpad6, 6);
+              if (result != null) return result;
+            }
+          }
+
+          // -----------------------------------------------------------------
+          // 2. SmartHUD Enter/Esc (record mode, HUD active, not text-field)
+          // -----------------------------------------------------------------
+          if (mode == AppMode.record &&
+              _eventsController.activeEvent != null &&
+              !_drawing.isDrawingMode &&
+              !isTextFieldFocused) {
             if (event.logicalKey == LogicalKeyboardKey.enter ||
                 event.logicalKey == LogicalKeyboardKey.numpadEnter) {
               _saveAndCloseSmartHud();
               return KeyEventResult.handled;
             }
-            // Esc: Cancel and close HUD
             if (event.logicalKey == LogicalKeyboardKey.escape) {
               _cancelAndCloseSmartHud();
               return KeyEventResult.handled;
             }
           }
 
-          // Tool shortcuts (only in graphics mode)
-          if (_drawing.isDrawingMode) {
-            // '1' key: Freehand tool
-            if (event.logicalKey == LogicalKeyboardKey.digit1 ||
-                event.logicalKey == LogicalKeyboardKey.numpad1) {
-              _drawing.setTool(DrawingTool.freehand);
-              return KeyEventResult.handled;
-            }
-            // '2' key: Line tool
-            if (event.logicalKey == LogicalKeyboardKey.digit2 ||
-                event.logicalKey == LogicalKeyboardKey.numpad2) {
-              _drawing.setTool(DrawingTool.line);
-              return KeyEventResult.handled;
-            }
-            // '3' key: Arrow tool
-            if (event.logicalKey == LogicalKeyboardKey.digit3 ||
-                event.logicalKey == LogicalKeyboardKey.numpad3) {
-              _drawing.setTool(DrawingTool.arrow);
+          // -----------------------------------------------------------------
+          // 3. Tracking hotkeys (tracking mode, NOT in text fields)
+          // -----------------------------------------------------------------
+          if (mode == AppMode.tracking && !isTextFieldFocused) {
+            final keyLabel = event.logicalKey.keyLabel.toLowerCase();
+            if (keyLabel.isNotEmpty &&
+                _trackingController.handleHotkeyDown(
+                    keyLabel, player.state.position)) {
               return KeyEventResult.handled;
             }
           }
 
-          // 'C' key: Clear all drawings
-          if (event.logicalKey == LogicalKeyboardKey.keyC) {
-            _clearDrawing();
+          // =================================================================
+          // STOP HERE if a text field is focused — no bare-key shortcuts below
+          // should fire while the user is typing.
+          // =================================================================
+          if (isTextFieldFocused && !hasModifier) {
+            return KeyEventResult.ignored;
+          }
+
+          // -----------------------------------------------------------------
+          // 4. Global playback shortcuts (all modes)
+          // -----------------------------------------------------------------
+
+          // Space: Play/Pause
+          if (event.logicalKey == LogicalKeyboardKey.space) {
+            _togglePlayPause();
             return KeyEventResult.handled;
           }
-
-          // 'K' key: Toggle laser pointer when 'K' key is pressed
-          if (event.logicalKey == LogicalKeyboardKey.keyK) {
-            _drawing.toggleLaser();
-            return KeyEventResult.handled;
-          }
-
-          // Alt key: Show category numbers and track state
-          if (event.logicalKey == LogicalKeyboardKey.altLeft ||
-              event.logicalKey == LogicalKeyboardKey.altRight) {
-            _altKey.onAltPressed();
-            return KeyEventResult.handled;
-          }
-
-          // Alt+number: Create event with category
-          if (_altKey.isEntryActive &&
-              isAltPressed &&
-              _altKey.stage == _AltEntryStage.categories &&
-              hasVideoLoaded &&
-              !_drawing.isDrawingMode) {
-            if (event.logicalKey == LogicalKeyboardKey.digit1 ||
-                event.logicalKey == LogicalKeyboardKey.numpad1) {
-              final didCreate = _createEventFromAltNumber(1);
-              if (didCreate) {
-                _altKey.setStage(_AltEntryStage.labels);
-              }
-              return KeyEventResult.handled;
-            }
-            if (event.logicalKey == LogicalKeyboardKey.digit2 ||
-                event.logicalKey == LogicalKeyboardKey.numpad2) {
-              final didCreate = _createEventFromAltNumber(2);
-              if (didCreate) {
-                _altKey.setStage(_AltEntryStage.labels);
-              }
-              return KeyEventResult.handled;
-            }
-            if (event.logicalKey == LogicalKeyboardKey.digit3 ||
-                event.logicalKey == LogicalKeyboardKey.numpad3) {
-              final didCreate = _createEventFromAltNumber(3);
-              if (didCreate) {
-                _altKey.setStage(_AltEntryStage.labels);
-              }
-              return KeyEventResult.handled;
-            }
-            if (event.logicalKey == LogicalKeyboardKey.digit4 ||
-                event.logicalKey == LogicalKeyboardKey.numpad4) {
-              final didCreate = _createEventFromAltNumber(4);
-              if (didCreate) {
-                _altKey.setStage(_AltEntryStage.labels);
-              }
-              return KeyEventResult.handled;
-            }
-            if (event.logicalKey == LogicalKeyboardKey.digit5 ||
-                event.logicalKey == LogicalKeyboardKey.numpad5) {
-              final didCreate = _createEventFromAltNumber(5);
-              if (didCreate) {
-                _altKey.setStage(_AltEntryStage.labels);
-              }
-              return KeyEventResult.handled;
-            }
-            if (event.logicalKey == LogicalKeyboardKey.digit6 ||
-                event.logicalKey == LogicalKeyboardKey.numpad6) {
-              final didCreate = _createEventFromAltNumber(6);
-              if (didCreate) {
-                _altKey.setStage(_AltEntryStage.labels);
-              }
-              return KeyEventResult.handled;
-            }
-          }
-
-          // Arrow key navigation shortcuts
-          final isCtrlPressed = HardwareKeyboard.instance.isControlPressed;
-          final isShiftPressed = HardwareKeyboard.instance.isShiftPressed;
 
           // Arrow Left: Jump backward
           if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
             if (isCtrlPressed) {
-              // Ctrl+Left: Jump backward 30s
               _jumpBackward(const Duration(seconds: 30));
             } else if (isShiftPressed) {
-              // Shift+Left: Jump backward 10s
               _jumpBackward(const Duration(seconds: 10));
             } else {
-              // Left: Jump backward 3s
               _jumpBackward(const Duration(seconds: 3));
             }
             return KeyEventResult.handled;
@@ -1037,19 +1103,22 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
           // Arrow Right: Jump forward
           if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
             if (isCtrlPressed) {
-              // Ctrl+Right: Jump forward 30s
               _jumpForward(const Duration(seconds: 30));
             } else if (isShiftPressed) {
-              // Shift+Right: Jump forward 10s
               _jumpForward(const Duration(seconds: 10));
             } else {
-              // Right: Jump forward 3s
               _jumpForward(const Duration(seconds: 3));
             }
             return KeyEventResult.handled;
           }
 
-          // 'S' key: Set speed to slow playback speed (configurable in settings)
+          // 'A' key: Jump backward 5s
+          if (event.logicalKey == LogicalKeyboardKey.keyA) {
+            _jumpBackward(const Duration(seconds: 5));
+            return KeyEventResult.handled;
+          }
+
+          // 'S' key: Slow playback speed
           if (event.logicalKey == LogicalKeyboardKey.keyS) {
             final slowSpeed = _settingsController.settings.slowPlaybackSpeed;
             player.setRate(slowSpeed);
@@ -1057,23 +1126,25 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
             return KeyEventResult.handled;
           }
 
-          // 'D' key: Set speed to default playback speed (configurable in settings)
+          // 'D' key: Default playback speed
           if (event.logicalKey == LogicalKeyboardKey.keyD) {
-            final defaultSpeed = _settingsController.settings.defaultPlaybackSpeed;
+            final defaultSpeed =
+                _settingsController.settings.defaultPlaybackSpeed;
             player.setRate(defaultSpeed);
             print("Playback speed set to ${defaultSpeed}x (default)");
             return KeyEventResult.handled;
           }
 
-          // 'A' key: Jump backward 5 seconds
-          if (event.logicalKey == LogicalKeyboardKey.keyA) {
-            _jumpBackward(const Duration(seconds: 5));
-            return KeyEventResult.handled;
-          }
-
-          // 'P' key: Dump perf stats (debug only)
-          if (event.logicalKey == LogicalKeyboardKey.keyP) {
-            Perf.dump();
+          // Hold 'F': Fast forward
+          if (event.logicalKey == LogicalKeyboardKey.keyF &&
+              !_isSpeedShortcutActive) {
+            _previousPlaybackSpeed = player.state.rate;
+            _isSpeedShortcutActive = true;
+            final fastSpeed = _settingsController.settings.fastPlaySpeed;
+            player.setRate(fastSpeed);
+            print(
+              "Fast forward: ${fastSpeed}x speed (previous: ${_previousPlaybackSpeed}x)",
+            );
             return KeyEventResult.handled;
           }
 
@@ -1090,22 +1161,70 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
             return KeyEventResult.handled;
           }
 
-          // Hold 'F' for fast forward speed (configurable in settings)
-          if (event.logicalKey == LogicalKeyboardKey.keyF &&
-              !_isSpeedShortcutActive) {
-            _previousPlaybackSpeed = player.state.rate;
-            _isSpeedShortcutActive = true;
-            final fastSpeed = _settingsController.settings.fastPlaySpeed;
-            player.setRate(fastSpeed);
-            print(
-              "Fast forward: ${fastSpeed}x speed (previous: ${_previousPlaybackSpeed}x)",
-            );
+          // -----------------------------------------------------------------
+          // 5. Drawing / annotation shortcuts (record + review modes only)
+          // -----------------------------------------------------------------
+          if (mode == AppMode.record || mode == AppMode.review) {
+            // 'G' key: Toggle graphics/drawing mode
+            if (event.logicalKey == LogicalKeyboardKey.keyG) {
+              _toggleDrawingMode();
+              return KeyEventResult.handled;
+            }
+
+            // 'C' key: Clear all drawings
+            if (event.logicalKey == LogicalKeyboardKey.keyC) {
+              _clearDrawing();
+              return KeyEventResult.handled;
+            }
+
+            // 'K' key: Toggle laser pointer
+            if (event.logicalKey == LogicalKeyboardKey.keyK) {
+              _drawing.toggleLaser();
+              return KeyEventResult.handled;
+            }
+
+            // Drawing tool shortcuts (only when drawing mode is active)
+            if (_drawing.isDrawingMode) {
+              if (event.logicalKey == LogicalKeyboardKey.digit1 ||
+                  event.logicalKey == LogicalKeyboardKey.numpad1) {
+                _drawing.setTool(DrawingTool.freehand);
+                return KeyEventResult.handled;
+              }
+              if (event.logicalKey == LogicalKeyboardKey.digit2 ||
+                  event.logicalKey == LogicalKeyboardKey.numpad2) {
+                _drawing.setTool(DrawingTool.line);
+                return KeyEventResult.handled;
+              }
+              if (event.logicalKey == LogicalKeyboardKey.digit3 ||
+                  event.logicalKey == LogicalKeyboardKey.numpad3) {
+                _drawing.setTool(DrawingTool.arrow);
+                return KeyEventResult.handled;
+              }
+            }
+          }
+
+          // 'P' key: Dump perf stats (debug only, all modes)
+          if (event.logicalKey == LogicalKeyboardKey.keyP) {
+            Perf.dump();
             return KeyEventResult.handled;
           }
         }
-        // Handle key release events
+
+        // =====================================================================
+        // KEY UP
+        // =====================================================================
         if (event is KeyUpEvent) {
-          // Alt key released: Update state
+          // Tracking hold-mode timer release (tracking mode, not text fields)
+          if (mode == AppMode.tracking && !isTextFieldFocused) {
+            final keyLabel = event.logicalKey.keyLabel.toLowerCase();
+            if (keyLabel.isNotEmpty &&
+                _trackingController.handleHotkeyUp(
+                    keyLabel, player.state.position)) {
+              return KeyEventResult.handled;
+            }
+          }
+
+          // Alt key released
           if (event.logicalKey == LogicalKeyboardKey.altLeft ||
               event.logicalKey == LogicalKeyboardKey.altRight) {
             _altKey.onAltReleased();
@@ -1113,7 +1232,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
           }
 
           // Release 'F' to restore previous speed
-          if (event.logicalKey == LogicalKeyboardKey.keyF &&
+          if (!isTextFieldFocused &&
+              event.logicalKey == LogicalKeyboardKey.keyF &&
               _isSpeedShortcutActive) {
             player.setRate(_previousPlaybackSpeed);
             _isSpeedShortcutActive = false;
@@ -1142,7 +1262,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                   onShowShortcuts: _toggleShortcutsPanel,
                   showShortcuts: _showShortcuts,
                   currentMode: _uiController.currentMode,
-                  onModeChanged: _uiController.setMode,
+                  onModeChanged: _changeMode,
                   onSaveEvents: hasVideoLoaded ? _saveEvents : null,
                   onLoadEvents: hasVideoLoaded ? _loadEvents : null,
                   onShowEventsTable: hasVideoLoaded ? _showEventsTable : null,
@@ -1267,7 +1387,17 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                     title: 'Player Tracking',
                     icon: Icons.people,
                     defaultFloatingPosition: const Offset(20, 200),
-                    builder: (dockEdge) => const PlayerTrackingPanel(),
+                    builder: (dockEdge) => ListenableBuilder(
+                      listenable: _trackingController,
+                      builder: (context, _) => PlayerTrackingPanel(
+                        controller: _trackingController,
+                        player: player,
+                        dockEdge: dockEdge,
+                        onSave: _saveTrackingSession,
+                        onLoad: _loadTrackingSession,
+                        onExportCsv: _exportTrackingCsv,
+                      ),
+                    ),
                   ),
                 ],
                 ),

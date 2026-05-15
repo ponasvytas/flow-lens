@@ -13,8 +13,8 @@ import 'package:flutter/foundation.dart';
 class Perf {
   Perf._();
 
-  /// Master switch — set to `false` to silence output even in debug mode.
-  static bool enabled = true;
+  /// Master switch — set to `true` to re-enable output in debug mode.
+  static bool enabled = false;
 
   /// How often [rebuildCount] prints (every N rebuilds per tag).
   static int rebuildLogInterval = 50;

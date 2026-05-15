@@ -37,111 +37,197 @@ class ShortcutsPanel extends StatelessWidget {
 
   Widget _buildPanel() {
     return Container(
-      width: 320,
-      padding: const EdgeInsets.all(16),
+      width: 360,
+      constraints: const BoxConstraints(maxHeight: 560),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.85),
+        color: Colors.black.withOpacity(0.90),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.blue.shade300, width: 2),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Icon(Icons.drag_handle, color: Colors.blue, size: 24),
-              const SizedBox(width: 8),
-              const Icon(Icons.keyboard, color: Colors.blue, size: 20),
-              const SizedBox(width: 8),
-              const Text(
-                'Keyboard Shortcuts',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+          // Title bar
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
+            child: Row(
+              children: [
+                const Icon(Icons.drag_handle, color: Colors.blue, size: 24),
+                const SizedBox(width: 8),
+                const Icon(Icons.keyboard, color: Colors.blue, size: 20),
+                const SizedBox(width: 8),
+                const Text(
+                  'Keyboard Shortcuts',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-              const Spacer(),
-              if (onResetPosition != null)
+                const Spacer(),
+                if (onResetPosition != null)
+                  IconButton(
+                    icon: const Icon(Icons.refresh,
+                        color: Colors.white70, size: 18),
+                    onPressed: onResetPosition,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    tooltip: 'Reset position',
+                  ),
+                const SizedBox(width: 4),
                 IconButton(
-                  icon: const Icon(Icons.refresh, color: Colors.white70, size: 18),
-                  onPressed: onResetPosition,
+                  icon: const Icon(Icons.close,
+                      color: Colors.white70, size: 20),
+                  onPressed: onToggle,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
-                  tooltip: 'Reset position',
+                  tooltip: 'Close',
                 ),
-              const SizedBox(width: 4),
-              IconButton(
-                icon: const Icon(Icons.close, color: Colors.white70, size: 20),
-                onPressed: onToggle,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                tooltip: 'Close',
-              ),
-            ],
+              ],
+            ),
           ),
-          const Divider(color: Colors.white24, height: 24),
-          _buildShortcutRow('Space', 'Play/Pause video'),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: Divider(color: Colors.white24, height: 16),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'Shortcuts are disabled while typing in text fields.',
+              style: TextStyle(color: Colors.white38, fontSize: 11,
+                  fontStyle: FontStyle.italic),
+            ),
+          ),
           const SizedBox(height: 8),
-          _buildShortcutRow('←/→', 'Jump ±3 seconds'),
-          const SizedBox(height: 8),
-          _buildShortcutRow('Shift+←/→', 'Jump ±10 seconds'),
-          const SizedBox(height: 8),
-          _buildShortcutRow('Ctrl+←/→', 'Jump ±30 seconds'),
-          const SizedBox(height: 8),
-          _buildShortcutRow('G', 'Toggle graphics mode'),
-          const SizedBox(height: 8),
-          _buildShortcutRow('1/2/3', 'Select tool (graphics mode)'),
-          const SizedBox(height: 8),
-          _buildShortcutRow('K', 'Toggle laser pointer'),
-          const SizedBox(height: 8),
-          _buildShortcutRow('C', 'Clear all drawings'),
-          const SizedBox(height: 8),
-          _buildShortcutRow('S', 'Set speed to slow (settings)'),
-          const SizedBox(height: 8),
-          _buildShortcutRow('D', 'Set speed to default (settings)'),
-          const SizedBox(height: 8),
-          _buildShortcutRow('A', 'Jump back 5 seconds'),
-          const SizedBox(height: 8),
-          _buildShortcutRow('F (Hold)', '3x forward speed'),
-          const SizedBox(height: 8),
-          _buildShortcutRow('M', 'Toggle mute/unmute'),
-          const SizedBox(height: 8),
-          _buildShortcutRow('Scroll', 'Zoom in/out (when not drawing)'),
+          // Scrollable shortcut list
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── Global (all modes) ──
+                  _buildSectionHeader('All Modes', Colors.blue),
+                  _buildShortcutRow('Ctrl+M', 'Cycle app mode'),
+                  _buildShortcutRow('Space', 'Play / Pause video'),
+                  _buildShortcutRow('←  /  →', 'Jump ±3 seconds'),
+                  _buildShortcutRow('Shift+←/→', 'Jump ±10 seconds'),
+                  _buildShortcutRow('Ctrl+←/→', 'Jump ±30 seconds'),
+                  _buildShortcutRow('A', 'Jump back 5 seconds'),
+                  _buildShortcutRow('S', 'Slow playback speed'),
+                  _buildShortcutRow('D', 'Default playback speed'),
+                  _buildShortcutRow('F (hold)', 'Fast-forward while held'),
+                  _buildShortcutRow('M', 'Toggle mute / unmute'),
+                  _buildShortcutRow('Scroll', 'Zoom in / out'),
+
+                  const SizedBox(height: 12),
+
+                  // ── Record + Review ──
+                  _buildSectionHeader('Record & Review', Colors.orange),
+                  _buildShortcutRow('G', 'Toggle drawing mode'),
+                  _buildShortcutRow('C', 'Clear all drawings'),
+                  _buildShortcutRow('K', 'Toggle laser pointer'),
+                  _buildShortcutRow('1 / 2 / 3',
+                      'Freehand / Line / Arrow (drawing mode)'),
+
+                  const SizedBox(height: 12),
+
+                  // ── Record only ──
+                  _buildSectionHeader('Record Only', Colors.redAccent),
+                  _buildShortcutRow('Alt+1‑6', 'Create event by category'),
+                  _buildShortcutRow('Alt+1‑5',
+                      'Grade / label event (SmartHUD)'),
+                  _buildShortcutRow('Enter', 'Save event (SmartHUD)'),
+                  _buildShortcutRow('Esc', 'Cancel event (SmartHUD)'),
+
+                  const SizedBox(height: 12),
+
+                  // ── Tracking only ──
+                  _buildSectionHeader('Tracking Only', Colors.greenAccent),
+                  _buildShortcutRow('(assigned)',
+                      'Trigger counter / timer hotkey'),
+                  _buildShortcutRow('(hold)',
+                      'Hold-mode timer while key held'),
+                  const Padding(
+                    padding: EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Assign hotkeys per tracker via the key badge '
+                      'in the tracking panel.',
+                      style: TextStyle(
+                          color: Colors.white38, fontSize: 11),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String label, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6, top: 2),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Container(height: 1, color: color.withOpacity(0.25)),
+          ),
         ],
       ),
     );
   }
 
   Widget _buildShortcutRow(String key, String description) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade800,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: Colors.grey.shade600, width: 1),
-          ),
-          child: Text(
-            key,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              fontFamily: 'monospace',
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 5),
+      child: Row(
+        children: [
+          Container(
+            constraints: const BoxConstraints(minWidth: 80),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade800,
+              borderRadius: BorderRadius.circular(5),
+              border: Border.all(color: Colors.grey.shade600, width: 1),
+            ),
+            child: Text(
+              key,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'monospace',
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            description,
-            style: const TextStyle(color: Colors.white, fontSize: 14),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              description,
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
