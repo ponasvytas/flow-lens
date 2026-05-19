@@ -264,6 +264,50 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     controller = VideoController(player);
 
     _settingsController.loadSettings();
+
+    // Handle deep-link query parameters: ?video=<url>&sport=<name>&t=<seconds>
+    WidgetsBinding.instance.addPostFrameCallback((_) => _handleDeepLink());
+  }
+
+  /// Parse URL query parameters and auto-load a video if present.
+  /// Supported params:
+  ///   video : direct, URL-encoded media URL (e.g. https://cdn.example.com/game.mp4)
+  ///   sport : sport profile name (e.g. "hockey"). Defaults to first enabled profile.
+  ///   t     : initial playback position in seconds (int or float). Optional.
+  void _handleDeepLink() {
+    if (!mounted) return;
+    final base = Uri.base;
+    print('[DeepLink] Uri.base=$base');
+    print('[DeepLink] queryParameters=${base.queryParameters}');
+    final params = base.queryParameters;
+    final videoUrl = params['video'];
+    final sportName = params['sport'];
+    final tParam = params['t'];
+    print('[DeepLink] video=$videoUrl sport=$sportName t=$tParam');
+
+    if (videoUrl == null || videoUrl.isEmpty) {
+      print('[DeepLink] no video param, skipping auto-load');
+      return;
+    }
+
+    // Select a sport profile (required before the player UI is shown).
+    final wanted = sportName ?? 'hockey';
+    final profile = SportProfile.availableProfiles.firstWhere(
+      (p) => p.enabled && p.name == wanted,
+      orElse: () => SportProfile.availableProfiles
+          .firstWhere((p) => p.enabled, orElse: () => SportProfile.availableProfiles.first),
+    );
+    _onSportSelected(profile);
+
+    // Load the video, then seek to ?t= if requested.
+    Duration? initialPosition;
+    if (tParam != null) {
+      final secs = double.tryParse(tParam);
+      if (secs != null && secs > 0) {
+        initialPosition = Duration(milliseconds: (secs * 1000).round());
+      }
+    }
+    _loadUrl(videoUrl, initialPosition: initialPosition);
   }
 
   Future<void> _loadTaxonomy() async {
@@ -480,7 +524,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     }
   }
 
-  Future<void> _loadUrl(String url) async {
+  Future<void> _loadUrl(String url, {Duration? initialPosition}) async {
     setState(() {
       hasVideoLoaded = true;
     });
@@ -490,6 +534,10 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
       _videoSourcePath = url;
       await player.open(Media(url));
       player.setRate(_settingsController.settings.defaultPlaybackSpeed);
+      if (initialPosition != null && initialPosition > Duration.zero) {
+        // Seek after open; media_kit queues the seek if the demuxer is not ready yet.
+        await player.seek(initialPosition);
+      }
       print("Successfully loaded video");
     } catch (e) {
       print("Error loading video: $e");
