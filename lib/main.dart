@@ -8,6 +8,7 @@ import 'package:file_picker/file_picker.dart';
 
 import 'utils/video_loader.dart';
 import 'utils/player_config.dart';
+import 'utils/native_player_helpers.dart';
 import 'utils/perf.dart';
 import 'models/drawing_models.dart';
 import 'models/game_event.dart';
@@ -194,6 +195,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
   // Video loading state
   bool hasVideoLoaded = false;
+  String? _videoSourcePath;
 
   // Event Tracking State
   final EventsController _eventsController = EventsController();
@@ -226,6 +228,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
   // Speed control state for hold-to-speed shortcuts
   double _previousPlaybackSpeed = 1.0;
+  double _previousVolume = 100.0;
   bool _isSpeedShortcutActive = false;
 
   final EventStorageService _storageService = EventStorageService();
@@ -304,6 +307,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
           hasVideoLoaded = true;
         });
         try {
+          _videoSourcePath = url;
           await player.open(Media(url), play: false);
           print("Loaded video from blob URL: $url");
           player.setRate(_settingsController.settings.defaultPlaybackSpeed);
@@ -325,6 +329,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
         final String? path = result.files.single.path;
         if (path != null) {
+          _videoSourcePath = path;
           await player.open(Media(path));
           player.setRate(_settingsController.settings.defaultPlaybackSpeed);
           print("Loaded video from path: $path");
@@ -463,6 +468,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
       // const testVideoUrl = "https://github.com/ponasvytas/hockey-video-analyst/releases/download/v0.0.1-alpha/part5.mp4";
 
       print("Loading test video from: $testVideoUrl");
+      _videoSourcePath = testVideoUrl;
       await player.open(Media(testVideoUrl));
       player.setRate(_settingsController.settings.defaultPlaybackSpeed);
       print("Successfully loaded test video");
@@ -481,6 +487,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
     try {
       print("Loading video from URL: $url");
+      _videoSourcePath = url;
       await player.open(Media(url));
       player.setRate(_settingsController.settings.defaultPlaybackSpeed);
       print("Successfully loaded video");
@@ -673,6 +680,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
             Navigator.of(context).pop();
           },
           onClose: () => Navigator.of(context).pop(),
+          videoSourcePath: _videoSourcePath,
+          videoDuration: player.state.duration,
         ),
       );
     } else {
@@ -686,6 +695,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
               Navigator.of(context).pop();
             },
             onClose: () => Navigator.of(context).pop(),
+            videoSourcePath: _videoSourcePath,
+            videoDuration: player.state.duration,
           ),
         ),
       );
@@ -1139,8 +1150,10 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
           if (event.logicalKey == LogicalKeyboardKey.keyF &&
               !_isSpeedShortcutActive) {
             _previousPlaybackSpeed = player.state.rate;
+            _previousVolume = player.state.volume;
             _isSpeedShortcutActive = true;
             final fastSpeed = _settingsController.settings.fastPlaySpeed;
+            nativeMutePlayer(player);
             player.setRate(fastSpeed);
             print(
               "Fast forward: ${fastSpeed}x speed (previous: ${_previousPlaybackSpeed}x)",
@@ -1235,8 +1248,9 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
           if (!isTextFieldFocused &&
               event.logicalKey == LogicalKeyboardKey.keyF &&
               _isSpeedShortcutActive) {
-            player.setRate(_previousPlaybackSpeed);
             _isSpeedShortcutActive = false;
+            player.setRate(_previousPlaybackSpeed);
+            nativeResyncAfterFF(player, () => _isSpeedShortcutActive);
             print("Speed restored to ${_previousPlaybackSpeed}x");
             return KeyEventResult.handled;
           }

@@ -2,18 +2,23 @@ import 'package:flutter/material.dart';
 import '../models/game_event.dart';
 import '../models/sport_taxonomy.dart';
 import '../controllers/events_controller.dart';
+import 'export_dialog.dart';
 
 class EventsTableView extends StatefulWidget {
   final EventsController controller;
   final SportTaxonomy taxonomy;
   final Function(GameEvent) onEventTap;
   final VoidCallback onClose;
+  final String? videoSourcePath;
+  final Duration videoDuration;
 
   const EventsTableView({
     required this.controller,
     required this.taxonomy,
     required this.onEventTap,
     required this.onClose,
+    this.videoSourcePath,
+    this.videoDuration = Duration.zero,
     super.key,
   });
 
@@ -286,6 +291,32 @@ class _EventsTableViewState extends State<EventsTableView> {
     );
   }
 
+  void _exportSelected() {
+    final selectedEvents = widget.controller.filteredEvents
+        .where((e) => _selectedEventIds.contains(e.id))
+        .toList();
+
+    if (selectedEvents.isEmpty) return;
+
+    final videoPath = widget.videoSourcePath;
+    if (videoPath == null || videoPath.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No video loaded — cannot export')),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => ExportDialog(
+        selectedEvents: selectedEvents,
+        sourceVideoPath: videoPath,
+        videoDuration: widget.videoDuration,
+      ),
+    );
+  }
+
   void _confirmBulkDelete() {
     final selectedEvents = widget.controller.filteredEvents
         .where((e) => _selectedEventIds.contains(e.id))
@@ -365,7 +396,18 @@ class _EventsTableViewState extends State<EventsTableView> {
                 ),
               ),
               const Spacer(),
-              if (_selectedEventIds.isNotEmpty)
+              if (_selectedEventIds.isNotEmpty) ...[              TextButton.icon(
+                  onPressed: _exportSelected,
+                  icon: const Icon(Icons.movie_creation, color: Colors.white70, size: 18),
+                  label: Text(
+                    'Export Selected (${_selectedEventIds.length})',
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                  style: TextButton.styleFrom(
+                    backgroundColor: const Color(0xFF753b8f).withOpacity(0.3),
+                  ),
+                ),
+                const SizedBox(width: 8),
                 TextButton.icon(
                   onPressed: _confirmBulkDelete,
                   icon: const Icon(Icons.delete, color: Colors.white70, size: 18),
@@ -377,6 +419,7 @@ class _EventsTableViewState extends State<EventsTableView> {
                     backgroundColor: Colors.red.withOpacity(0.2),
                   ),
                 ),
+              ],
               const SizedBox(width: 16),
               Text(
                 'Showing ${events.length} / ${widget.controller.totalEventCount}',
