@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 /// Keyboard shortcuts panel - toggleable and draggable
-class ShortcutsPanel extends StatelessWidget {
+class ShortcutsPanel extends StatefulWidget {
   final bool isVisible;
   final VoidCallback onToggle;
   final double positionX;
@@ -20,15 +20,43 @@ class ShortcutsPanel extends StatelessWidget {
   });
 
   @override
+  State<ShortcutsPanel> createState() => _ShortcutsPanelState();
+}
+
+class _ShortcutsPanelState extends State<ShortcutsPanel> {
+  late Offset _position;
+
+  @override
+  void initState() {
+    super.initState();
+    _position = Offset(widget.positionX, widget.positionY);
+  }
+
+  @override
+  void didUpdateWidget(ShortcutsPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.positionX != widget.positionX ||
+        oldWidget.positionY != widget.positionY) {
+      _position = Offset(widget.positionX, widget.positionY);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (!isVisible) return const SizedBox.shrink();
-    
+    if (!widget.isVisible) return const SizedBox.shrink();
+
     return Positioned(
-      left: positionX,
-      top: positionY,
+      left: _position.dx,
+      top: _position.dy,
       child: GestureDetector(
         onPanUpdate: (details) {
-          onPositionChanged(details.delta.dx, details.delta.dy);
+          setState(() => _position += details.delta);
+        },
+        onPanEnd: (_) {
+          widget.onPositionChanged(
+            _position.dx - widget.positionX,
+            _position.dy - widget.positionY,
+          );
         },
         child: Material(color: Colors.transparent, child: _buildPanel()),
       ),
@@ -40,7 +68,7 @@ class ShortcutsPanel extends StatelessWidget {
       width: 360,
       constraints: const BoxConstraints(maxHeight: 560),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.90),
+        color: Colors.black.withValues(alpha: 0.90),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.blue.shade300, width: 2),
       ),
@@ -65,20 +93,26 @@ class ShortcutsPanel extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
-                if (onResetPosition != null)
+                if (widget.onResetPosition != null)
                   IconButton(
-                    icon: const Icon(Icons.refresh,
-                        color: Colors.white70, size: 18),
-                    onPressed: onResetPosition,
+                    icon: const Icon(
+                      Icons.refresh,
+                      color: Colors.white70,
+                      size: 18,
+                    ),
+                    onPressed: widget.onResetPosition,
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                     tooltip: 'Reset position',
                   ),
                 const SizedBox(width: 4),
                 IconButton(
-                  icon: const Icon(Icons.close,
-                      color: Colors.white70, size: 20),
-                  onPressed: onToggle,
+                  icon: const Icon(
+                    Icons.close,
+                    color: Colors.white70,
+                    size: 20,
+                  ),
+                  onPressed: widget.onToggle,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                   tooltip: 'Close',
@@ -94,8 +128,11 @@ class ShortcutsPanel extends StatelessWidget {
             padding: EdgeInsets.symmetric(horizontal: 16),
             child: Text(
               'Shortcuts are disabled while typing in text fields.',
-              style: TextStyle(color: Colors.white38, fontSize: 11,
-                  fontStyle: FontStyle.italic),
+              style: TextStyle(
+                color: Colors.white38,
+                fontSize: 11,
+                fontStyle: FontStyle.italic,
+              ),
             ),
           ),
           const SizedBox(height: 8),
@@ -127,16 +164,20 @@ class ShortcutsPanel extends StatelessWidget {
                   _buildShortcutRow('G', 'Toggle drawing mode'),
                   _buildShortcutRow('C', 'Clear all drawings'),
                   _buildShortcutRow('K', 'Toggle laser pointer'),
-                  _buildShortcutRow('1 / 2 / 3',
-                      'Freehand / Line / Arrow (drawing mode)'),
+                  _buildShortcutRow(
+                    '1 / 2 / 3',
+                    'Freehand / Line / Arrow (drawing mode)',
+                  ),
 
                   const SizedBox(height: 12),
 
                   // ── Record only ──
                   _buildSectionHeader('Record Only', Colors.redAccent),
                   _buildShortcutRow('Alt+1‑6', 'Create event by category'),
-                  _buildShortcutRow('Alt+1‑5',
-                      'Grade / label event (SmartHUD)'),
+                  _buildShortcutRow(
+                    'Alt+1‑5',
+                    'Grade / label event (SmartHUD)',
+                  ),
                   _buildShortcutRow('Enter', 'Save event (SmartHUD)'),
                   _buildShortcutRow('Esc', 'Cancel event (SmartHUD)'),
 
@@ -144,17 +185,17 @@ class ShortcutsPanel extends StatelessWidget {
 
                   // ── Tracking only ──
                   _buildSectionHeader('Tracking Only', Colors.greenAccent),
-                  _buildShortcutRow('(assigned)',
-                      'Trigger counter / timer hotkey'),
-                  _buildShortcutRow('(hold)',
-                      'Hold-mode timer while key held'),
+                  _buildShortcutRow(
+                    '(assigned)',
+                    'Trigger counter / timer hotkey',
+                  ),
+                  _buildShortcutRow('(hold)', 'Hold-mode timer while key held'),
                   const Padding(
                     padding: EdgeInsets.only(top: 4),
                     child: Text(
                       'Assign hotkeys per tracker via the key badge '
                       'in the tracking panel.',
-                      style: TextStyle(
-                          color: Colors.white38, fontSize: 11),
+                      style: TextStyle(color: Colors.white38, fontSize: 11),
                     ),
                   ),
                 ],
@@ -188,7 +229,7 @@ class ShortcutsPanel extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: Container(height: 1, color: color.withOpacity(0.25)),
+            child: Container(height: 1, color: color.withValues(alpha: 0.25)),
           ),
         ],
       ),

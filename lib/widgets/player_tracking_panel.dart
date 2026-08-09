@@ -47,15 +47,16 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
   // Live timer tick
   StreamSubscription<Duration>? _positionSub;
   Duration _videoPosition = Duration.zero;
+  DateTime? _lastTimerPaint;
+  late int _structureFingerprint;
 
   @override
   void initState() {
     super.initState();
     _videoPosition = widget.player.state.position;
-    _positionSub = widget.player.stream.position.listen((pos) {
-      if (mounted) setState(() => _videoPosition = pos);
-    });
+    _structureFingerprint = _controllerStructureFingerprint();
     widget.controller.addListener(_onControllerChange);
+    _updateTimerSubscription();
   }
 
   @override
@@ -70,6 +71,7 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
 
   void _onControllerChange() {
     if (!mounted) return;
+    _updateTimerSubscription();
     // Check for feedback flash
     final fb = widget.controller.lastFeedback;
     if (fb != null) {
@@ -79,9 +81,56 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
       _flashTimer = Timer(const Duration(milliseconds: 400), () {
         if (mounted) setState(() => _flashKey = null);
       });
-    } else {
+      return;
+    }
+    final nextFingerprint = _controllerStructureFingerprint();
+    if (nextFingerprint != _structureFingerprint) {
+      _structureFingerprint = nextFingerprint;
       setState(() {});
     }
+  }
+
+  int _controllerStructureFingerprint() => Object.hash(
+    Object.hashAll(
+      widget.controller.subjects.map(
+        (subject) => Object.hash(
+          subject.id,
+          subject.label,
+          subject.number,
+          subject.colorValue,
+        ),
+      ),
+    ),
+    Object.hashAll(
+      widget.controller.trackers.map(
+        (tracker) => Object.hash(
+          tracker.id,
+          tracker.label,
+          tracker.kind,
+          tracker.timerMode,
+        ),
+      ),
+    ),
+    Object.hashAll(widget.controller.hotkeys.entries),
+    widget.controller.activeSubjectId,
+  );
+
+  void _updateTimerSubscription() {
+    if (widget.controller.activeTimerKeys.isEmpty) {
+      _positionSub?.cancel();
+      _positionSub = null;
+      return;
+    }
+    _positionSub ??= widget.player.stream.position.listen((position) {
+      final now = DateTime.now();
+      if (_lastTimerPaint != null &&
+          now.difference(_lastTimerPaint!) <
+              const Duration(milliseconds: 100)) {
+        return;
+      }
+      _lastTimerPaint = now;
+      if (mounted) setState(() => _videoPosition = position);
+    });
   }
 
   bool get _isHorizontal =>
@@ -129,8 +178,7 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
                     if (i > 0) const SizedBox(width: 6),
                     SizedBox(
                       width: 220,
-                      child: _buildSubjectCard(
-                          subjects[i], trackers, ctrl),
+                      child: _buildSubjectCard(subjects[i], trackers, ctrl),
                     ),
                   ],
                 ],
@@ -143,10 +191,7 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
             ],
 
           // Inline add form
-          if (_showAddForm) ...[
-            const SizedBox(height: 6),
-            _buildAddForm(ctrl),
-          ],
+          if (_showAddForm) ...[const SizedBox(height: 6), _buildAddForm(ctrl)],
         ],
       ),
     );
@@ -216,7 +261,7 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
     return Container(
       padding: const EdgeInsets.all(6),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
+        color: Colors.white.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: Colors.white12),
       ),
@@ -233,10 +278,7 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
           const SizedBox(width: 4),
           SizedBox(
             width: 44,
-            child: _MiniTextField(
-              controller: _numberController,
-              hint: '#',
-            ),
+            child: _MiniTextField(controller: _numberController, hint: '#'),
           ),
           const SizedBox(width: 4),
           _SmallIconBtn(
@@ -275,17 +317,20 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
   // Subject card
   // -------------------------------------------------------------------------
 
-  Widget _buildSubjectCard(TrackingSubject subject,
-      List<TrackingDefinition> trackers, TrackingController ctrl) {
+  Widget _buildSubjectCard(
+    TrackingSubject subject,
+    List<TrackingDefinition> trackers,
+    TrackingController ctrl,
+  ) {
     final isCollapsed = _collapsedSubjects.contains(subject.id);
     final subjectColor = Color(subject.colorValue);
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.04),
+        color: Colors.white.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
-          color: subjectColor.withOpacity(0.3),
+          color: subjectColor.withValues(alpha: 0.3),
           width: 1,
         ),
       ),
@@ -302,14 +347,16 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
               decoration: BoxDecoration(
-                color: subjectColor.withOpacity(0.12),
+                color: subjectColor.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(5),
                   topRight: const Radius.circular(5),
-                  bottomLeft:
-                      isCollapsed ? const Radius.circular(5) : Radius.zero,
-                  bottomRight:
-                      isCollapsed ? const Radius.circular(5) : Radius.zero,
+                  bottomLeft: isCollapsed
+                      ? const Radius.circular(5)
+                      : Radius.zero,
+                  bottomRight: isCollapsed
+                      ? const Radius.circular(5)
+                      : Radius.zero,
                 ),
               ),
               child: Row(
@@ -329,7 +376,7 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
                     Text(
                       '#${subject.number} ',
                       style: TextStyle(
-                        color: subjectColor.withOpacity(0.8),
+                        color: subjectColor.withValues(alpha: 0.8),
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
                       ),
@@ -351,8 +398,7 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
                     onTap: () => ctrl.removeSubject(subject.id),
                     child: const Padding(
                       padding: EdgeInsets.all(2),
-                      child:
-                          Icon(Icons.close, size: 12, color: Colors.white30),
+                      child: Icon(Icons.close, size: 12, color: Colors.white30),
                     ),
                   ),
                   // Collapse toggle
@@ -370,8 +416,9 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
 
           // Tracker rows
           if (!isCollapsed)
-            ...trackers.map((tracker) =>
-                _buildTrackerRow(subject, tracker, ctrl)),
+            ...trackers.map(
+              (tracker) => _buildTrackerRow(subject, tracker, ctrl),
+            ),
         ],
       ),
     );
@@ -381,27 +428,38 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
   // Tracker row (counter or timer)
   // -------------------------------------------------------------------------
 
-  Widget _buildTrackerRow(TrackingSubject subject,
-      TrackingDefinition tracker, TrackingController ctrl) {
-    final isFlashing = _flashKey != null &&
+  Widget _buildTrackerRow(
+    TrackingSubject subject,
+    TrackingDefinition tracker,
+    TrackingController ctrl,
+  ) {
+    final isFlashing =
+        _flashKey != null &&
         _flashKey!.subjectId == subject.id &&
         _flashKey!.trackerId == tracker.id;
     final hotkey = ctrl.getHotkey(subject.id, tracker.id);
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-      color: isFlashing
-          ? Colors.amber.withOpacity(0.25)
-          : Colors.transparent,
-      child: tracker.kind == TrackerKind.counter
-          ? _buildCounterContent(subject, tracker, ctrl, hotkey)
-          : _buildTimerContent(subject, tracker, ctrl, hotkey),
+    return ValueListenableBuilder<TrackingCellStats>(
+      valueListenable: ctrl.cellStatsListenable(subject.id, tracker.id),
+      builder: (context, stats, child) => AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        color: isFlashing
+            ? Colors.amber.withValues(alpha: 0.25)
+            : Colors.transparent,
+        child: tracker.kind == TrackerKind.counter
+            ? _buildCounterContent(subject, tracker, ctrl, hotkey)
+            : _buildTimerContent(subject, tracker, ctrl, hotkey),
+      ),
     );
   }
 
-  Widget _buildCounterContent(TrackingSubject subject,
-      TrackingDefinition tracker, TrackingController ctrl, String? hotkey) {
+  Widget _buildCounterContent(
+    TrackingSubject subject,
+    TrackingDefinition tracker,
+    TrackingController ctrl,
+    String? hotkey,
+  ) {
     final value = ctrl.getCounterValue(subject.id, tracker.id);
     return Row(
       children: [
@@ -438,18 +496,22 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
           icon: Icons.remove,
           onTap: value > 0
               ? () => ctrl.decrementCounter(
-                    subjectId: subject.id,
-                    trackerId: tracker.id,
-                    timestamp: widget.player.state.position,
-                  )
+                  subjectId: subject.id,
+                  trackerId: tracker.id,
+                  timestamp: widget.player.state.position,
+                )
               : null,
         ),
       ],
     );
   }
 
-  Widget _buildTimerContent(TrackingSubject subject,
-      TrackingDefinition tracker, TrackingController ctrl, String? hotkey) {
+  Widget _buildTimerContent(
+    TrackingSubject subject,
+    TrackingDefinition tracker,
+    TrackingController ctrl,
+    String? hotkey,
+  ) {
     final running = ctrl.isTimerRunning(subject.id, tracker.id);
     final accumulated = ctrl.getTimerDuration(subject.id, tracker.id);
     final startTs = ctrl.timerStartTimestamp(subject.id, tracker.id);
@@ -463,8 +525,9 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
       }
     }
 
-    final modeIcon =
-        tracker.timerMode == TimerMode.hold ? Icons.touch_app : Icons.toggle_on;
+    final modeIcon = tracker.timerMode == TimerMode.hold
+        ? Icons.touch_app
+        : Icons.toggle_on;
 
     return Row(
       children: [
@@ -517,7 +580,10 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
   // -------------------------------------------------------------------------
 
   void _promptHotkey(
-      TrackingController ctrl, String subjectId, String trackerId) {
+    TrackingController ctrl,
+    String subjectId,
+    String trackerId,
+  ) {
     showDialog(
       context: context,
       builder: (ctx) => _HotkeyDialog(
@@ -598,14 +664,14 @@ class _SmallIconBtn extends StatelessWidget {
       message: tooltip,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(4),
-        child: Padding(
-          padding: const EdgeInsets.all(3),
-          child: Icon(icon,
-              size: 16,
-              color: onTap != null
-                  ? (color ?? Colors.white54)
-                  : Colors.white12),
+        borderRadius: BorderRadius.circular(22),
+        child: SizedBox.square(
+          dimension: 44,
+          child: Icon(
+            icon,
+            size: 16,
+            color: onTap != null ? (color ?? Colors.white54) : Colors.white12,
+          ),
         ),
       ),
     );
@@ -621,16 +687,29 @@ class _TinyBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(3),
-      child: Padding(
-        padding: const EdgeInsets.all(2),
-        child: Icon(icon,
-            size: 14,
-            color: onTap != null
-                ? (color ?? Colors.white54)
-                : Colors.white12),
+    return Tooltip(
+      message: icon == Icons.add
+          ? 'Increment'
+          : icon == Icons.remove
+          ? 'Decrement'
+          : icon == Icons.stop
+          ? 'Stop timer'
+          : 'Start timer',
+      child: Semantics(
+        button: true,
+        enabled: onTap != null,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(22),
+          child: SizedBox.square(
+            dimension: 44,
+            child: Icon(
+              icon,
+              size: 14,
+              color: onTap != null ? (color ?? Colors.white54) : Colors.white12,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -657,8 +736,7 @@ class _MiniTextField extends StatelessWidget {
         hintText: hint,
         hintStyle: const TextStyle(color: Colors.white24, fontSize: 11),
         isDense: true,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(4),
           borderSide: const BorderSide(color: Colors.white12),
@@ -684,29 +762,42 @@ class _HotkeyBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        constraints: const BoxConstraints(minWidth: 20),
-        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-        decoration: BoxDecoration(
-          color: label != null
-              ? Colors.blueGrey.withOpacity(0.4)
-              : Colors.white.withOpacity(0.06),
-          borderRadius: BorderRadius.circular(3),
-          border: Border.all(
-            color: label != null ? Colors.white24 : Colors.white10,
-            width: 1,
-          ),
-        ),
-        child: Text(
-          label?.toUpperCase() ?? '·',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: label != null ? Colors.white70 : Colors.white12,
-            fontSize: 9,
-            fontWeight: FontWeight.bold,
-            fontFamily: 'monospace',
+    return Tooltip(
+      message: label == null ? 'Assign hotkey' : 'Change hotkey $label',
+      child: Semantics(
+        button: true,
+        label: label == null ? 'Assign hotkey' : 'Hotkey $label',
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(22),
+          child: SizedBox.square(
+            dimension: 44,
+            child: Center(
+              child: Container(
+                constraints: const BoxConstraints(minWidth: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                decoration: BoxDecoration(
+                  color: label != null
+                      ? Colors.blueGrey.withValues(alpha: 0.4)
+                      : Colors.white.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(3),
+                  border: Border.all(
+                    color: label != null ? Colors.white24 : Colors.white10,
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  label?.toUpperCase() ?? '·',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: label != null ? Colors.white70 : Colors.white12,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -806,15 +897,18 @@ class _HotkeyDialogState extends State<_HotkeyDialog> {
           borderRadius: BorderRadius.circular(12),
           side: const BorderSide(color: Colors.white12),
         ),
-        title: const Text('Assign Hotkey',
-            style: TextStyle(color: Colors.white, fontSize: 14)),
+        title: const Text(
+          'Assign Hotkey',
+          style: TextStyle(color: Colors.white, fontSize: 14),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (widget.currentKey != null)
-              Text('Current: ${widget.currentKey!.toUpperCase()}',
-                  style:
-                      const TextStyle(color: Colors.white38, fontSize: 12)),
+              Text(
+                'Current: ${widget.currentKey!.toUpperCase()}',
+                style: const TextStyle(color: Colors.white38, fontSize: 12),
+              ),
             const SizedBox(height: 12),
             Container(
               width: 60,
@@ -823,9 +917,7 @@ class _HotkeyDialogState extends State<_HotkeyDialog> {
                 color: Colors.black38,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: _captured != null
-                      ? Colors.blueAccent
-                      : Colors.white24,
+                  color: _captured != null ? Colors.blueAccent : Colors.white24,
                   width: 2,
                 ),
               ),
@@ -833,8 +925,7 @@ class _HotkeyDialogState extends State<_HotkeyDialog> {
                 child: Text(
                   _captured?.toUpperCase() ?? '?',
                   style: TextStyle(
-                    color:
-                        _captured != null ? Colors.white : Colors.white24,
+                    color: _captured != null ? Colors.white : Colors.white24,
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
                     fontFamily: 'monospace',
@@ -843,31 +934,36 @@ class _HotkeyDialogState extends State<_HotkeyDialog> {
               ),
             ),
             const SizedBox(height: 8),
-            const Text('Press any key...',
-                style: TextStyle(color: Colors.white38, fontSize: 11)),
+            const Text(
+              'Press any key...',
+              style: TextStyle(color: Colors.white38, fontSize: 11),
+            ),
           ],
         ),
         actionsAlignment: MainAxisAlignment.spaceBetween,
         actions: [
           TextButton(
             onPressed: widget.onClear,
-            child: const Text('Clear',
-                style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+            child: const Text(
+              'Clear',
+              style: TextStyle(color: Colors.redAccent, fontSize: 12),
+            ),
           ),
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextButton(
                 onPressed: widget.onCancel,
-                child: const Text('Cancel',
-                    style: TextStyle(color: Colors.white38, fontSize: 12)),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: Colors.white38, fontSize: 12),
+                ),
               ),
               TextButton(
                 onPressed: _captured != null
                     ? () => widget.onSet(_captured!)
                     : null,
-                child: const Text('Assign',
-                    style: TextStyle(fontSize: 12)),
+                child: const Text('Assign', style: TextStyle(fontSize: 12)),
               ),
             ],
           ),
@@ -913,28 +1009,30 @@ class _TrackerPickerDialogState extends State<_TrackerPickerDialog> {
         borderRadius: BorderRadius.circular(12),
         side: const BorderSide(color: Colors.white12),
       ),
-      title: const Text('Select Trackers',
-          style: TextStyle(color: Colors.white, fontSize: 14)),
+      title: const Text(
+        'Select Trackers',
+        style: TextStyle(color: Colors.white, fontSize: 14),
+      ),
       content: SizedBox(
         width: 300,
         height: 400,
         child: ListView(
           children: [
             _sectionHeader('Counters'),
-            for (final t in HockeyTrackingPresets.allCounters)
-              _trackerTile(t),
+            for (final t in HockeyTrackingPresets.allCounters) _trackerTile(t),
             const SizedBox(height: 8),
             _sectionHeader('Timers'),
-            for (final t in HockeyTrackingPresets.allTimers)
-              _trackerTile(t),
+            for (final t in HockeyTrackingPresets.allTimers) _trackerTile(t),
           ],
         ),
       ),
       actions: [
         TextButton(
           onPressed: widget.onCancel,
-          child: const Text('Cancel',
-              style: TextStyle(color: Colors.white38, fontSize: 12)),
+          child: const Text(
+            'Cancel',
+            style: TextStyle(color: Colors.white38, fontSize: 12),
+          ),
         ),
         TextButton(
           onPressed: () {

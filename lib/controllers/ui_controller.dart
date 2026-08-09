@@ -148,11 +148,6 @@ class UIController extends ChangeNotifier {
     }
   }
 
-  /// Update floating position silently (called during drag, no rebuild needed).
-  void setFloatingPositionSilent(PanelId id, Offset pos) {
-    _floatingPositions[id] = pos;
-  }
-
   /// Update floating position and notify listeners (e.g. after drag end).
   void setFloatingPosition(PanelId id, Offset pos) {
     _floatingPositions[id] = pos;

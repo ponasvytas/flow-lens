@@ -4,12 +4,66 @@ import '../models/tracking_models.dart';
 /// Key for identifying a running timer: (subjectId, trackerId).
 typedef _TimerKey = ({String subjectId, String trackerId});
 
+@immutable
+class TrackingCellStats {
+  final int counterValue;
+  final Duration timerDuration;
+  final bool timerRunning;
+  final Duration? timerStartedAt;
+
+  const TrackingCellStats({
+    this.counterValue = 0,
+    this.timerDuration = Duration.zero,
+    this.timerRunning = false,
+    this.timerStartedAt,
+  });
+
+  TrackingCellStats copyWith({
+    int? counterValue,
+    Duration? timerDuration,
+    bool? timerRunning,
+    Duration? timerStartedAt,
+    bool clearTimerStart = false,
+  }) {
+    return TrackingCellStats(
+      counterValue: counterValue ?? this.counterValue,
+      timerDuration: timerDuration ?? this.timerDuration,
+      timerRunning: timerRunning ?? this.timerRunning,
+      timerStartedAt: clearTimerStart
+          ? null
+          : timerStartedAt ?? this.timerStartedAt,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is TrackingCellStats &&
+      counterValue == other.counterValue &&
+      timerDuration == other.timerDuration &&
+      timerRunning == other.timerRunning &&
+      timerStartedAt == other.timerStartedAt;
+
+  @override
+  int get hashCode =>
+      Object.hash(counterValue, timerDuration, timerRunning, timerStartedAt);
+}
+
 /// Holds the start timestamp for an active timer.
 class _ActiveTimer {
   final Duration startTimestamp;
 
   const _ActiveTimer({required this.startTimestamp});
 }
+
+TrackingSession _mutableSession(TrackingSession source) => TrackingSession(
+  id: source.id,
+  videoSource: source.videoSource,
+  createdAt: source.createdAt,
+  subjects: List<TrackingSubject>.of(source.subjects),
+  trackers: List<TrackingDefinition>.of(source.trackers),
+  events: List<TrackingEvent>.of(source.events),
+  hotkeys: Map<String, String>.of(source.hotkeys),
+);
 
 /// Central state controller for player tracking.
 ///
@@ -23,6 +77,8 @@ class TrackingController extends ChangeNotifier {
 
   /// Currently active timers keyed by (subjectId, trackerId).
   final Map<_TimerKey, _ActiveTimer> _activeTimers = {};
+  final Map<_TimerKey, TrackingCellStats> _cellStats = {};
+  final Map<_TimerKey, ValueNotifier<TrackingCellStats>> _cellNotifiers = {};
 
   /// Optional: the currently "focused" subject for quick-action hotkeys.
   String? _activeSubjectId;
@@ -30,10 +86,14 @@ class TrackingController extends ChangeNotifier {
   int _nextEventId = 1;
 
   TrackingController({TrackingSession? session})
-      : _session = session ??
+    : _session = _mutableSession(
+        session ??
             TrackingSession(
               id: DateTime.now().millisecondsSinceEpoch.toString(),
-            );
+            ),
+      ) {
+    _rebuildIndexes();
+  }
 
   // -----------------------------------------------------------------------
   // Getters
@@ -49,8 +109,10 @@ class TrackingController extends ChangeNotifier {
 
   /// Whether a timer is currently running for [subjectId] + [trackerId].
   bool isTimerRunning(String subjectId, String trackerId) {
-    return _activeTimers
-        .containsKey((subjectId: subjectId, trackerId: trackerId));
+    return _activeTimers.containsKey((
+      subjectId: subjectId,
+      trackerId: trackerId,
+    ));
   }
 
   /// All currently active timer keys, useful for UI indicators.
@@ -61,6 +123,23 @@ class TrackingController extends ChangeNotifier {
   Duration? timerStartTimestamp(String subjectId, String trackerId) {
     final key = (subjectId: subjectId, trackerId: trackerId);
     return _activeTimers[key]?.startTimestamp;
+  }
+
+  TrackingCellStats getCellStats(String subjectId, String trackerId) =>
+      _cellStats[(subjectId: subjectId, trackerId: trackerId)] ??
+      const TrackingCellStats();
+
+  ValueListenable<TrackingCellStats> cellStatsListenable(
+    String subjectId,
+    String trackerId,
+  ) {
+    final key = (subjectId: subjectId, trackerId: trackerId);
+    return _cellNotifiers.putIfAbsent(
+      key,
+      () => ValueNotifier<TrackingCellStats>(
+        _cellStats[key] ?? const TrackingCellStats(),
+      ),
+    );
   }
 
   /// Last action feedback — set briefly after a hotkey/button action so the UI
@@ -78,10 +157,10 @@ class TrackingController extends ChangeNotifier {
   // -----------------------------------------------------------------------
 
   void loadSession(TrackingSession session) {
-    _session = session;
+    _session = _mutableSession(session);
     _activeTimers.clear();
     _activeSubjectId = null;
-    _nextEventId = session.events.length + 1;
+    _rebuildIndexes();
     notifyListeners();
   }
 
@@ -92,6 +171,8 @@ class TrackingController extends ChangeNotifier {
     _activeTimers.clear();
     _activeSubjectId = null;
     _nextEventId = 1;
+    _cellStats.clear();
+    _syncAllCellNotifiers();
     notifyListeners();
   }
 
@@ -108,6 +189,7 @@ class TrackingController extends ChangeNotifier {
     _session.subjects.removeWhere((s) => s.id == subjectId);
     // Cancel any running timers for this subject
     _activeTimers.removeWhere((key, _) => key.subjectId == subjectId);
+    _removeCellsWhere((key) => key.subjectId == subjectId);
     if (_activeSubjectId == subjectId) {
       _activeSubjectId = null;
     }
@@ -140,6 +222,7 @@ class TrackingController extends ChangeNotifier {
     _session.trackers.removeWhere((t) => t.id == trackerId);
     // Cancel any running timers using this tracker
     _activeTimers.removeWhere((key, _) => key.trackerId == trackerId);
+    _removeCellsWhere((key) => key.trackerId == trackerId);
     notifyListeners();
   }
 
@@ -171,6 +254,7 @@ class TrackingController extends ChangeNotifier {
       delta: delta,
     );
     _session.events.add(event);
+    _updateCounter(subjectId, trackerId, delta);
     notifyListeners();
     return event;
   }
@@ -190,6 +274,7 @@ class TrackingController extends ChangeNotifier {
       delta: delta,
     );
     _session.events.add(event);
+    _updateCounter(subjectId, trackerId, -delta);
     notifyListeners();
     return event;
   }
@@ -217,6 +302,13 @@ class TrackingController extends ChangeNotifier {
       action: TrackingAction.timerStart,
     );
     _session.events.add(event);
+    _setCellStats(
+      key,
+      getCellStats(
+        subjectId,
+        trackerId,
+      ).copyWith(timerRunning: true, timerStartedAt: timestamp),
+    );
     notifyListeners();
     return event;
   }
@@ -231,7 +323,7 @@ class TrackingController extends ChangeNotifier {
     final key = (subjectId: subjectId, trackerId: trackerId);
     if (!_activeTimers.containsKey(key)) return null; // not running
 
-    _activeTimers.remove(key);
+    final active = _activeTimers.remove(key)!;
 
     final event = _createEvent(
       subjectId: subjectId,
@@ -240,6 +332,18 @@ class TrackingController extends ChangeNotifier {
       action: TrackingAction.timerStop,
     );
     _session.events.add(event);
+    final previous = getCellStats(subjectId, trackerId);
+    final elapsed = timestamp >= active.startTimestamp
+        ? timestamp - active.startTimestamp
+        : Duration.zero;
+    _setCellStats(
+      key,
+      previous.copyWith(
+        timerDuration: previous.timerDuration + elapsed,
+        timerRunning: false,
+        clearTimerStart: true,
+      ),
+    );
     notifyListeners();
     return event;
   }
@@ -253,10 +357,16 @@ class TrackingController extends ChangeNotifier {
     final key = (subjectId: subjectId, trackerId: trackerId);
     if (_activeTimers.containsKey(key)) {
       return stopTimer(
-          subjectId: subjectId, trackerId: trackerId, timestamp: timestamp);
+        subjectId: subjectId,
+        trackerId: trackerId,
+        timestamp: timestamp,
+      );
     } else {
       return startTimer(
-          subjectId: subjectId, trackerId: trackerId, timestamp: timestamp);
+        subjectId: subjectId,
+        trackerId: trackerId,
+        timestamp: timestamp,
+      );
     }
   }
 
@@ -279,6 +389,13 @@ class TrackingController extends ChangeNotifier {
       action: TrackingAction.timerCancel,
     );
     _session.events.add(event);
+    _setCellStats(
+      key,
+      getCellStats(
+        subjectId,
+        trackerId,
+      ).copyWith(timerRunning: false, clearTimerStart: true),
+    );
     notifyListeners();
     return event;
   }
@@ -301,53 +418,20 @@ class TrackingController extends ChangeNotifier {
 
   /// Sum of counter increments minus decrements for a given subject+tracker.
   int getCounterValue(String subjectId, String trackerId) {
-    int value = 0;
-    for (final event in _session.events) {
-      if (event.subjectId != subjectId || event.trackerId != trackerId) {
-        continue;
-      }
-      if (event.action == TrackingAction.increment) {
-        value += event.delta;
-      } else if (event.action == TrackingAction.decrement) {
-        value -= event.delta;
-      }
-    }
-    return value;
+    return getCellStats(subjectId, trackerId).counterValue;
   }
 
   /// Total accumulated timer duration for a given subject+tracker,
   /// computed from start/stop event pairs.
   Duration getTimerDuration(String subjectId, String trackerId) {
-    Duration total = Duration.zero;
-    Duration? lastStart;
-
-    for (final event in _session.events) {
-      if (event.subjectId != subjectId || event.trackerId != trackerId) {
-        continue;
-      }
-      switch (event.action) {
-        case TrackingAction.timerStart:
-          lastStart = event.timestamp;
-          break;
-        case TrackingAction.timerStop:
-          if (lastStart != null) {
-            total += event.timestamp - lastStart;
-            lastStart = null;
-          }
-          break;
-        case TrackingAction.timerCancel:
-          lastStart = null;
-          break;
-        default:
-          break;
-      }
-    }
-    return total;
+    return getCellStats(subjectId, trackerId).timerDuration;
   }
 
   /// Returns individual timer intervals as a list of (start, stop) pairs.
   List<({Duration start, Duration stop})> getTimerIntervals(
-      String subjectId, String trackerId) {
+    String subjectId,
+    String trackerId,
+  ) {
     final intervals = <({Duration start, Duration stop})>[];
     Duration? lastStart;
 
@@ -396,8 +480,7 @@ class TrackingController extends ChangeNotifier {
 
     // If it was a timer start, also remove the active timer state
     if (removed.action == TrackingAction.timerStart) {
-      final key =
-          (subjectId: removed.subjectId, trackerId: removed.trackerId);
+      final key = (subjectId: removed.subjectId, trackerId: removed.trackerId);
       _activeTimers.remove(key);
     }
     // If it was a timer stop, re-open the timer from the matching start
@@ -408,21 +491,27 @@ class TrackingController extends ChangeNotifier {
         if (e.subjectId == removed.subjectId &&
             e.trackerId == removed.trackerId &&
             e.action == TrackingAction.timerStart) {
-          final key =
-              (subjectId: removed.subjectId, trackerId: removed.trackerId);
+          final key = (
+            subjectId: removed.subjectId,
+            trackerId: removed.trackerId,
+          );
           _activeTimers[key] = _ActiveTimer(startTimestamp: e.timestamp);
           break;
         }
       }
     }
 
+    _rebuildIndexes(preserveActiveTimers: true);
     notifyListeners();
     return removed;
   }
 
   /// Delete a specific event by id.
   void deleteEvent(String eventId) {
+    final before = _session.events.length;
     _session.events.removeWhere((e) => e.id == eventId);
+    if (_session.events.length == before) return;
+    _rebuildIndexes(preserveActiveTimers: true);
     notifyListeners();
   }
 
@@ -529,7 +618,9 @@ class TrackingController extends ChangeNotifier {
   /// Add a new subject and automatically assign the same trackers that
   /// [templateSubjectId] has (copies tracker list, not events).
   void addSubjectWithSameTrackers(
-      TrackingSubject subject, String? templateSubjectId) {
+    TrackingSubject subject,
+    String? templateSubjectId,
+  ) {
     _session.subjects.add(subject);
     // Trackers are shared across all subjects (session-level), so nothing
     // extra to copy. The UI shows all session trackers for each subject.
@@ -555,5 +646,98 @@ class TrackingController extends ChangeNotifier {
       action: action,
       delta: delta,
     );
+  }
+
+  void _updateCounter(String subjectId, String trackerId, int change) {
+    final key = (subjectId: subjectId, trackerId: trackerId);
+    final previous = _cellStats[key] ?? const TrackingCellStats();
+    _setCellStats(
+      key,
+      previous.copyWith(counterValue: previous.counterValue + change),
+    );
+  }
+
+  void _setCellStats(_TimerKey key, TrackingCellStats value) {
+    _cellStats[key] = value;
+    final notifier = _cellNotifiers[key];
+    if (notifier != null && notifier.value != value) notifier.value = value;
+  }
+
+  void _rebuildIndexes({bool preserveActiveTimers = false}) {
+    final preserved = preserveActiveTimers
+        ? Map<_TimerKey, _ActiveTimer>.from(_activeTimers)
+        : <_TimerKey, _ActiveTimer>{};
+    _cellStats.clear();
+    final unmatchedStarts = <_TimerKey, Duration>{};
+    var highestSuffix = 0;
+    for (final event in _session.events) {
+      final suffix = RegExp(r'^(?:te_)?(\d+)$').firstMatch(event.id);
+      if (suffix != null) {
+        final parsed = int.parse(suffix.group(1)!);
+        if (parsed > highestSuffix) highestSuffix = parsed;
+      }
+      final key = (subjectId: event.subjectId, trackerId: event.trackerId);
+      final previous = _cellStats[key] ?? const TrackingCellStats();
+      switch (event.action) {
+        case TrackingAction.increment:
+          _cellStats[key] = previous.copyWith(
+            counterValue: previous.counterValue + event.delta,
+          );
+          break;
+        case TrackingAction.decrement:
+          _cellStats[key] = previous.copyWith(
+            counterValue: previous.counterValue - event.delta,
+          );
+          break;
+        case TrackingAction.timerStart:
+          unmatchedStarts[key] = event.timestamp;
+          break;
+        case TrackingAction.timerStop:
+          final start = unmatchedStarts.remove(key);
+          if (start != null && event.timestamp >= start) {
+            _cellStats[key] = previous.copyWith(
+              timerDuration: previous.timerDuration + (event.timestamp - start),
+            );
+          }
+          break;
+        case TrackingAction.timerCancel:
+          unmatchedStarts.remove(key);
+          break;
+      }
+    }
+    _nextEventId = highestSuffix + 1;
+    if (!preserveActiveTimers) _activeTimers.clear();
+    _activeTimers.addAll(preserved);
+    for (final entry in _activeTimers.entries) {
+      final previous = _cellStats[entry.key] ?? const TrackingCellStats();
+      _cellStats[entry.key] = previous.copyWith(
+        timerRunning: true,
+        timerStartedAt: entry.value.startTimestamp,
+      );
+    }
+    _syncAllCellNotifiers();
+  }
+
+  void _syncAllCellNotifiers() {
+    for (final entry in _cellNotifiers.entries) {
+      entry.value.value = _cellStats[entry.key] ?? const TrackingCellStats();
+    }
+  }
+
+  void _removeCellsWhere(bool Function(_TimerKey key) predicate) {
+    _cellStats.removeWhere((key, _) => predicate(key));
+    final keys = _cellNotifiers.keys.where(predicate).toList();
+    for (final key in keys) {
+      _cellNotifiers.remove(key)?.dispose();
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final notifier in _cellNotifiers.values) {
+      notifier.dispose();
+    }
+    _cellNotifiers.clear();
+    super.dispose();
   }
 }

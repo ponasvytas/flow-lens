@@ -65,8 +65,10 @@ class _DockedEventsPanelState extends State<DockedEventsPanel> {
     if (targetOffset < currentOffset ||
         targetOffset > currentOffset + viewportHeight - itemHeight) {
       _scrollController.animateTo(
-        (targetOffset - viewportHeight / 2 + itemHeight / 2)
-            .clamp(0.0, _scrollController.position.maxScrollExtent),
+        (targetOffset - viewportHeight / 2 + itemHeight / 2).clamp(
+          0.0,
+          _scrollController.position.maxScrollExtent,
+        ),
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
       );
@@ -106,8 +108,7 @@ class _DockedEventsPanelState extends State<DockedEventsPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final events = List<GameEvent>.from(widget.controller.filteredEvents)
-      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    final events = widget.controller.chronologicalFilteredEvents;
     final activeId = widget.controller.activeEvent?.id;
 
     return Container(
@@ -116,7 +117,7 @@ class _DockedEventsPanelState extends State<DockedEventsPanel> {
         color: const Color(0xFF1E1E1E),
         border: Border(
           left: BorderSide(
-            color: Colors.white.withOpacity(0.1),
+            color: Colors.white.withValues(alpha: 0.1),
             width: 1,
           ),
         ),
@@ -130,7 +131,7 @@ class _DockedEventsPanelState extends State<DockedEventsPanel> {
               color: const Color(0xFF753b8f),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
+                  color: Colors.black.withValues(alpha: 0.3),
                   blurRadius: 4,
                   offset: const Offset(0, 2),
                 ),
@@ -152,7 +153,7 @@ class _DockedEventsPanelState extends State<DockedEventsPanel> {
                 Text(
                   '${events.length}',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.6),
+                    color: Colors.white.withValues(alpha: 0.6),
                     fontSize: 12,
                   ),
                 ),
@@ -162,11 +163,7 @@ class _DockedEventsPanelState extends State<DockedEventsPanel> {
                   borderRadius: BorderRadius.circular(12),
                   child: const Padding(
                     padding: EdgeInsets.all(4),
-                    child: Icon(
-                      Icons.close,
-                      color: Colors.white70,
-                      size: 16,
-                    ),
+                    child: Icon(Icons.close, color: Colors.white70, size: 16),
                   ),
                 ),
               ],
@@ -182,7 +179,7 @@ class _DockedEventsPanelState extends State<DockedEventsPanel> {
                           ? 'No matches'
                           : 'No events',
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.4),
+                        color: Colors.white.withValues(alpha: 0.4),
                         fontSize: 13,
                       ),
                     ),
@@ -194,8 +191,7 @@ class _DockedEventsPanelState extends State<DockedEventsPanel> {
                     itemBuilder: (context, index) {
                       final event = events[index];
                       final isActive = event.id == activeId;
-                      final isPast =
-                          event.timestamp <= widget.currentPosition;
+                      final isPast = event.timestamp <= widget.currentPosition;
 
                       return _CompactEventRow(
                         timestamp: _formatDuration(event.timestamp),
@@ -245,7 +241,7 @@ class _CompactEventRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
           color: isActive
-              ? const Color(0xFF753b8f).withOpacity(0.35)
+              ? const Color(0xFF753b8f).withValues(alpha: 0.35)
               : Colors.transparent,
           border: Border(
             left: BorderSide(
@@ -253,7 +249,7 @@ class _CompactEventRow extends StatelessWidget {
               width: 3,
             ),
             bottom: BorderSide(
-              color: Colors.white.withOpacity(0.04),
+              color: Colors.white.withValues(alpha: 0.04),
               width: 1,
             ),
           ),
@@ -278,8 +274,8 @@ class _CompactEventRow extends StatelessWidget {
                 timestamp,
                 style: TextStyle(
                   color: isPast
-                      ? Colors.white.withOpacity(0.5)
-                      : Colors.white.withOpacity(0.9),
+                      ? Colors.white.withValues(alpha: 0.5)
+                      : Colors.white.withValues(alpha: 0.9),
                   fontSize: 12,
                   fontFamily: 'monospace',
                   fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
@@ -295,8 +291,8 @@ class _CompactEventRow extends StatelessWidget {
                 category,
                 style: TextStyle(
                   color: isPast
-                      ? Colors.white.withOpacity(0.4)
-                      : Colors.white.withOpacity(0.7),
+                      ? Colors.white.withValues(alpha: 0.4)
+                      : Colors.white.withValues(alpha: 0.7),
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
                 ),
@@ -311,8 +307,8 @@ class _CompactEventRow extends StatelessWidget {
                 eventType,
                 style: TextStyle(
                   color: isPast
-                      ? Colors.white.withOpacity(0.35)
-                      : Colors.white.withOpacity(0.6),
+                      ? Colors.white.withValues(alpha: 0.35)
+                      : Colors.white.withValues(alpha: 0.6),
                   fontSize: 11,
                 ),
                 overflow: TextOverflow.ellipsis,
@@ -326,7 +322,7 @@ class _CompactEventRow extends StatelessWidget {
                 child: Icon(
                   Icons.zoom_in,
                   size: 12,
-                  color: Colors.white.withOpacity(0.3),
+                  color: Colors.white.withValues(alpha: 0.3),
                 ),
               ),
           ],

@@ -40,26 +40,44 @@ void main() {
   }
 
   const edgeDrags = {
-    'left': Offset(-80, 0),
-    'right': Offset(470, 0),
-    'top': Offset(0, -20),
-    'bottom': Offset(0, 380),
+    PanelDockEdge.left: Offset(-80, 0),
+    PanelDockEdge.right: Offset(470, 0),
+    PanelDockEdge.top: Offset(0, -20),
+    PanelDockEdge.bottom: Offset(0, 350),
   };
 
   for (final MapEntry(key: edge, value: dragOffset) in edgeDrags.entries) {
-    testWidgets(
-      'dragging near the $edge edge keeps a panel floating',
-      (tester) async {
-        final controller = UIController();
-        await tester.pumpWidget(buildLayout(controller));
+    testWidgets('dragging near the ${edge.name} edge snaps the panel', (
+      tester,
+    ) async {
+      final controller = UIController();
+      await tester.pumpWidget(buildLayout(controller));
 
-        await tester.drag(find.text('Test Panel'), dragOffset);
-        await tester.pump();
+      await tester.drag(find.text('Test Panel'), dragOffset);
+      await tester.pump();
 
-        expect(controller.dockEdge(panelId), PanelDockEdge.floating);
-      },
-    );
+      expect(controller.dockEdge(panelId), edge);
+    });
   }
+
+  test('nearest edge wins at a corner', () {
+    expect(
+      nearestDockEdge(
+        const Offset(10, kAppTitleBarHeight + 20),
+        const Size(100, 50),
+        const Size(800, 600),
+      ),
+      PanelDockEdge.left,
+    );
+    expect(
+      nearestDockEdge(
+        const Offset(20, kAppTitleBarHeight + 5),
+        const Size(100, 50),
+        const Size(800, 600),
+      ),
+      PanelDockEdge.top,
+    );
+  });
 
   testWidgets('dock menu still docks a floating panel', (tester) async {
     final controller = UIController();

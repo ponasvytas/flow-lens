@@ -33,13 +33,9 @@ class EventNavigationPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final filtered = controller.filteredEvents;
-    final total = filtered.length;
+    final sorted = controller.chronologicalFilteredEvents;
+    final total = sorted.length;
     final hasEvents = total > 0;
-
-    // Sort by timestamp (should already be, but be safe)
-    final sorted = List<GameEvent>.from(filtered)
-      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
     // Use effective position that accounts for lead-in: if the seekbar is
     // up to proximityThreshold *before* an event, we consider ourselves
@@ -47,13 +43,7 @@ class EventNavigationPanel extends StatelessWidget {
     final effectivePosition = currentPosition + proximityThreshold;
 
     // Find the "current" event index: the last event at or before effectivePosition
-    int currentIndex = -1;
-    for (int i = sorted.length - 1; i >= 0; i--) {
-      if (sorted[i].timestamp <= effectivePosition) {
-        currentIndex = i;
-        break;
-      }
-    }
+    final currentIndex = eventIndexAtOrBefore(sorted, effectivePosition);
 
     // Determine previous target
     GameEvent? prevTarget;
@@ -132,6 +122,22 @@ class EventNavigationPanel extends StatelessWidget {
   }
 }
 
+/// Returns the last event at or before [position], or -1 when all are later.
+/// [events] must be ordered by timestamp.
+int eventIndexAtOrBefore(List<GameEvent> events, Duration position) {
+  var low = 0;
+  var high = events.length;
+  while (low < high) {
+    final middle = low + ((high - low) >> 1);
+    if (events[middle].timestamp <= position) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+  return low - 1;
+}
+
 class _NavButton extends StatelessWidget {
   final IconData icon;
   final String tooltip;
@@ -173,18 +179,20 @@ class _FilterSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = filter.isActive ? 'Filtered · $total events' : 'All events · $total';
+    final label = filter.isActive
+        ? 'Filtered · $total events'
+        : 'All events · $total';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: filter.isActive
-            ? const Color(0xFF753b8f).withOpacity(0.6)
-            : Colors.white.withOpacity(0.08),
+            ? const Color(0xFF753b8f).withValues(alpha: 0.6)
+            : Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: filter.isActive
-              ? const Color(0xFF9b5fb8).withOpacity(0.7)
+              ? const Color(0xFF9b5fb8).withValues(alpha: 0.7)
               : Colors.white24,
           width: 1,
         ),

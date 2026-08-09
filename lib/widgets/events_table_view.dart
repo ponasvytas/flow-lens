@@ -34,9 +34,12 @@ class _EventsTableViewState extends State<EventsTableView> {
   Set<String> get _selectedEventIds => widget.controller.selectedEventIds;
   _SortColumn _sortColumn = _SortColumn.time;
   bool _sortAscending = true;
+  List<GameEvent>? _sortedEventsCache;
+  int _sortedDataRevision = -1;
 
   void _setSort(_SortColumn column) {
     setState(() {
+      _sortedEventsCache = null;
       if (_sortColumn == column) {
         _sortAscending = !_sortAscending;
       } else {
@@ -47,37 +50,45 @@ class _EventsTableViewState extends State<EventsTableView> {
   }
 
   List<GameEvent> _sortEvents(List<GameEvent> source) {
+    final revision = widget.controller.dataRevision.value;
+    if (_sortedEventsCache != null && _sortedDataRevision == revision) {
+      return _sortedEventsCache!;
+    }
     final list = List<GameEvent>.from(source);
     int impactRank(EventGrade? g) => switch (g) {
-          EventGrade.negative => 0,
-          EventGrade.neutral => 1,
-          null => 1,
-          EventGrade.positive => 2,
-        };
+      EventGrade.negative => 0,
+      EventGrade.neutral => 1,
+      null => 1,
+      EventGrade.positive => 2,
+    };
     int cmp(GameEvent a, GameEvent b) {
       switch (_sortColumn) {
         case _SortColumn.time:
           return a.timestamp.compareTo(b.timestamp);
         case _SortColumn.category:
-          final r = _getCategoryName(a.categoryId)
-              .toLowerCase()
-              .compareTo(_getCategoryName(b.categoryId).toLowerCase());
+          final r = _getCategoryName(a.categoryId).toLowerCase().compareTo(
+            _getCategoryName(b.categoryId).toLowerCase(),
+          );
           return r != 0 ? r : a.timestamp.compareTo(b.timestamp);
         case _SortColumn.event:
-          final r = _getEventTypeName(a)
-              .toLowerCase()
-              .compareTo(_getEventTypeName(b).toLowerCase());
+          final r = _getEventTypeName(
+            a,
+          ).toLowerCase().compareTo(_getEventTypeName(b).toLowerCase());
           return r != 0 ? r : a.timestamp.compareTo(b.timestamp);
         case _SortColumn.impact:
           final r = impactRank(a.grade).compareTo(impactRank(b.grade));
           return r != 0 ? r : a.timestamp.compareTo(b.timestamp);
       }
     }
+
     list.sort(cmp);
     if (!_sortAscending) {
-      return list.reversed.toList();
+      _sortedEventsCache = list.reversed.toList();
+    } else {
+      _sortedEventsCache = list;
     }
-    return list;
+    _sortedDataRevision = revision;
+    return _sortedEventsCache!;
   }
 
   @override
@@ -108,8 +119,9 @@ class _EventsTableViewState extends State<EventsTableView> {
     if (_isAllSelected) {
       widget.controller.clearSelection();
     } else {
-      widget.controller
-          .setSelection(widget.controller.filteredEvents.map((e) => e.id));
+      widget.controller.setSelection(
+        widget.controller.filteredEvents.map((e) => e.id),
+      );
     }
   }
 
@@ -122,7 +134,7 @@ class _EventsTableViewState extends State<EventsTableView> {
     final hours = duration.inHours;
     final minutes = twoDigits(duration.inMinutes.remainder(60));
     final seconds = twoDigits(duration.inSeconds.remainder(60));
-    
+
     if (hours > 0) {
       return '$hours:$minutes:$seconds';
     }
@@ -168,7 +180,7 @@ class _EventsTableViewState extends State<EventsTableView> {
     final usedCategoryIds = widget.controller.allEvents
         .map((e) => e.categoryId)
         .toSet();
-    
+
     // Build list of categories that are actually used
     final availableCategories = <MapEntry<String, String>>[];
     for (final categoryId in usedCategoryIds) {
@@ -177,7 +189,7 @@ class _EventsTableViewState extends State<EventsTableView> {
         availableCategories.add(MapEntry(category.categoryId, category.name));
       }
     }
-    
+
     // Sort by name for better UX
     availableCategories.sort((a, b) => a.value.compareTo(b.value));
 
@@ -198,11 +210,11 @@ class _EventsTableViewState extends State<EventsTableView> {
     // Get unique event identifiers from actual events
     final availableEventTypes = <MapEntry<String, String>>[];
     final seenKeys = <String>{};
-    
+
     for (final event in widget.controller.allEvents) {
       String key;
       String displayName;
-      
+
       if (event.eventTypeId != null) {
         // Use taxonomy-based event type
         key = event.eventTypeId!;
@@ -213,13 +225,13 @@ class _EventsTableViewState extends State<EventsTableView> {
         key = event.detail ?? event.label;
         displayName = key;
       }
-      
+
       if (!seenKeys.contains(key)) {
         seenKeys.add(key);
         availableEventTypes.add(MapEntry(key, displayName));
       }
     }
-    
+
     // Sort by name for better UX
     availableEventTypes.sort((a, b) => a.value.compareTo(b.value));
 
@@ -242,7 +254,7 @@ class _EventsTableViewState extends State<EventsTableView> {
         .where((e) => e.grade != null)
         .map((e) => e.grade!)
         .toSet();
-    
+
     // Build list of impacts that are actually used
     final availableImpacts = <MapEntry<String, String>>[];
     for (final grade in usedGrades) {
@@ -253,23 +265,26 @@ class _EventsTableViewState extends State<EventsTableView> {
       };
       availableImpacts.add(MapEntry(grade.name, name));
     }
-    
+
     // Sort by name for better UX
     availableImpacts.sort((a, b) => a.value.compareTo(b.value));
 
     _showColumnFilter(
       title: 'Filter by Impact',
       availableValues: availableImpacts,
-      currentSelection: widget.controller.filter.impacts?.map((g) => g.name).toSet(),
+      currentSelection: widget.controller.filter.impacts
+          ?.map((g) => g.name)
+          .toSet(),
       onApply: (selected) {
         final grades = selected.isEmpty
             ? null
             : selected
-                .map((name) => EventGrade.values.firstWhere((g) => g.name == name))
-                .toSet();
-        final newFilter = widget.controller.filter.copyWith(
-          impacts: grades,
-        );
+                  .map(
+                    (name) =>
+                        EventGrade.values.firstWhere((g) => g.name == name),
+                  )
+                  .toSet();
+        final newFilter = widget.controller.filter.copyWith(impacts: grades);
         widget.controller.setFilter(newFilter);
       },
     );
@@ -377,11 +392,9 @@ class _EventsTableViewState extends State<EventsTableView> {
           ),
           ElevatedButton(
             onPressed: () {
-              // Delete all selected events
-              for (final event in selectedEvents) {
-                widget.controller.deleteEvent(event);
-              }
-              widget.controller.clearSelection();
+              widget.controller.deleteEventsById(
+                selectedEvents.map((event) => event.id),
+              );
               Navigator.of(context).pop();
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -415,7 +428,7 @@ class _EventsTableViewState extends State<EventsTableView> {
             color: const Color(0xFF753b8f),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.2),
+                color: Colors.black.withValues(alpha: 0.2),
                 blurRadius: 4,
                 offset: const Offset(0, 2),
               ),
@@ -432,27 +445,38 @@ class _EventsTableViewState extends State<EventsTableView> {
                 ),
               ),
               const Spacer(),
-              if (_selectedEventIds.isNotEmpty) ...[              TextButton.icon(
+              if (_selectedEventIds.isNotEmpty) ...[
+                TextButton.icon(
                   onPressed: _exportSelected,
-                  icon: const Icon(Icons.movie_creation, color: Colors.white70, size: 18),
+                  icon: const Icon(
+                    Icons.movie_creation,
+                    color: Colors.white70,
+                    size: 18,
+                  ),
                   label: Text(
                     'Export Selected (${_selectedEventIds.length})',
                     style: const TextStyle(color: Colors.white70),
                   ),
                   style: TextButton.styleFrom(
-                    backgroundColor: const Color(0xFF753b8f).withOpacity(0.3),
+                    backgroundColor: const Color(
+                      0xFF753b8f,
+                    ).withValues(alpha: 0.3),
                   ),
                 ),
                 const SizedBox(width: 8),
                 TextButton.icon(
                   onPressed: _confirmBulkDelete,
-                  icon: const Icon(Icons.delete, color: Colors.white70, size: 18),
+                  icon: const Icon(
+                    Icons.delete,
+                    color: Colors.white70,
+                    size: 18,
+                  ),
                   label: Text(
                     'Delete Selected (${_selectedEventIds.length})',
                     style: const TextStyle(color: Colors.white70),
                   ),
                   style: TextButton.styleFrom(
-                    backgroundColor: Colors.red.withOpacity(0.2),
+                    backgroundColor: Colors.red.withValues(alpha: 0.2),
                   ),
                 ),
               ],
@@ -465,7 +489,11 @@ class _EventsTableViewState extends State<EventsTableView> {
               if (widget.controller.filter.isActive)
                 TextButton.icon(
                   onPressed: () => widget.controller.clearFilter(),
-                  icon: const Icon(Icons.clear, color: Colors.white70, size: 18),
+                  icon: const Icon(
+                    Icons.clear,
+                    color: Colors.white70,
+                    size: 18,
+                  ),
                   label: const Text(
                     'Clear Filters',
                     style: TextStyle(color: Colors.white70),
@@ -497,11 +525,7 @@ class _EventsTableViewState extends State<EventsTableView> {
                   onChanged: (_) => _toggleSelectAll(),
                 ),
               ),
-              _buildHeaderCell(
-                'Time',
-                flex: 2,
-                sortColumn: _SortColumn.time,
-              ),
+              _buildHeaderCell('Time', flex: 2, sortColumn: _SortColumn.time),
               _buildHeaderCell(
                 'Category',
                 flex: 3,
@@ -544,10 +568,8 @@ class _EventsTableViewState extends State<EventsTableView> {
                 )
               : ListView.separated(
                   itemCount: events.length,
-                  separatorBuilder: (context, index) => Divider(
-                    height: 1,
-                    color: Colors.grey[300],
-                  ),
+                  separatorBuilder: (context, index) =>
+                      Divider(height: 1, color: Colors.grey[300]),
                   itemBuilder: (context, index) {
                     final event = events[index];
                     return InkWell(
@@ -564,7 +586,8 @@ class _EventsTableViewState extends State<EventsTableView> {
                               width: 48,
                               child: Checkbox(
                                 value: _selectedEventIds.contains(event.id),
-                                onChanged: (_) => _toggleEventSelection(event.id),
+                                onChanged: (_) =>
+                                    _toggleEventSelection(event.id),
                               ),
                             ),
                             _buildDataCell(
@@ -575,10 +598,7 @@ class _EventsTableViewState extends State<EventsTableView> {
                               _getCategoryName(event.categoryId),
                               flex: 3,
                             ),
-                            _buildDataCell(
-                              _getEventTypeName(event),
-                              flex: 3,
-                            ),
+                            _buildDataCell(_getEventTypeName(event), flex: 3),
                             _buildDataCell(
                               _getImpactName(event.grade),
                               flex: 2,
@@ -589,7 +609,10 @@ class _EventsTableViewState extends State<EventsTableView> {
                               flex: 1,
                               child: Center(
                                 child: IconButton(
-                                  icon: const Icon(Icons.delete_outline, size: 20),
+                                  icon: const Icon(
+                                    Icons.delete_outline,
+                                    size: 20,
+                                  ),
                                   color: Colors.red[400],
                                   tooltip: 'Delete event',
                                   onPressed: () => _confirmDelete(event),
@@ -607,17 +630,9 @@ class _EventsTableViewState extends State<EventsTableView> {
     );
 
     if (isDesktop) {
-      return Dialog(
-        child: SizedBox(
-          width: 800,
-          height: 600,
-          child: content,
-        ),
-      );
+      return Dialog(child: SizedBox(width: 800, height: 600, child: content));
     } else {
-      return Scaffold(
-        body: SafeArea(child: content),
-      );
+      return Scaffold(body: SafeArea(child: content));
     }
   }
 
@@ -663,10 +678,7 @@ class _EventsTableViewState extends State<EventsTableView> {
           children: [
             Expanded(
               child: sortColumn != null
-                  ? InkWell(
-                      onTap: () => _setSort(sortColumn),
-                      child: labelRow,
-                    )
+                  ? InkWell(onTap: () => _setSort(sortColumn), child: labelRow)
                   : labelRow,
             ),
             if (hasFilter)
@@ -675,7 +687,9 @@ class _EventsTableViewState extends State<EventsTableView> {
                 child: Icon(
                   isFiltered ? Icons.filter_alt : Icons.filter_alt_outlined,
                   size: 18,
-                  color: isFiltered ? const Color(0xFF753b8f) : Colors.grey[600],
+                  color: isFiltered
+                      ? const Color(0xFF753b8f)
+                      : Colors.grey[600],
                 ),
               ),
           ],
@@ -729,8 +743,7 @@ class _ColumnFilterDialogState extends State<_ColumnFilterDialog> {
     _selection = Set.from(widget.currentSelection);
   }
 
-  bool get _isAllSelected =>
-      _selection.length == widget.availableValues.length;
+  bool get _isAllSelected => _selection.length == widget.availableValues.length;
 
   void _toggleAll() {
     setState(() {

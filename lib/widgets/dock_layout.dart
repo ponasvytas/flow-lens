@@ -56,6 +56,15 @@ class _DockLayoutState extends State<DockLayout> {
   // Temporary drag offset used only while a floating panel is being dragged.
   // Keyed by PanelId so multiple floats don't interfere.
   final Map<PanelId, Offset> _dragOffsets = {};
+  final Map<PanelId, GlobalKey> _panelKeys = {};
+  final Map<(PanelId, PanelDockEdge), Widget> _panelChildren = {};
+
+  @override
+  void didUpdateWidget(DockLayout oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final ids = widget.panels.map((entry) => entry.id).toSet();
+    _panelChildren.removeWhere((key, child) => !ids.contains(key.$1));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -162,9 +171,7 @@ class _DockLayoutState extends State<DockLayout> {
           children: [
             for (int i = 0; i < entries.length; i++) ...[
               if (i > 0) const SizedBox(height: 8),
-              IntrinsicWidth(
-                child: _wrapPanel(entries[i], edge, screenSize),
-              ),
+              IntrinsicWidth(child: _wrapPanel(entries[i], edge, screenSize)),
             ],
           ],
         ),
@@ -177,13 +184,17 @@ class _DockLayoutState extends State<DockLayout> {
   // -------------------------------------------------------------------------
 
   Widget _buildFloatingPanel(DockPanelEntry entry, Size screenSize) {
-    final pos = _dragOffsets[entry.id] ??
+    final pos =
+        _dragOffsets[entry.id] ??
         widget.uiController.floatingPosition(
-            entry.id, entry.defaultFloatingPosition);
+          entry.id,
+          entry.defaultFloatingPosition,
+        );
     return Positioned(
       left: pos.dx,
       top: pos.dy,
       child: GestureDetector(
+        key: _panelKeys.putIfAbsent(entry.id, GlobalKey.new),
         onPanUpdate: (d) => _onFloatingDragUpdate(entry.id, d, entry),
         onPanEnd: (_) => _onFloatingDragEnd(entry.id, screenSize, entry),
         child: _wrapPanel(entry, PanelDockEdge.floating, screenSize),
@@ -196,33 +207,36 @@ class _DockLayoutState extends State<DockLayout> {
   // -------------------------------------------------------------------------
 
   void _onFloatingDragUpdate(
-      PanelId id, DragUpdateDetails details, DockPanelEntry entry) {
-    final current = _dragOffsets[id] ??
-        widget.uiController.floatingPosition(
-            id, entry.defaultFloatingPosition);
+    PanelId id,
+    DragUpdateDetails details,
+    DockPanelEntry entry,
+  ) {
+    final current =
+        _dragOffsets[id] ??
+        widget.uiController.floatingPosition(id, entry.defaultFloatingPosition);
     final newPos = Offset(
       current.dx + details.delta.dx,
       current.dy + details.delta.dy,
     );
     setState(() => _dragOffsets[id] = newPos);
-    widget.uiController.setFloatingPositionSilent(id, newPos);
   }
 
-  void _onFloatingDragEnd(
-    PanelId id,
-    Size screenSize,
-    DockPanelEntry entry,
-  ) {
-    final pos = _dragOffsets[id] ??
-        widget.uiController.floatingPosition(
-            id, entry.defaultFloatingPosition);
+  void _onFloatingDragEnd(PanelId id, Size screenSize, DockPanelEntry entry) {
+    final pos =
+        _dragOffsets[id] ??
+        widget.uiController.floatingPosition(id, entry.defaultFloatingPosition);
     double x = pos.dx;
     double y = pos.dy;
 
-    _dragOffsets.remove(id);
+    setState(() => _dragOffsets.remove(id));
+    final panelSize =
+        _panelKeys[id]?.currentContext?.size ?? const Size(220, 100);
+    final snapEdge = nearestDockEdge(pos, panelSize, screenSize);
+    if (snapEdge != PanelDockEdge.floating) {
+      widget.uiController.setDockEdge(id, snapEdge);
+      return;
+    }
 
-    // Dragging only moves a floating panel. Docking is an explicit action
-    // available from the panel's dock-position menu.
     x = x.clamp(0, screenSize.width - 60);
     y = y.clamp(kAppTitleBarHeight, screenSize.height - kProgressBarReserve);
     widget.uiController.setFloatingPosition(id, Offset(x, y));
@@ -232,8 +246,7 @@ class _DockLayoutState extends State<DockLayout> {
   // Panel visual wrapper (shared by all edge types)
   // -------------------------------------------------------------------------
 
-  Widget _wrapPanel(
-      DockPanelEntry entry, PanelDockEdge edge, Size screenSize) {
+  Widget _wrapPanel(DockPanelEntry entry, PanelDockEdge edge, Size screenSize) {
     final ui = widget.uiController;
     final isCollapsed = ui.panelCollapsed(entry.id);
     final isVertical =
@@ -252,10 +265,37 @@ class _DockLayoutState extends State<DockLayout> {
       constraints: isVertical
           ? const BoxConstraints()
           : isHorizontal
-              ? BoxConstraints(
-                  maxWidth: screenSize.width - kPanelEdgeMargin * 2)
-              : const BoxConstraints(maxWidth: kPanelFloatingMaxWidth),
-      child: entry.builder(edge),
+          ? BoxConstraints(maxWidth: screenSize.width - kPanelEdgeMargin * 2)
+          : const BoxConstraints(maxWidth: kPanelFloatingMaxWidth),
+      child: _panelChildren.putIfAbsent((
+        entry.id,
+        edge,
+      ), () => entry.builder(edge)),
     );
   }
+}
+
+/// Chooses the nearest edge within [threshold]. At corners, distance decides.
+PanelDockEdge nearestDockEdge(
+  Offset position,
+  Size panelSize,
+  Size screenSize, {
+  double threshold = kSnapThreshold,
+}) {
+  final distances = <PanelDockEdge, double>{
+    PanelDockEdge.left: position.dx.abs(),
+    PanelDockEdge.right: (screenSize.width - position.dx - panelSize.width)
+        .abs(),
+    PanelDockEdge.top: (position.dy - kAppTitleBarHeight).abs(),
+    PanelDockEdge.bottom:
+        (screenSize.height -
+                kProgressBarReserve -
+                position.dy -
+                panelSize.height)
+            .abs(),
+  };
+  final nearest = distances.entries.reduce(
+    (a, b) => a.value <= b.value ? a : b,
+  );
+  return nearest.value <= threshold ? nearest.key : PanelDockEdge.floating;
 }
