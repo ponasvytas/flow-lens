@@ -206,7 +206,10 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
   // -------------------------------------------------------------------------
 
   Widget _buildToolbar(TrackingController ctrl) {
-    return Row(
+    return Wrap(
+      spacing: 4,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         // Add player button
         _SmallIconBtn(
@@ -214,14 +217,12 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
           tooltip: 'Add player',
           onTap: () => setState(() => _showAddForm = !_showAddForm),
         ),
-        const SizedBox(width: 4),
         // Config / add trackers
         _SmallIconBtn(
           icon: Icons.tune,
           tooltip: 'Configure trackers',
           onTap: () => _showTrackerPicker(ctrl),
         ),
-        const SizedBox(width: 4),
         // Save
         _SmallIconBtn(
           icon: Icons.save_alt,
@@ -240,13 +241,11 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
           tooltip: 'Export CSV',
           onTap: ctrl.events.isNotEmpty ? widget.onExportCsv : null,
         ),
-        const Spacer(),
         // Event count
         Text(
           '${ctrl.events.length} events',
           style: const TextStyle(color: Colors.white30, fontSize: 10),
         ),
-        const SizedBox(width: 4),
         // Undo
         _SmallIconBtn(
           icon: Icons.undo,
