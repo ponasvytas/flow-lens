@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import '../models/game_event.dart';
+import '../controllers/scrub_seek_coordinator.dart';
 import '../utils/perf.dart';
 import 'event_timeline.dart';
 
@@ -9,11 +10,13 @@ class VideoProgressBar extends StatelessWidget {
   final Player player;
   final List<GameEvent> events;
   final Function(GameEvent) onEventTap;
+  final VoidCallback? onScrubStart;
 
   const VideoProgressBar({
     required this.player,
     required this.events,
     required this.onEventTap,
+    this.onScrubStart,
     super.key,
   });
 
@@ -27,7 +30,7 @@ class VideoProgressBar extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.5),
+          color: Colors.black.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Column(
@@ -54,7 +57,7 @@ class VideoProgressBar extends StatelessWidget {
               },
             ),
             // Seekbar — single StreamBuilder combining position + duration
-            _SeekBar(player: player),
+            _SeekBar(player: player, onScrubStart: onScrubStart),
           ],
         ),
       ),
@@ -69,8 +72,9 @@ class VideoProgressBar extends StatelessWidget {
 /// immediately, and only seeks on release (onChangeEnd).
 class _SeekBar extends StatefulWidget {
   final Player player;
+  final VoidCallback? onScrubStart;
 
-  const _SeekBar({required this.player});
+  const _SeekBar({required this.player, this.onScrubStart});
 
   @override
   State<_SeekBar> createState() => _SeekBarState();
@@ -79,7 +83,26 @@ class _SeekBar extends StatefulWidget {
 class _SeekBarState extends State<_SeekBar> {
   bool _isDragging = false;
   double _dragValue = 0.0;
-  bool _wasPlaying = false;
+  late ScrubSeekCoordinator _scrub;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrub = _createCoordinator();
+  }
+
+  @override
+  void didUpdateWidget(_SeekBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.player != widget.player) _scrub = _createCoordinator();
+  }
+
+  ScrubSeekCoordinator _createCoordinator() => ScrubSeekCoordinator(
+    seek: widget.player.seek,
+    pause: widget.player.pause,
+    play: widget.player.play,
+    isPlaying: () => widget.player.state.playing,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -98,8 +121,8 @@ class _SeekBarState extends State<_SeekBar> {
         final displayValue = _isDragging ? _dragValue : streamValue;
         final displayPosition = _isDragging
             ? Duration(
-                milliseconds:
-                    (_dragValue * duration.inMilliseconds).round())
+                milliseconds: (_dragValue * duration.inMilliseconds).round(),
+              )
             : position;
 
         return Row(
@@ -109,10 +132,7 @@ class _SeekBarState extends State<_SeekBar> {
               width: 45,
               child: Text(
                 _formatDuration(displayPosition),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 11),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -135,8 +155,8 @@ class _SeekBarState extends State<_SeekBar> {
                   activeColor: Colors.blue,
                   inactiveColor: Colors.grey.shade700,
                   onChangeStart: (value) {
-                    _wasPlaying = widget.player.state.playing;
-                    if (_wasPlaying) widget.player.pause();
+                    _scrub.begin();
+                    widget.onScrubStart?.call();
                     setState(() {
                       _isDragging = true;
                       _dragValue = value;
@@ -146,20 +166,14 @@ class _SeekBarState extends State<_SeekBar> {
                     setState(() {
                       _dragValue = newValue;
                     });
-                    final newPosition = Duration(
-                      milliseconds:
-                          (newValue * duration.inMilliseconds).round(),
-                    );
-                    widget.player.seek(newPosition);
                   },
-                  onChangeEnd: (newValue) {
+                  onChangeEnd: (newValue) async {
                     final newPosition = Duration(
-                      milliseconds:
-                          (newValue * duration.inMilliseconds).round(),
+                      milliseconds: (newValue * duration.inMilliseconds)
+                          .round(),
                     );
-                    widget.player.seek(newPosition).then((_) {
-                      if (_wasPlaying) widget.player.play();
-                    });
+                    final current = await _scrub.complete(newPosition);
+                    if (!mounted || !current) return;
                     setState(() {
                       _isDragging = false;
                     });
@@ -172,10 +186,7 @@ class _SeekBarState extends State<_SeekBar> {
               width: 45,
               child: Text(
                 _formatDuration(duration),
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 11,
-                ),
+                style: const TextStyle(color: Colors.white70, fontSize: 11),
                 textAlign: TextAlign.center,
               ),
             ),

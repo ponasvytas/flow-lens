@@ -1,16 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+
 import '../models/drawing_models.dart';
 import '../painters/laser_painter.dart';
 
-/// Laser pointer overlay with cursor tracking and trail drawing
-/// Manages its own cursor position state AND animations to avoid parent rebuilds
 class LaserPointerOverlay extends StatefulWidget {
   final bool isActive;
   final bool isDrawingMode;
   final List<LaserTrail> trails;
   final Color color;
   final double strokeWidth;
-  /// Source video aspect ratio (width / height), to match the video canvas.
   final double videoAspectRatio;
   final Function(List<DrawingPoint>) onCompleteDrawing;
   final Function(LaserTrail) onRemoveTrail;
@@ -33,84 +33,84 @@ class LaserPointerOverlay extends StatefulWidget {
 
 class _LaserPointerOverlayState extends State<LaserPointerOverlay>
     with TickerProviderStateMixin {
+  static const drawingThrottle = Duration(milliseconds: 16);
+  static const idleThrottle = Duration(milliseconds: 50);
+  static const trailDelay = Duration(milliseconds: 1500);
+  static const trailFade = Duration(milliseconds: 1000);
+
+  final DrawingCaptureBuffer _capture = DrawingCaptureBuffer();
+  final Map<LaserTrail, AnimationController> _controllers = {};
+  final Map<LaserTrail, Timer> _timers = {};
   Offset? _cursorPosition;
-  List<DrawingPoint> _currentStroke = [];
+  Offset? _latestDrawPosition;
+  DateTime? _lastCursorUpdate;
 
-  // Animation management - each trail gets its own controller
-  final Map<LaserTrail, AnimationController> _animationControllers = {};
-
-  static const Duration _animationDelay = Duration(milliseconds: 1000);
-  static const Duration _animationDuration = Duration(milliseconds: 400);
+  @override
+  void initState() {
+    super.initState();
+    for (final trail in widget.trails) {
+      _schedule(trail);
+    }
+  }
 
   @override
   void didUpdateWidget(LaserPointerOverlay oldWidget) {
     super.didUpdateWidget(oldWidget);
-
-    // Check for new trails that need animation
-    for (var trail in widget.trails) {
-      if (!_animationControllers.containsKey(trail) && !trail.isAnimating) {
-        _scheduleAnimation(trail);
+    for (final trail in widget.trails) {
+      if (!_controllers.containsKey(trail) && !_timers.containsKey(trail)) {
+        _schedule(trail);
       }
     }
-
-    // Clean up controllers for removed trails
-    final removedTrails = _animationControllers.keys
-        .where((trail) => !widget.trails.contains(trail))
-        .toList();
-    for (var trail in removedTrails) {
-      _animationControllers[trail]?.dispose();
-      _animationControllers.remove(trail);
+    final removed = <LaserTrail>{
+      ..._controllers.keys,
+      ..._timers.keys,
+    }.where((trail) => !widget.trails.contains(trail));
+    for (final trail in removed.toList()) {
+      _timers.remove(trail)?.cancel();
+      _controllers.remove(trail)?.dispose();
     }
   }
 
-  void _scheduleAnimation(LaserTrail trail) {
-    // Mark as animating immediately to prevent duplicate scheduling
-    trail.isAnimating = true;
-
-    // Wait 3 seconds before starting animation
-    Future.delayed(_animationDelay, () {
+  void _schedule(LaserTrail trail) {
+    _timers[trail] = Timer(trailDelay, () {
+      _timers.remove(trail);
       if (!mounted || !widget.trails.contains(trail)) return;
-
-      // Create AnimationController with vsync for smooth frame rendering
-      final controller = AnimationController(
-        vsync: this,
-        duration: _animationDuration,
-      );
-
-      _animationControllers[trail] = controller;
-
-      // Update trail progress on each animation frame
-      controller.addListener(() {
-        if (mounted) {
-          setState(() {
-            // ⭐ Only rebuilds LaserPointerOverlay, not parent!
-            trail.animationProgress = controller.value;
-          });
-        }
-      });
-
-      // Remove trail when animation completes
+      final controller = AnimationController(vsync: this, duration: trailFade);
+      _controllers[trail] = controller;
       controller.addStatusListener((status) {
-        if (status == AnimationStatus.completed) {
-          _animationControllers.remove(trail);
-          controller.dispose();
-          // Notify parent to remove trail from list
-          widget.onRemoveTrail(trail);
-        }
+        if (status != AnimationStatus.completed) return;
+        _controllers.remove(trail);
+        controller.dispose();
+        widget.onRemoveTrail(trail);
       });
-
-      // Start the animation
+      setState(() {});
       controller.forward();
     });
   }
 
+  bool _acceptCursor(Offset position, Duration interval) {
+    if (_cursorPosition != null &&
+        (position - _cursorPosition!).distance < 5.0) {
+      return false;
+    }
+    final now = DateTime.now();
+    if (_lastCursorUpdate != null &&
+        now.difference(_lastCursorUpdate!) < interval) {
+      return false;
+    }
+    _lastCursorUpdate = now;
+    return true;
+  }
+
   @override
   void dispose() {
-    // Clean up all animation controllers
-    for (var controller in _animationControllers.values) {
+    for (final timer in _timers.values) {
+      timer.cancel();
+    }
+    for (final controller in _controllers.values) {
       controller.dispose();
     }
-    _animationControllers.clear();
+    _capture.dispose();
     super.dispose();
   }
 
@@ -118,8 +118,8 @@ class _LaserPointerOverlayState extends State<LaserPointerOverlay>
   Widget build(BuildContext context) {
     return Center(
       child: SizedBox(
-        width: MediaQuery.of(context).size.width,
-        height: MediaQuery.of(context).size.width / widget.videoAspectRatio,
+        width: MediaQuery.sizeOf(context).width,
+        height: MediaQuery.sizeOf(context).width / widget.videoAspectRatio,
         child: IgnorePointer(
           ignoring: !widget.isActive || !widget.isDrawingMode,
           child: MouseRegion(
@@ -127,68 +127,70 @@ class _LaserPointerOverlayState extends State<LaserPointerOverlay>
                 ? SystemMouseCursors.none
                 : SystemMouseCursors.basic,
             onHover: (event) {
-              if (widget.isActive && widget.isDrawingMode) {
-                setState(() {
-                  _cursorPosition = event.localPosition;
-                });
+              if (widget.isActive &&
+                  widget.isDrawingMode &&
+                  _acceptCursor(event.localPosition, idleThrottle)) {
+                setState(() => _cursorPosition = event.localPosition);
               }
             },
-            onExit: (event) {
-              if (widget.isActive) {
-                setState(() {
-                  _cursorPosition = null;
-                });
-              }
+            onExit: (_) {
+              if (widget.isActive) setState(() => _cursorPosition = null);
             },
             child: GestureDetector(
               onPanStart: (details) {
-                if (widget.isActive && widget.isDrawingMode) {
-                  setState(() {
-                    _cursorPosition = details.localPosition;
-                    _currentStroke = [
-                      DrawingPoint(
-                        details.localPosition,
-                        widget.color,
-                        widget.strokeWidth,
-                      ),
-                    ];
-                  });
-                }
+                if (!widget.isActive || !widget.isDrawingMode) return;
+                _latestDrawPosition = details.localPosition;
+                _capture.start(
+                  DrawingPoint(
+                    details.localPosition,
+                    widget.color,
+                    widget.strokeWidth,
+                  ),
+                );
+                setState(() => _cursorPosition = details.localPosition);
               },
               onPanUpdate: (details) {
-                if (widget.isActive && widget.isDrawingMode) {
-                  setState(() {
-                    _cursorPosition = details.localPosition;
-                    _currentStroke.add(
-                      DrawingPoint(
-                        details.localPosition,
-                        widget.color,
-                        widget.strokeWidth,
-                      ),
-                    );
-                  });
+                if (!widget.isActive || !widget.isDrawingMode) return;
+                _latestDrawPosition = details.localPosition;
+                if (_acceptCursor(details.localPosition, drawingThrottle)) {
+                  _capture.add(
+                    DrawingPoint(
+                      details.localPosition,
+                      widget.color,
+                      widget.strokeWidth,
+                    ),
+                  );
+                  setState(() => _cursorPosition = details.localPosition);
                 }
               },
-              onPanEnd: (details) {
-                if (widget.isActive &&
-                    widget.isDrawingMode &&
-                    _currentStroke.isNotEmpty) {
-                  // Pass complete stroke to parent
-                  widget.onCompleteDrawing(List.from(_currentStroke));
-                  setState(() {
-                    _currentStroke = [];
-                  });
+              onPanEnd: (_) {
+                if (!widget.isActive ||
+                    !widget.isDrawingMode ||
+                    _capture.isEmpty) {
+                  return;
                 }
+                final points = _capture.finishPoints(
+                  _latestDrawPosition ?? _capture.lastPoint!.offset,
+                  widget.color,
+                  widget.strokeWidth,
+                );
+                _latestDrawPosition = null;
+                if (points.isNotEmpty) widget.onCompleteDrawing(points);
               },
               child: RepaintBoundary(
                 child: CustomPaint(
                   painter: LaserPainter(
                     widget.trails,
-                    _currentStroke,
+                    const <DrawingPoint>[],
                     _cursorPosition,
                     widget.color,
                     widget.strokeWidth,
                     widget.isActive && widget.isDrawingMode,
+                    activeCapture: _capture,
+                    trailAnimations: <LaserTrail, Animation<double>>{
+                      for (final entry in _controllers.entries)
+                        entry.key: entry.value,
+                    },
                   ),
                 ),
               ),

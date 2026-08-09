@@ -1,6 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:vector_math/vector_math_64.dart' show Vector3;
 import '../models/drawing_models.dart';
 import '../painters/drawing_painter.dart';
 import 'drawing_interaction_overlay.dart';
@@ -41,6 +42,7 @@ class VideoCanvas extends StatelessWidget {
   final Color drawingColor;
   final double strokeWidth;
   final int drawingRevision;
+
   /// Source video aspect ratio (width / height). Used to size the canvas so
   /// the video fills it without black letterbox bars.
   final double videoAspectRatio;
@@ -100,9 +102,9 @@ class VideoCanvas extends StatelessWidget {
       final matrix = transformationController.value.clone();
 
       // Translate to focal point, scale, then translate back
-      matrix.translate(focalPoint.dx, focalPoint.dy);
-      matrix.scale(scaleChange);
-      matrix.translate(-focalPoint.dx, -focalPoint.dy);
+      matrix.translateByVector3(Vector3(focalPoint.dx, focalPoint.dy, 0));
+      matrix.scaleByVector3(Vector3.all(scaleChange));
+      matrix.translateByVector3(Vector3(-focalPoint.dx, -focalPoint.dy, 0));
 
       transformationController.value = matrix;
     }
@@ -126,62 +128,63 @@ class VideoCanvas extends StatelessWidget {
               width: availableWidth,
               height: videoHeight,
               child: Stack(
-            children: [
-              // Video layer - no built-in controls (we have our own UI)
-              Video(
-                controller: controller,
-                controls: NoVideoControls, // Disable all built-in controls
-              ),
-
-              // Scroll intercept layer - captures scroll events for zoom
-              // and prevents them from reaching video controls (which use scroll for volume)
-              if (!isDrawingMode)
-                Positioned.fill(
-                  child: _ScrollInterceptor(
-                    onScroll: (event) => _handlePointerSignal(event, context),
+                children: [
+                  // Video layer - no built-in controls (we have our own UI)
+                  Video(
+                    controller: controller,
+                    controls: NoVideoControls, // Disable all built-in controls
                   ),
-                ),
 
-              // Drawing layer - always show existing drawings
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: RepaintBoundary(
-                    child: CustomPaint(
-                      painter: DrawingPainter(
-                        drawingStrokes,
-                        lineShapes,
-                        arrowShapes,
-                        [],
-                        null,
-                        null,
-                        drawingColor,
-                        strokeWidth,
-                        currentTool,
-                        revision: drawingRevision,
+                  // Scroll intercept layer - captures scroll events for zoom
+                  // and prevents them from reaching video controls (which use scroll for volume)
+                  if (!isDrawingMode)
+                    Positioned.fill(
+                      child: _ScrollInterceptor(
+                        onScroll: (event) =>
+                            _handlePointerSignal(event, context),
+                      ),
+                    ),
+
+                  // Drawing layer - always show existing drawings
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: RepaintBoundary(
+                        child: CustomPaint(
+                          painter: DrawingPainter(
+                            drawingStrokes,
+                            lineShapes,
+                            arrowShapes,
+                            [],
+                            null,
+                            null,
+                            drawingColor,
+                            strokeWidth,
+                            currentTool,
+                            revision: drawingRevision,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
 
-              // Interaction Layer (Active drawing)
-              if (isDrawingMode && currentTool != DrawingTool.laser)
-                Positioned.fill(
-                  child: DrawingInteractionOverlay(
-                    isDrawingMode: isDrawingMode,
-                    currentTool: currentTool,
-                    drawingColor: drawingColor,
-                    strokeWidth: strokeWidth,
-                    onStrokeCompleted: onStrokeCompleted,
-                    onLineCompleted: onLineCompleted,
-                    onArrowCompleted: onArrowCompleted,
-                    onClearDrawing: onClearDrawing,
-                  ),
-                ),
-            ],
-          ),
-        ),
-      );
+                  // Interaction Layer (Active drawing)
+                  if (isDrawingMode && currentTool != DrawingTool.laser)
+                    Positioned.fill(
+                      child: DrawingInteractionOverlay(
+                        isDrawingMode: isDrawingMode,
+                        currentTool: currentTool,
+                        drawingColor: drawingColor,
+                        strokeWidth: strokeWidth,
+                        onStrokeCompleted: onStrokeCompleted,
+                        onLineCompleted: onLineCompleted,
+                        onArrowCompleted: onArrowCompleted,
+                        onClearDrawing: onClearDrawing,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
         },
       ),
     );

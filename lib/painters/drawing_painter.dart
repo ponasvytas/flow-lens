@@ -13,6 +13,7 @@ class DrawingPainter extends CustomPainter {
   final Color drawingColor;
   final double strokeWidth;
   final DrawingTool currentTool;
+  final DrawingCaptureBuffer? activeCapture;
 
   /// Monotonically increasing counter — bump whenever content changes.
   /// Avoids unreliable list reference equality checks.
@@ -29,7 +30,8 @@ class DrawingPainter extends CustomPainter {
     this.strokeWidth,
     this.currentTool, {
     this.revision = 0,
-  });
+    this.activeCapture,
+  }) : super(repaint: activeCapture);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -44,35 +46,7 @@ class DrawingPainter extends CustomPainter {
         ..strokeJoin = StrokeJoin.round
         ..style = PaintingStyle.stroke;
 
-      final path = Path();
-      final points = _reducePoints(stroke.points.map((p) => p.offset).toList());
-
-      if (points.isEmpty) continue;
-      path.moveTo(points.first.dx, points.first.dy);
-
-      // Use quadratic curves for smooth lines
-      for (var i = 1; i < points.length; i++) {
-        final p0 = points[i - 1];
-        final p1 = points[i];
-        final controlPoint = Offset((p0.dx + p1.dx) / 2, (p0.dy + p1.dy) / 2);
-
-        if (i == 1) {
-          path.lineTo(controlPoint.dx, controlPoint.dy);
-        } else {
-          path.quadraticBezierTo(
-            p0.dx,
-            p0.dy,
-            controlPoint.dx,
-            controlPoint.dy,
-          );
-        }
-      }
-      // Draw final segment
-      if (points.length > 1) {
-        path.lineTo(points.last.dx, points.last.dy);
-      }
-
-      canvas.drawPath(path, paint);
+      canvas.drawPath(stroke.path, paint);
     }
 
     // Draw completed lines
@@ -102,49 +76,23 @@ class DrawingPainter extends CustomPainter {
     }
 
     // Draw current freehand stroke being drawn
-    if (currentStroke.isNotEmpty) {
+    final activePoints = activeCapture?.points ?? currentStroke;
+    if (activePoints.isNotEmpty) {
       final paint = Paint()
-        ..color = currentStroke.first.color
-        ..strokeWidth = currentStroke.first.strokeWidth
+        ..color = activePoints.first.color
+        ..strokeWidth = activePoints.first.strokeWidth
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round
         ..style = PaintingStyle.stroke;
 
-      final path = Path();
-      final points = _reducePoints(currentStroke.map((p) => p.offset).toList());
-
-      if (points.isEmpty) return;
-      path.moveTo(points.first.dx, points.first.dy);
-
-      // Use quadratic curves for smooth lines
-      for (var i = 1; i < points.length; i++) {
-        final p0 = points[i - 1];
-        final p1 = points[i];
-        final controlPoint = Offset((p0.dx + p1.dx) / 2, (p0.dy + p1.dy) / 2);
-
-        if (i == 1) {
-          path.lineTo(controlPoint.dx, controlPoint.dy);
-        } else {
-          path.quadraticBezierTo(
-            p0.dx,
-            p0.dy,
-            controlPoint.dx,
-            controlPoint.dy,
-          );
-        }
-      }
-      // Draw final segment
-      if (points.length > 1) {
-        path.lineTo(points.last.dx, points.last.dy);
-      }
-
+      final path = activeCapture?.path ?? buildDrawingPath(activePoints);
       canvas.drawPath(path, paint);
     }
 
     // Draw preview line/arrow while dragging
     if (lineStart != null && lineEnd != null) {
       final paint = Paint()
-        ..color = drawingColor.withOpacity(0.7)
+        ..color = drawingColor.withValues(alpha: 0.7)
         ..strokeWidth = strokeWidth
         ..strokeCap = StrokeCap.round
         ..style = PaintingStyle.stroke;
@@ -180,30 +128,6 @@ class DrawingPainter extends CustomPainter {
     // Draw arrowhead lines
     canvas.drawLine(end, arrowPoint1, paint);
     canvas.drawLine(end, arrowPoint2, paint);
-  }
-
-  // Reduce points by filtering out those too close together
-  List<Offset> _reducePoints(List<Offset> points, {double minDistance = 5.0}) {
-    if (points.length <= 2) return points;
-
-    final reduced = <Offset>[points.first];
-
-    for (var i = 1; i < points.length; i++) {
-      final lastPoint = reduced.last;
-      final currentPoint = points[i];
-      final distance = (currentPoint - lastPoint).distance;
-
-      if (distance >= minDistance) {
-        reduced.add(currentPoint);
-      }
-    }
-
-    // Always include the last point
-    if (reduced.last != points.last) {
-      reduced.add(points.last);
-    }
-
-    return reduced;
   }
 
   @override

@@ -30,62 +30,59 @@ class DrawingInteractionOverlay extends StatefulWidget {
 }
 
 class _DrawingInteractionOverlayState extends State<DrawingInteractionOverlay> {
-  List<DrawingPoint> _currentStroke = [];
+  final DrawingCaptureBuffer _currentStroke = DrawingCaptureBuffer();
   Offset? _lineStart;
   Offset? _currentDrawPosition;
+  Offset? _latestStrokePosition;
 
   void _onPanStart(DragStartDetails details) {
     if (!widget.isDrawingMode) return;
-    setState(() {
-      if (widget.currentTool == DrawingTool.freehand) {
-        _currentStroke = [
-          DrawingPoint(
-            details.localPosition,
-            widget.drawingColor,
-            widget.strokeWidth,
-          ),
-        ];
-      } else {
+    if (widget.currentTool == DrawingTool.freehand) {
+      _latestStrokePosition = details.localPosition;
+      _currentStroke.start(
+        DrawingPoint(
+          details.localPosition,
+          widget.drawingColor,
+          widget.strokeWidth,
+        ),
+      );
+    } else {
+      setState(() {
         _lineStart = details.localPosition;
         _currentDrawPosition = details.localPosition;
-      }
-    });
+      });
+    }
   }
 
   void _onPanUpdate(DragUpdateDetails details) {
     if (!widget.isDrawingMode) return;
-    setState(() {
-      if (widget.currentTool == DrawingTool.freehand) {
-        // Assign a new list so CustomPainter.shouldRepaint sees a length change
-        // (it compares against oldDelegate's list, which would be the same
-        // reference if we mutated in place).
-        _currentStroke = [
-          ..._currentStroke,
-          DrawingPoint(
-            details.localPosition,
-            widget.drawingColor,
-            widget.strokeWidth,
-          ),
-        ];
-      } else {
+    if (widget.currentTool == DrawingTool.freehand) {
+      _latestStrokePosition = details.localPosition;
+      _currentStroke.add(
+        DrawingPoint(
+          details.localPosition,
+          widget.drawingColor,
+          widget.strokeWidth,
+        ),
+      );
+    } else {
+      setState(() {
         _currentDrawPosition = details.localPosition;
-      }
-    });
+      });
+    }
   }
 
   void _onPanEnd(DragEndDetails details) {
     if (!widget.isDrawingMode) return;
 
-    if (widget.currentTool == DrawingTool.freehand &&
-        _currentStroke.isNotEmpty) {
-      widget.onStrokeCompleted(
-        DrawingStroke(
-          List.from(_currentStroke),
-          widget.drawingColor,
-          widget.strokeWidth,
-        ),
+    if (widget.currentTool == DrawingTool.freehand && !_currentStroke.isEmpty) {
+      final stroke = _currentStroke.finish(
+        _latestStrokePosition ?? _currentStroke.lastPoint!.offset,
+        widget.drawingColor,
+        widget.strokeWidth,
       );
-      setState(() => _currentStroke = []);
+      if (stroke != null) widget.onStrokeCompleted(stroke);
+      _latestStrokePosition = null;
     } else if (widget.currentTool == DrawingTool.line &&
         _lineStart != null &&
         _currentDrawPosition != null) {
@@ -120,10 +117,15 @@ class _DrawingInteractionOverlayState extends State<DrawingInteractionOverlay> {
   }
 
   @override
+  void dispose() {
+    _currentStroke.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onDoubleTap: widget.isDrawingMode ? widget.onClearDrawing : null,
       onPanStart: _onPanStart,
       onPanUpdate: _onPanUpdate,
       onPanEnd: _onPanEnd,
@@ -133,12 +135,13 @@ class _DrawingInteractionOverlayState extends State<DrawingInteractionOverlay> {
             [], // No completed strokes here
             [], // No completed lines here
             [], // No completed arrows here
-            _currentStroke,
+            const <DrawingPoint>[],
             _lineStart,
             _currentDrawPosition,
             widget.drawingColor,
             widget.strokeWidth,
             widget.currentTool,
+            activeCapture: _currentStroke,
           ),
           child: Container(), // Fill space
         ),
