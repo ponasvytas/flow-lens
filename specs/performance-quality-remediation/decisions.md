@@ -19,3 +19,9 @@ This log is append-only.
 - Reference-machine FPS and memory gates are recorded manually rather than
   enforced in CI; deterministic counts and data behavior are enforced in tests.
 
+## 2026-08-09 — Drawing clear interaction revision
+
+- Restore double-click/double-tap clearing on the active drawing surface and
+  make all clear actions immediate. Drawings are intentionally short-lived,
+  temporal coaching annotations, so fast clearing is more valuable than a
+  confirmation step. This supersedes the Phase 04 explicit-only clear decision.

@@ -126,6 +126,7 @@ class _DrawingInteractionOverlayState extends State<DrawingInteractionOverlay> {
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
+      onDoubleTap: widget.isDrawingMode ? widget.onClearDrawing : null,
       onPanStart: _onPanStart,
       onPanUpdate: _onPanUpdate,
       onPanEnd: _onPanEnd,

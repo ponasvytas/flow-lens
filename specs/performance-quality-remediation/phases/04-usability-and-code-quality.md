@@ -11,8 +11,9 @@ Phase 03 resource lifecycle.
 
 ## Implementation
 
-Document Firebase intent; remove dead APIs/widgets; require explicit drawing
-clear; provide 44-pixel hit areas; use gated logging and current platform APIs.
+Document Firebase intent; remove dead APIs/widgets; support immediate explicit
+and double-click drawing clear; provide 44-pixel hit areas; use gated logging
+and current platform APIs.
 
 ## API changes
 
@@ -24,12 +25,12 @@ Visible actions retain tooltips/semantics and nonfunctional settings are hidden.
 
 ## Tests
 
-Widget accessibility, explicit drawing clear, and analyzer/search verification.
+Widget accessibility, immediate drawing clear, and analyzer/search verification.
 
 ## Acceptance checklist
 
 - [x] `flutter analyze` reports zero findings.
-- [x] Drawing clear is explicit rather than double-tap.
+- [x] Drawing clear is immediate from explicit actions and surface double-tap.
 - [x] Firebase scaffold intent is documented.
 - [ ] Every interactive control has verified keyboard/semantics coverage.
 

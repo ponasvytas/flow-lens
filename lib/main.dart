@@ -70,12 +70,6 @@ class _DrawingState extends ChangeNotifier {
 
   /// Monotonic counter for completed-strokes content changes.
   int revision = 0;
-  bool get hasDrawings =>
-      strokes.isNotEmpty ||
-      lines.isNotEmpty ||
-      arrows.isNotEmpty ||
-      laserTrails.isNotEmpty;
-
   void toggleDrawingMode() {
     isDrawingMode = !isDrawingMode;
     notifyListeners();
@@ -668,27 +662,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     _drawing.removeTrail(trail);
   }
 
-  Future<void> _clearDrawing() async {
-    if (!_drawing.hasDrawings) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Clear drawings?'),
-        content: const Text('This removes every drawing and laser trail.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Clear'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) _drawing.clearAll();
-  }
+  void _clearDrawing() => _drawing.clearAll();
 
   void _toggleDrawingMode() {
     _drawing.toggleDrawingMode();
