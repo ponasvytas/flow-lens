@@ -4,10 +4,7 @@ import '../models/sport_profile.dart';
 class SportProfileSelector extends StatelessWidget {
   final Function(SportProfile) onProfileSelected;
 
-  const SportProfileSelector({
-    required this.onProfileSelected,
-    super.key,
-  });
+  const SportProfileSelector({required this.onProfileSelected, super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -18,26 +15,16 @@ class SportProfileSelector extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.sports,
-              size: 80,
-              color: Color(0xFF753b8f),
-            ),
+            const Icon(Icons.sports, size: 80, color: Color(0xFF753b8f)),
             const SizedBox(height: 24),
             const Text(
               'Select Sport',
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             const Text(
               'Choose which sport you want to analyze',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey,
-              ),
+              style: TextStyle(fontSize: 16, color: Colors.grey),
             ),
             const SizedBox(height: 48),
             Wrap(
@@ -56,7 +43,7 @@ class SportProfileSelector extends StatelessWidget {
 
   Widget _buildSportCard(BuildContext context, SportProfile profile) {
     final isEnabled = profile.enabled;
-    
+
     return InkWell(
       onTap: isEnabled ? () => onProfileSelected(profile) : null,
       borderRadius: BorderRadius.circular(16),
@@ -73,7 +60,7 @@ class SportProfileSelector extends StatelessWidget {
           boxShadow: isEnabled
               ? [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
+                    color: Colors.black.withValues(alpha: 0.1),
                     blurRadius: 8,
                     offset: const Offset(0, 4),
                   ),
@@ -101,7 +88,10 @@ class SportProfileSelector extends StatelessWidget {
             if (!isEnabled) ...[
               const SizedBox(height: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade300,
                   borderRadius: BorderRadius.circular(12),

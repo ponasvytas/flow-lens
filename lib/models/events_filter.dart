@@ -5,11 +5,7 @@ class EventsFilter {
   final Set<String>? eventTypeIds;
   final Set<EventGrade>? impacts;
 
-  EventsFilter({
-    this.categoryIds,
-    this.eventTypeIds,
-    this.impacts,
-  });
+  EventsFilter({this.categoryIds, this.eventTypeIds, this.impacts});
 
   bool get isActive =>
       (categoryIds != null && categoryIds!.isNotEmpty) ||
@@ -34,7 +30,7 @@ class EventsFilter {
     if (eventTypeIds != null && eventTypeIds!.isNotEmpty) {
       // Check if event matches by eventTypeId or by label/detail
       bool matchesEventType = false;
-      
+
       if (event.eventTypeId != null) {
         matchesEventType = eventTypeIds!.contains(event.eventTypeId);
       } else {
@@ -42,7 +38,7 @@ class EventsFilter {
         final eventKey = event.detail ?? event.label;
         matchesEventType = eventTypeIds!.contains(eventKey);
       }
-      
+
       if (!matchesEventType) {
         return false;
       }
@@ -67,8 +63,9 @@ class EventsFilter {
   }) {
     return EventsFilter(
       categoryIds: clearCategories ? null : (categoryIds ?? this.categoryIds),
-      eventTypeIds:
-          clearEventTypes ? null : (eventTypeIds ?? this.eventTypeIds),
+      eventTypeIds: clearEventTypes
+          ? null
+          : (eventTypeIds ?? this.eventTypeIds),
       impacts: clearImpacts ? null : (impacts ?? this.impacts),
     );
   }

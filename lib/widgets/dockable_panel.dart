@@ -115,9 +115,17 @@ class _DockPanelState extends State<DockPanel>
       ),
       items: [
         _menuItem(PanelDockEdge.left, Icons.align_horizontal_left, 'Dock Left'),
-        _menuItem(PanelDockEdge.right, Icons.align_horizontal_right, 'Dock Right'),
+        _menuItem(
+          PanelDockEdge.right,
+          Icons.align_horizontal_right,
+          'Dock Right',
+        ),
         _menuItem(PanelDockEdge.top, Icons.align_vertical_top, 'Dock Top'),
-        _menuItem(PanelDockEdge.bottom, Icons.align_vertical_bottom, 'Dock Bottom'),
+        _menuItem(
+          PanelDockEdge.bottom,
+          Icons.align_vertical_bottom,
+          'Dock Bottom',
+        ),
         _menuItem(PanelDockEdge.floating, Icons.open_with, 'Float'),
       ],
     ).then((edge) {
@@ -126,16 +134,21 @@ class _DockPanelState extends State<DockPanel>
   }
 
   PopupMenuItem<PanelDockEdge> _menuItem(
-      PanelDockEdge edge, IconData icon, String label) {
+    PanelDockEdge edge,
+    IconData icon,
+    String label,
+  ) {
     final isActive = widget.dockEdge == edge;
     return PopupMenuItem<PanelDockEdge>(
       value: edge,
       height: 36,
       child: Row(
         children: [
-          Icon(icon,
-              size: 16,
-              color: isActive ? const Color(0xFF9b5fb8) : Colors.white60),
+          Icon(
+            icon,
+            size: 16,
+            color: isActive ? const Color(0xFF9b5fb8) : Colors.white60,
+          ),
           const SizedBox(width: 10),
           Text(
             label,
@@ -167,12 +180,12 @@ class _DockPanelState extends State<DockPanel>
     Widget panel = Container(
       constraints: widget.constraints,
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.82),
+        color: Colors.black.withValues(alpha: 0.82),
         borderRadius: BorderRadius.circular(kPanelCornerRadius),
         border: Border.all(color: Colors.white24, width: 1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.4),
+            color: Colors.black.withValues(alpha: 0.4),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -208,7 +221,7 @@ class _DockPanelState extends State<DockPanel>
       height: kPanelTitleStripHeight,
       padding: const EdgeInsets.symmetric(horizontal: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
+        color: Colors.white.withValues(alpha: 0.06),
         borderRadius: BorderRadius.only(
           topLeft: const Radius.circular(kPanelCornerRadius),
           topRight: const Radius.circular(kPanelCornerRadius),
@@ -234,8 +247,7 @@ class _DockPanelState extends State<DockPanel>
             child: Tooltip(
               message: 'Dock position',
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
                 child: Icon(
                   widget.dockEdge == PanelDockEdge.floating
                       ? Icons.open_with

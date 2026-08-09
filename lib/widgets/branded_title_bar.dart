@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/app_log.dart';
 import '../models/app_mode.dart';
 
 /// Branded title bar for Flow Lens
@@ -45,7 +46,7 @@ class BrandedTitleBar extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.3),
+            color: Colors.black.withValues(alpha: 0.3),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -62,12 +63,12 @@ class BrandedTitleBar extends StatelessWidget {
             fit: BoxFit.contain,
             errorBuilder: (context, error, stackTrace) {
               // Fallback if image doesn't load
-              print('Error loading logo: $error');
+              AppLog.debug('Error loading logo: $error');
               return Container(
                 height: 40,
                 width: 40,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Center(
@@ -139,9 +140,13 @@ class BrandedTitleBar extends StatelessWidget {
           if (onToggleDockedEvents != null)
             IconButton(
               onPressed: onToggleDockedEvents,
-              tooltip: showDockedEvents ? 'Hide Events Panel' : 'Dock Events Panel',
+              tooltip: showDockedEvents
+                  ? 'Hide Events Panel'
+                  : 'Dock Events Panel',
               icon: Icon(
-                showDockedEvents ? Icons.view_sidebar : Icons.view_sidebar_outlined,
+                showDockedEvents
+                    ? Icons.view_sidebar
+                    : Icons.view_sidebar_outlined,
                 color: showDockedEvents ? Colors.white : Colors.white70,
               ),
             ),
@@ -184,18 +189,20 @@ class _ModeTabs extends StatelessWidget {
     return Container(
       height: 32,
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.25),
+        color: Colors.black.withValues(alpha: 0.25),
         borderRadius: BorderRadius.circular(20),
       ),
       padding: const EdgeInsets.all(3),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: AppMode.values
-            .map((mode) => _ModeTab(
-                  mode: mode,
-                  isActive: mode == currentMode,
-                  onTap: () => onModeChanged(mode),
-                ))
+            .map(
+              (mode) => _ModeTab(
+                mode: mode,
+                isActive: mode == currentMode,
+                onTap: () => onModeChanged(mode),
+              ),
+            )
             .toList(),
       ),
     );
@@ -245,7 +252,7 @@ class _ModeTab extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         decoration: BoxDecoration(
           color: isActive
-              ? Colors.white.withOpacity(0.18)
+              ? Colors.white.withValues(alpha: 0.18)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(16),
         ),
@@ -263,8 +270,7 @@ class _ModeTab extends StatelessWidget {
               style: TextStyle(
                 color: isActive ? Colors.white : Colors.white54,
                 fontSize: 12,
-                fontWeight:
-                    isActive ? FontWeight.bold : FontWeight.normal,
+                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
                 letterSpacing: 0.3,
               ),
             ),

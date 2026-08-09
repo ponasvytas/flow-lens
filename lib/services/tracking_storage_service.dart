@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../utils/app_log.dart';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -11,14 +12,14 @@ class TrackingStorageService {
     if (session.events.isEmpty && session.subjects.isEmpty) return;
 
     try {
-      final jsonString = const JsonEncoder.withIndent('  ')
-          .convert(session.toJson());
+      final jsonString = const JsonEncoder.withIndent(
+        '  ',
+      ).convert(session.toJson());
 
       if (!kIsWeb) {
         String? outputFile = await FilePicker.platform.saveFile(
           dialogTitle: 'Save Tracking Session',
-          fileName:
-              'tracking_${DateTime.now().millisecondsSinceEpoch}.json',
+          fileName: 'tracking_${DateTime.now().millisecondsSinceEpoch}.json',
           type: FileType.custom,
           allowedExtensions: ['json'],
         );
@@ -29,16 +30,16 @@ class TrackingStorageService {
           }
           final file = File(outputFile);
           await file.writeAsString(jsonString);
-          print('Tracking session saved to $outputFile');
+          AppLog.debug('Tracking session saved to $outputFile');
         }
       } else {
         final fileName =
             'tracking_${DateTime.now().millisecondsSinceEpoch}.json';
         await saveTextFile(jsonString, fileName);
-        print('Tracking session download triggered for $fileName');
+        AppLog.debug('Tracking session download triggered for $fileName');
       }
     } catch (e) {
-      print('Error saving tracking session: $e');
+      AppLog.debug('Error saving tracking session: $e');
       rethrow;
     }
   }
@@ -69,7 +70,7 @@ class TrackingStorageService {
         return TrackingSession.fromJson(json);
       }
     } catch (e) {
-      print('Error loading tracking session: $e');
+      AppLog.debug('Error loading tracking session: $e');
       rethrow;
     }
     return null;
@@ -81,12 +82,8 @@ class TrackingStorageService {
     if (session.events.isEmpty) return;
 
     try {
-      final subjectMap = {
-        for (final s in session.subjects) s.id: s.label,
-      };
-      final trackerMap = {
-        for (final t in session.trackers) t.id: t.label,
-      };
+      final subjectMap = {for (final s in session.subjects) s.id: s.label};
+      final trackerMap = {for (final t in session.trackers) t.id: t.label};
 
       // Build a lookup of the most recent timerStart timestamp per
       // subject+tracker so we can compute interval durations on timerStop.
@@ -94,13 +91,12 @@ class TrackingStorageService {
 
       final buffer = StringBuffer();
       buffer.writeln(
-          'event_id,timestamp_ms,subject_id,subject_label,tracker_id,tracker_label,action,value');
+        'event_id,timestamp_ms,subject_id,subject_label,tracker_id,tracker_label,action,value',
+      );
 
       for (final event in session.events) {
-        final subjectLabel =
-            subjectMap[event.subjectId] ?? event.subjectId;
-        final trackerLabel =
-            trackerMap[event.trackerId] ?? event.trackerId;
+        final subjectLabel = subjectMap[event.subjectId] ?? event.subjectId;
+        final trackerLabel = trackerMap[event.trackerId] ?? event.trackerId;
         final pairKey = '${event.subjectId}:${event.trackerId}';
 
         // Compute the value column
@@ -145,8 +141,7 @@ class TrackingStorageService {
       if (!kIsWeb) {
         String? outputFile = await FilePicker.platform.saveFile(
           dialogTitle: 'Export Tracking CSV',
-          fileName:
-              'tracking_${DateTime.now().millisecondsSinceEpoch}.csv',
+          fileName: 'tracking_${DateTime.now().millisecondsSinceEpoch}.csv',
           type: FileType.custom,
           allowedExtensions: ['csv'],
         );
@@ -157,16 +152,16 @@ class TrackingStorageService {
           }
           final file = File(outputFile);
           await file.writeAsString(csvString);
-          print('Tracking CSV exported to $outputFile');
+          AppLog.debug('Tracking CSV exported to $outputFile');
         }
       } else {
         final fileName =
             'tracking_${DateTime.now().millisecondsSinceEpoch}.csv';
         await saveTextFile(csvString, fileName);
-        print('Tracking CSV download triggered for $fileName');
+        AppLog.debug('Tracking CSV download triggered for $fileName');
       }
     } catch (e) {
-      print('Error exporting tracking CSV: $e');
+      AppLog.debug('Error exporting tracking CSV: $e');
       rethrow;
     }
   }

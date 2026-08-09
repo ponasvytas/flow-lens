@@ -23,13 +23,7 @@ enum TimerMode {
 }
 
 /// Atomic actions stored in the event stream.
-enum TrackingAction {
-  increment,
-  decrement,
-  timerStart,
-  timerStop,
-  timerCancel,
-}
+enum TrackingAction { increment, decrement, timerStart, timerStop, timerCancel }
 
 // ---------------------------------------------------------------------------
 // TrackingSubject — the entity being tracked (player, team, etc.)
@@ -100,7 +94,8 @@ class TrackingSubject {
   int get hashCode => Object.hash(id, label, number, teamId, colorValue);
 
   @override
-  String toString() => 'TrackingSubject($label${number != null ? ' #$number' : ''})';
+  String toString() =>
+      'TrackingSubject($label${number != null ? ' #$number' : ''})';
 }
 
 // ---------------------------------------------------------------------------
@@ -325,11 +320,11 @@ class TrackingSession {
     List<TrackingDefinition>? trackers,
     List<TrackingEvent>? events,
     Map<String, String>? hotkeys,
-  })  : createdAt = createdAt ?? DateTime.now(),
-        subjects = subjects ?? [],
-        trackers = trackers ?? [],
-        events = events ?? [],
-        hotkeys = hotkeys ?? {};
+  }) : createdAt = createdAt ?? DateTime.now(),
+       subjects = subjects ?? [],
+       trackers = trackers ?? [],
+       events = events ?? [],
+       hotkeys = hotkeys ?? {};
 
   Map<String, dynamic> toJson() {
     return {
@@ -350,21 +345,27 @@ class TrackingSession {
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'] as String)
           : null,
-      subjects: (json['subjects'] as List<dynamic>?)
+      subjects:
+          (json['subjects'] as List<dynamic>?)
               ?.map((s) => TrackingSubject.fromJson(s as Map<String, dynamic>))
               .toList() ??
           [],
-      trackers: (json['trackers'] as List<dynamic>?)
+      trackers:
+          (json['trackers'] as List<dynamic>?)
               ?.map(
-                  (t) => TrackingDefinition.fromJson(t as Map<String, dynamic>))
+                (t) => TrackingDefinition.fromJson(t as Map<String, dynamic>),
+              )
               .toList() ??
           [],
-      events: (json['events'] as List<dynamic>?)
+      events:
+          (json['events'] as List<dynamic>?)
               ?.map((e) => TrackingEvent.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
-      hotkeys: (json['hotkeys'] as Map<String, dynamic>?)
-              ?.map((k, v) => MapEntry(k, v as String)) ??
+      hotkeys:
+          (json['hotkeys'] as Map<String, dynamic>?)?.map(
+            (k, v) => MapEntry(k, v as String),
+          ) ??
           {},
     );
   }

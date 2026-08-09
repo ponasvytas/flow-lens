@@ -10,6 +10,7 @@ import 'utils/video_loader.dart';
 import 'utils/player_config.dart';
 import 'utils/native_player_helpers.dart';
 import 'utils/perf.dart';
+import 'utils/app_log.dart';
 import 'models/drawing_models.dart';
 import 'models/game_event.dart';
 import 'widgets/video_canvas.dart';
@@ -34,6 +35,7 @@ import 'controllers/events_controller.dart';
 import 'controllers/settings_controller.dart';
 import 'controllers/ui_controller.dart';
 import 'controllers/tracking_controller.dart';
+import 'controllers/event_preview_coordinator.dart';
 import 'models/app_mode.dart';
 import 'widgets/dock_layout.dart';
 import 'widgets/settings_view.dart';
@@ -43,17 +45,13 @@ import 'widgets/player_tracking_panel.dart';
 void main() {
   // 1. Initialize MediaKit (Crucial for the native video engine)
   WidgetsFlutterBinding.ensureInitialized();
+  Perf.install();
   MediaKit.ensureInitialized();
 
   runApp(const MaterialApp(home: HockeyAnalyzerScreen()));
 }
 
-enum _AltEntryStage {
-  none,
-  categories,
-  labels,
-  grades,
-}
+enum _AltEntryStage { none, categories, labels, grades }
 
 // ---------------------------------------------------------------------------
 // Scoped ChangeNotifiers — mutations here do NOT trigger a parent setState.
@@ -72,6 +70,11 @@ class _DrawingState extends ChangeNotifier {
 
   /// Monotonic counter for completed-strokes content changes.
   int revision = 0;
+  bool get hasDrawings =>
+      strokes.isNotEmpty ||
+      lines.isNotEmpty ||
+      arrows.isNotEmpty ||
+      laserTrails.isNotEmpty;
 
   void toggleDrawingMode() {
     isDrawingMode = !isDrawingMode;
@@ -151,10 +154,8 @@ class _AltKeyState extends ChangeNotifier {
 
   bool get showCategoryNumbers =>
       isEntryActive && stage == _AltEntryStage.categories;
-  bool get showLabelNumbers =>
-      isEntryActive && stage == _AltEntryStage.labels;
-  bool get showGradeNumbers =>
-      isEntryActive && stage == _AltEntryStage.grades;
+  bool get showLabelNumbers => isEntryActive && stage == _AltEntryStage.labels;
+  bool get showGradeNumbers => isEntryActive && stage == _AltEntryStage.grades;
 
   /// Toggle entry mode on an Alt tap.
   void toggle() {
@@ -213,6 +214,9 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   // matches what is shown on screen.
   double _videoAspectRatio = 16 / 9;
   StreamSubscription<VideoParams>? _videoParamsSub;
+  StreamSubscription<Duration>? _previewPositionSub;
+  late final EventPreviewCoordinator _eventPreview;
+  int _taxonomyRequestGeneration = 0;
 
   // Event Tracking State
   final EventsController _eventsController = EventsController();
@@ -230,7 +234,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
   // Player tracking
   final TrackingController _trackingController = TrackingController();
-  final TrackingStorageService _trackingStorageService = TrackingStorageService();
+  final TrackingStorageService _trackingStorageService =
+      TrackingStorageService();
 
   // Docked events panel
   bool _showDockedEvents = false;
@@ -256,16 +261,17 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   @override
   void initState() {
     super.initState();
-    
+
     // Initialize shortcuts panel position (right side after first frame)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         setState(() {
-          _shortcutsPanelX = MediaQuery.of(context).size.width - 340; // 320 width + 20 margin
+          _shortcutsPanelX =
+              MediaQuery.of(context).size.width - 340; // 320 width + 20 margin
         });
       }
     });
-    
+
     // 2. Configure the player with web-friendly and performance settings
     player = Player(
       configuration: PlayerConfiguration(
@@ -274,7 +280,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
         // On Web, let the browser/media_kit handle the rendering backend
         vo: kIsWeb ? null : 'gpu',
         // Enable logging for debugging
-        logLevel: MPVLogLevel.info,
+        logLevel: Perf.enabled ? MPVLogLevel.info : MPVLogLevel.warn,
       ),
     );
 
@@ -282,6 +288,22 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     configureNativePlayer(player);
 
     controller = VideoController(player);
+
+    _eventPreview = EventPreviewCoordinator(
+      seek: player.seek,
+      play: player.play,
+      pause: player.pause,
+      duration: () => player.state.duration,
+      onError: (error, _) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Event preview failed: $error')));
+      },
+    );
+    _previewPositionSub = player.stream.position.listen(
+      _eventPreview.onPosition,
+    );
 
     // Track the real video aspect ratio so the canvas matches the source
     // footage instead of assuming 16:9 (which letterboxes wider/narrower
@@ -297,9 +319,13 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
       }
     });
 
-    _settingsController.loadSettings();
+    _initializeSettingsAndDeepLink();
+  }
 
-    // Handle deep-link query parameters: ?video=<url>&sport=<name>&t=<seconds>
+  Future<void> _initializeSettingsAndDeepLink() async {
+    await _settingsController.loadSettings();
+    if (!mounted) return;
+    await player.setRate(_settingsController.settings.defaultPlaybackSpeed);
     WidgetsBinding.instance.addPostFrameCallback((_) => _handleDeepLink());
   }
 
@@ -311,16 +337,16 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   void _handleDeepLink() {
     if (!mounted) return;
     final base = Uri.base;
-    print('[DeepLink] Uri.base=$base');
-    print('[DeepLink] queryParameters=${base.queryParameters}');
+    AppLog.debug('[DeepLink] Uri.base=$base');
+    AppLog.debug('[DeepLink] queryParameters=${base.queryParameters}');
     final params = base.queryParameters;
     final videoUrl = params['video'];
     final sportName = params['sport'];
     final tParam = params['t'];
-    print('[DeepLink] video=$videoUrl sport=$sportName t=$tParam');
+    AppLog.debug('[DeepLink] video=$videoUrl sport=$sportName t=$tParam');
 
     if (videoUrl == null || videoUrl.isEmpty) {
-      print('[DeepLink] no video param, skipping auto-load');
+      AppLog.debug('[DeepLink] no video param, skipping auto-load');
       return;
     }
 
@@ -328,8 +354,10 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     final wanted = sportName ?? 'hockey';
     final profile = SportProfile.availableProfiles.firstWhere(
       (p) => p.enabled && p.name == wanted,
-      orElse: () => SportProfile.availableProfiles
-          .firstWhere((p) => p.enabled, orElse: () => SportProfile.availableProfiles.first),
+      orElse: () => SportProfile.availableProfiles.firstWhere(
+        (p) => p.enabled,
+        orElse: () => SportProfile.availableProfiles.first,
+      ),
     );
     _onSportSelected(profile);
 
@@ -346,14 +374,16 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
   Future<void> _loadTaxonomy() async {
     if (_selectedSportProfile == null) return;
-    
+    final generation = ++_taxonomyRequestGeneration;
+    final sportName = _selectedSportProfile!.name;
     try {
-      final taxonomy = await _taxonomyRepository.loadSportTaxonomy(_selectedSportProfile!.name);
+      final taxonomy = await _taxonomyRepository.loadSportTaxonomy(sportName);
+      if (!mounted || generation != _taxonomyRequestGeneration) return;
       setState(() {
         _taxonomy = taxonomy;
       });
     } catch (e) {
-      print('Error loading taxonomy: $e');
+      AppLog.debug('Error loading taxonomy: $e');
     }
   }
 
@@ -366,12 +396,19 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
   @override
   void dispose() {
+    _taxonomyRequestGeneration++;
+    _eventPreview.dispose();
+    _previewPositionSub?.cancel();
     _rootFocus.dispose();
     _zoomAnimationController?.dispose();
     _videoParamsSub?.cancel();
+    releaseVideoUrl(_videoSourcePath);
     player.dispose(); // Always clean up video memory!
     _eventsController.dispose();
+    _settingsController.dispose();
+    _trackingController.dispose();
     _uiController.dispose();
+    _transformationController.dispose();
     _drawing.dispose();
     _altKey.dispose();
     super.dispose();
@@ -383,18 +420,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
       // This allows files >2GB to be loaded
       final url = await pickVideoFileWeb();
       if (url != null) {
-        setState(() {
-          hasVideoLoaded = true;
-        });
-        try {
-          _videoSourcePath = url;
-          await player.open(Media(url), play: false);
-          print("Loaded video from blob URL: $url");
-          player.setRate(_settingsController.settings.defaultPlaybackSpeed);
-          await player.play();
-        } catch (e) {
-          print("Error opening/playing video: $e");
-        }
+        await _replaceVideoSource(url);
       }
     } else {
       // Native platforms: Use file_picker with path
@@ -403,18 +429,11 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
       );
 
       if (result != null) {
-        setState(() {
-          hasVideoLoaded = true;
-        });
-
         final String? path = result.files.single.path;
         if (path != null) {
-          _videoSourcePath = path;
-          await player.open(Media(path));
-          player.setRate(_settingsController.settings.defaultPlaybackSpeed);
-          print("Loaded video from path: $path");
+          await _replaceVideoSource(path);
         } else {
-          print("Error: No file path available");
+          AppLog.debug("Error: No file path available");
         }
       }
     }
@@ -466,15 +485,15 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     try {
       await _trackingStorageService.saveSession(_trackingController.session);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tracking session saved')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Tracking session saved')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save tracking: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save tracking: $e')));
       }
     }
   }
@@ -497,9 +516,9 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load tracking: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to load tracking: $e')));
       }
     }
   }
@@ -508,15 +527,15 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     try {
       await _trackingStorageService.exportCsv(_trackingController.session);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tracking CSV exported')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Tracking CSV exported')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to export CSV: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to export CSV: $e')));
       }
     }
   }
@@ -526,74 +545,71 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   // ---------------------------------------------------------------------------
 
   void _changeMode(AppMode mode) {
+    _eventPreview.cancel();
     if (_uiController.currentMode == AppMode.tracking &&
         mode != AppMode.tracking) {
-      _trackingController.stopAllTimers(
-          timestamp: player.state.position);
+      _trackingController.stopAllTimers(timestamp: player.state.position);
     }
     _uiController.setMode(mode);
   }
 
   Future<void> _loadTestVideo() async {
-    setState(() {
-      hasVideoLoaded = true;
-    });
+    // Using a reliable test video that works well on mobile browsers.
+    const testVideoUrl =
+        // "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+        "https://firebasestorage.googleapis.com/v0/b/flow-video-analyzer.firebasestorage.app/o/12U%20Storm%20Select%20vs%2012U%20Pelicans%20Mexico.mp4?alt=media&token=efa9d272-61e6-445c-972c-f444970d494e";
+    // Alternative: Your GitHub video
+    // const testVideoUrl = "https://github.com/ponasvytas/hockey-video-analyst/releases/download/v0.0.1-alpha/part5.mp4";
 
-    try {
-      // Using a reliable test video that works well on mobile browsers
-      const testVideoUrl =
-          // "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
-          "https://firebasestorage.googleapis.com/v0/b/flow-video-analyzer.firebasestorage.app/o/12U%20Storm%20Select%20vs%2012U%20Pelicans%20Mexico.mp4?alt=media&token=efa9d272-61e6-445c-972c-f444970d494e";
-      // Alternative: Your GitHub video
-      // const testVideoUrl = "https://github.com/ponasvytas/hockey-video-analyst/releases/download/v0.0.1-alpha/part5.mp4";
-
-      print("Loading test video from: $testVideoUrl");
-      _videoSourcePath = testVideoUrl;
-      await player.open(Media(testVideoUrl));
-      player.setRate(_settingsController.settings.defaultPlaybackSpeed);
-      print("Successfully loaded test video");
-    } catch (e) {
-      print("Error loading test video: $e");
-      setState(() {
-        hasVideoLoaded = false;
-      });
-    }
+    await _replaceVideoSource(testVideoUrl);
   }
 
   Future<void> _loadUrl(String url, {Duration? initialPosition}) async {
-    setState(() {
-      hasVideoLoaded = true;
-    });
+    await _replaceVideoSource(url, initialPosition: initialPosition);
+  }
 
+  Future<bool> _replaceVideoSource(
+    String source, {
+    Duration? initialPosition,
+  }) async {
+    _eventPreview.cancel();
+    final previousSource = _videoSourcePath;
+    if (mounted) setState(() => hasVideoLoaded = false);
     try {
-      print("Loading video from URL: $url");
-      _videoSourcePath = url;
-      await player.open(Media(url));
-      player.setRate(_settingsController.settings.defaultPlaybackSpeed);
+      try {
+        await player.stop();
+      } finally {
+        releaseVideoUrl(previousSource);
+        _videoSourcePath = null;
+      }
+      await player.open(Media(source));
+      await player.setRate(_settingsController.settings.defaultPlaybackSpeed);
       if (initialPosition != null && initialPosition > Duration.zero) {
-        // Seek after open; media_kit queues the seek if the demuxer is not ready yet.
         await player.seek(initialPosition);
       }
-      print("Successfully loaded video");
+      _videoSourcePath = source;
+      if (mounted) setState(() => hasVideoLoaded = true);
+      return true;
     } catch (e) {
-      print("Error loading video: $e");
-      setState(() {
-        hasVideoLoaded = false;
-      });
+      releaseVideoUrl(source);
+      _videoSourcePath = null;
+      if (mounted) setState(() => hasVideoLoaded = false);
       if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Failed to load video: $e')));
       }
+      return false;
     }
   }
 
   void _changeSpeed(double speed) {
     player.setRate(speed);
-    print("Playback speed: ${speed}x");
+    AppLog.debug("Playback speed: ${speed}x");
   }
 
   void _jumpForward(Duration duration) {
+    _eventPreview.cancel();
     final currentPosition = player.state.position;
     final newPosition = currentPosition + duration;
     // Pause video during seek for smoother experience
@@ -602,10 +618,13 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     player.seek(newPosition).then((_) {
       if (wasPlaying) player.play();
     });
-    print("Jumped forward ${duration.inSeconds}s to ${newPosition.toString()}");
+    AppLog.debug(
+      "Jumped forward ${duration.inSeconds}s to ${newPosition.toString()}",
+    );
   }
 
   void _jumpBackward(Duration duration) {
+    _eventPreview.cancel();
     final currentPosition = player.state.position;
     final newPosition = currentPosition - duration;
     // Pause video during seek for smoother experience
@@ -616,7 +635,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
         if (wasPlaying) player.play();
       },
     );
-    print(
+    AppLog.debug(
       "Jumped backward ${duration.inSeconds}s to ${newPosition.toString()}",
     );
   }
@@ -635,20 +654,40 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
   void _completeLaserDrawing(List<DrawingPoint> strokePoints) {
     if (strokePoints.isEmpty) return;
-    _drawing.addLaserTrail(LaserTrail(
-      strokePoints,
-      _drawing.drawingColor,
-      _drawing.strokeWidth,
-      DateTime.now(),
-    ));
+    _drawing.addLaserTrail(
+      LaserTrail(
+        strokePoints,
+        _drawing.drawingColor,
+        _drawing.strokeWidth,
+        DateTime.now(),
+      ),
+    );
   }
 
   void _removeTrail(LaserTrail trail) {
     _drawing.removeTrail(trail);
   }
 
-  void _clearDrawing() {
-    _drawing.clearAll();
+  Future<void> _clearDrawing() async {
+    if (!_drawing.hasDrawings) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear drawings?'),
+        content: const Text('This removes every drawing and laser trail.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) _drawing.clearAll();
   }
 
   void _toggleDrawingMode() {
@@ -684,8 +723,16 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
   void _navigateToEvent(GameEvent event) {
     final leadIn = _settingsController.settings.leadIn;
-    final seekTime = event.timestamp - leadIn;
+    final leadOut = _settingsController.settings.leadOut;
     _eventsController.selectEvent(event);
+
+    void startPreview() {
+      _eventPreview.preview(
+        eventTimestamp: event.timestamp,
+        leadIn: leadIn,
+        leadOut: leadOut,
+      );
+    }
 
     final targetTransform = event.viewTransform != null
         ? _denormalizeTransform(event.viewTransform!)
@@ -694,11 +741,14 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
     // If zoom state is changing, animate it and stagger the seek
     if (currentTransform != targetTransform) {
-      _animateZoomTo(targetTransform, onMidpoint: () {
-        player.seek(seekTime > Duration.zero ? seekTime : Duration.zero);
-      });
+      _animateZoomTo(
+        targetTransform,
+        onMidpoint: () {
+          startPreview();
+        },
+      );
     } else {
-      player.seek(seekTime > Duration.zero ? seekTime : Duration.zero);
+      startPreview();
     }
   }
 
@@ -710,13 +760,16 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
       vsync: this,
     );
 
-    _zoomAnimation = Matrix4Tween(
-      begin: _transformationController.value,
-      end: target,
-    ).animate(CurvedAnimation(
-      parent: _zoomAnimationController!,
-      curve: Curves.easeInOut,
-    ));
+    _zoomAnimation =
+        Matrix4Tween(
+          begin: _transformationController.value,
+          end: target,
+        ).animate(
+          CurvedAnimation(
+            parent: _zoomAnimationController!,
+            curve: Curves.easeInOut,
+          ),
+        );
 
     bool seekFired = false;
     _zoomAnimationController!.addListener(() {
@@ -736,6 +789,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   }
 
   void _togglePlayPause() {
+    _eventPreview.cancel();
     if (player.state.playing) {
       player.pause();
     } else {
@@ -745,9 +799,9 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
   void _showEventsTable() {
     if (_taxonomy == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Loading taxonomy...')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Loading taxonomy...')));
       return;
     }
 
@@ -775,7 +829,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
             controller: _eventsController,
             taxonomy: _taxonomy!,
             onEventTap: (event) {
-            _navigateToEvent(event);
+              _navigateToEvent(event);
               Navigator.of(context).pop();
             },
             onClose: () => Navigator.of(context).pop(),
@@ -793,16 +847,12 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     if (isDesktop) {
       showDialog(
         context: context,
-        builder: (context) => SettingsView(
-          controller: _settingsController,
-        ),
+        builder: (context) => SettingsView(controller: _settingsController),
       );
     } else {
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (context) => SettingsView(
-            controller: _settingsController,
-          ),
+          builder: (context) => SettingsView(controller: _settingsController),
         ),
       );
     }
@@ -827,25 +877,29 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
       // Get screen size for boundary constraints
       final screenWidth = MediaQuery.of(context).size.width;
       final screenHeight = MediaQuery.of(context).size.height;
-      
+
       // Panel dimensions (approximate)
       const panelWidth = 320.0;
       const panelHeight = 500.0; // Approximate height
-      
+
       // Update position with delta
       _shortcutsPanelX += dx;
       _shortcutsPanelY += dy;
-      
+
       // Constrain to screen boundaries
       _shortcutsPanelX = _shortcutsPanelX.clamp(0.0, screenWidth - panelWidth);
-      _shortcutsPanelY = _shortcutsPanelY.clamp(64.0, screenHeight - panelHeight); // 64 for title bar
+      _shortcutsPanelY = _shortcutsPanelY.clamp(
+        64.0,
+        screenHeight - panelHeight,
+      ); // 64 for title bar
     });
   }
 
   void _resetShortcutsPanelPosition() {
     setState(() {
       final screenWidth = MediaQuery.of(context).size.width;
-      _shortcutsPanelX = screenWidth - 320 - 20; // 320px panel width + 20px margin
+      _shortcutsPanelX =
+          screenWidth - 320 - 20; // 320px panel width + 20px margin
       _shortcutsPanelY = 100.0;
     });
   }
@@ -855,15 +909,15 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     if (taxonomy == null) return false;
 
     final categories = taxonomy.categories;
-    
+
     // Check if number is valid (1-based index)
     if (number < 1 || number > categories.length) {
       return false; // Invalid number, ignore
     }
-    
+
     // Get category (convert to 0-based index)
     final categoryId = categories[number - 1].categoryId;
-    
+
     // Create event using existing logic
     _onEventTriggered(categoryId);
 
@@ -963,7 +1017,6 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     _deleteEvent(activeEvent);
   }
 
-
   void _onEventTriggered(String categoryId) {
     final taxonomy = _taxonomy;
     if (taxonomy == null) return;
@@ -985,7 +1038,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
     _eventsController.selectEvent(newEvent);
 
-    print("EVENT DRAFTED: ${newEvent.label} at ${position.toString()}");
+    AppLog.debug("EVENT DRAFTED: ${newEvent.label} at ${position.toString()}");
   }
 
   void _updateEvent(GameEvent updatedEvent) {
@@ -994,14 +1047,16 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
         updatedEvent.detail != null && updatedEvent.grade != null;
 
     if (isComplete) {
-      final existingIndex = _eventsController.allEvents.indexWhere((e) => e.id == updatedEvent.id);
+      final existingIndex = _eventsController.allEvents.indexWhere(
+        (e) => e.id == updatedEvent.id,
+      );
       if (existingIndex != -1) {
         // Update existing
         _eventsController.updateEvent(updatedEvent);
       } else {
         // Add new confirmed event
         _eventsController.addEvent(updatedEvent);
-        print("EVENT CONFIRMED: ${updatedEvent.label}");
+        AppLog.debug("EVENT CONFIRMED: ${updatedEvent.label}");
       }
     }
 
@@ -1011,7 +1066,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
   void _deleteEvent(GameEvent event) {
     _eventsController.deleteEvent(event);
-    print("EVENT DELETED: ${event.label}");
+    AppLog.debug("EVENT DELETED: ${event.label}");
     // Reclaim keyboard focus — removing the SmartHUD can leave focus orphaned.
     _rootFocus.requestFocus();
   }
@@ -1021,7 +1076,6 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     // Reclaim keyboard focus — removing the SmartHUD can leave focus orphaned.
     _rootFocus.requestFocus();
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -1039,8 +1093,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
         // primaryFocus.context.widget is Focus, not EditableText.
         // We walk up ancestors to find EditableText above the focused node.
         // =====================================================================
-        final isTextFieldFocused = FocusManager.instance.primaryFocus
-                ?.context
+        final isTextFieldFocused =
+            FocusManager.instance.primaryFocus?.context
                 ?.findAncestorWidgetOfExactType<EditableText>() !=
             null;
 
@@ -1054,7 +1108,6 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
         // KEY DOWN
         // =====================================================================
         if (event is KeyDownEvent) {
-
           // -----------------------------------------------------------------
           // 1. Modifier-based shortcuts (always active, even in text fields)
           // -----------------------------------------------------------------
@@ -1129,8 +1182,11 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
             if (_altKey.stage == _AltEntryStage.categories &&
                 hasVideoLoaded &&
                 !_drawing.isDrawingMode) {
-              KeyEventResult? _tryAltCreate(LogicalKeyboardKey a,
-                  LogicalKeyboardKey b, int n) {
+              KeyEventResult? tryAltCreate(
+                LogicalKeyboardKey a,
+                LogicalKeyboardKey b,
+                int n,
+              ) {
                 if (event.logicalKey == a || event.logicalKey == b) {
                   final didCreate = _createEventFromAltNumber(n);
                   if (didCreate) _altKey.setStage(_AltEntryStage.labels);
@@ -1139,18 +1195,37 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                 return null;
               }
 
-              final result = _tryAltCreate(LogicalKeyboardKey.digit1,
-                      LogicalKeyboardKey.numpad1, 1) ??
-                  _tryAltCreate(LogicalKeyboardKey.digit2,
-                      LogicalKeyboardKey.numpad2, 2) ??
-                  _tryAltCreate(LogicalKeyboardKey.digit3,
-                      LogicalKeyboardKey.numpad3, 3) ??
-                  _tryAltCreate(LogicalKeyboardKey.digit4,
-                      LogicalKeyboardKey.numpad4, 4) ??
-                  _tryAltCreate(LogicalKeyboardKey.digit5,
-                      LogicalKeyboardKey.numpad5, 5) ??
-                  _tryAltCreate(LogicalKeyboardKey.digit6,
-                      LogicalKeyboardKey.numpad6, 6);
+              final result =
+                  tryAltCreate(
+                    LogicalKeyboardKey.digit1,
+                    LogicalKeyboardKey.numpad1,
+                    1,
+                  ) ??
+                  tryAltCreate(
+                    LogicalKeyboardKey.digit2,
+                    LogicalKeyboardKey.numpad2,
+                    2,
+                  ) ??
+                  tryAltCreate(
+                    LogicalKeyboardKey.digit3,
+                    LogicalKeyboardKey.numpad3,
+                    3,
+                  ) ??
+                  tryAltCreate(
+                    LogicalKeyboardKey.digit4,
+                    LogicalKeyboardKey.numpad4,
+                    4,
+                  ) ??
+                  tryAltCreate(
+                    LogicalKeyboardKey.digit5,
+                    LogicalKeyboardKey.numpad5,
+                    5,
+                  ) ??
+                  tryAltCreate(
+                    LogicalKeyboardKey.digit6,
+                    LogicalKeyboardKey.numpad6,
+                    6,
+                  );
               if (result != null) return result;
             }
           }
@@ -1185,7 +1260,9 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
             final keyLabel = event.logicalKey.keyLabel.toLowerCase();
             if (keyLabel.isNotEmpty &&
                 _trackingController.handleHotkeyDown(
-                    keyLabel, player.state.position)) {
+                  keyLabel,
+                  player.state.position,
+                )) {
               return KeyEventResult.handled;
             }
           }
@@ -1242,7 +1319,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
           if (event.logicalKey == LogicalKeyboardKey.keyS) {
             final slowSpeed = _settingsController.settings.slowPlaybackSpeed;
             player.setRate(slowSpeed);
-            print("Playback speed set to ${slowSpeed}x (slow)");
+            AppLog.debug("Playback speed set to ${slowSpeed}x (slow)");
             return KeyEventResult.handled;
           }
 
@@ -1251,7 +1328,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
             final defaultSpeed =
                 _settingsController.settings.defaultPlaybackSpeed;
             player.setRate(defaultSpeed);
-            print("Playback speed set to ${defaultSpeed}x (default)");
+            AppLog.debug("Playback speed set to ${defaultSpeed}x (default)");
             return KeyEventResult.handled;
           }
 
@@ -1262,9 +1339,10 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
             _previousVolume = player.state.volume;
             _isSpeedShortcutActive = true;
             final fastSpeed = _settingsController.settings.fastPlaySpeed;
+            player.setVolume(0);
             nativeMutePlayer(player);
             player.setRate(fastSpeed);
-            print(
+            AppLog.debug(
               "Fast forward: ${fastSpeed}x speed (previous: ${_previousPlaybackSpeed}x)",
             );
             return KeyEventResult.handled;
@@ -1275,10 +1353,10 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
             final currentVolume = player.state.volume;
             if (currentVolume > 0) {
               player.setVolume(0);
-              print("Muted");
+              AppLog.debug("Muted");
             } else {
               player.setVolume(100);
-              print("Unmuted");
+              AppLog.debug("Unmuted");
             }
             return KeyEventResult.handled;
           }
@@ -1344,7 +1422,9 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
             final keyLabel = event.logicalKey.keyLabel.toLowerCase();
             if (keyLabel.isNotEmpty &&
                 _trackingController.handleHotkeyUp(
-                    keyLabel, player.state.position)) {
+                  keyLabel,
+                  player.state.position,
+                )) {
               return KeyEventResult.handled;
             }
           }
@@ -1365,8 +1445,12 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
               _isSpeedShortcutActive) {
             _isSpeedShortcutActive = false;
             player.setRate(_previousPlaybackSpeed);
-            nativeResyncAfterFF(player, () => _isSpeedShortcutActive);
-            print("Speed restored to ${_previousPlaybackSpeed}x");
+            nativeResyncAfterFF(player, () => _isSpeedShortcutActive).then((_) {
+              if (!_isSpeedShortcutActive) {
+                player.setVolume(_previousVolume);
+              }
+            });
+            AppLog.debug("Speed restored to ${_previousPlaybackSpeed}x");
             return KeyEventResult.handled;
           }
         }
@@ -1380,235 +1464,244 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
             Expanded(
               child: Stack(
                 children: [
-            // LAYER 0: Branded Title Bar (Top)
-            ListenableBuilder(
-              listenable: _uiController,
-              builder: (context, _) => Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: BrandedTitleBar(
-                  onShowShortcuts: _toggleShortcutsPanel,
-                  showShortcuts: _showShortcuts,
-                  currentMode: _uiController.currentMode,
-                  onModeChanged: _changeMode,
-                  onSaveEvents: hasVideoLoaded ? _saveEvents : null,
-                  onLoadEvents: hasVideoLoaded ? _loadEvents : null,
-                  onShowEventsTable: hasVideoLoaded ? _showEventsTable : null,
-                  onShowSettings: hasVideoLoaded ? _showSettings : null,
-                  onToggleDockedEvents: hasVideoLoaded ? _toggleDockedEvents : null,
-                  showDockedEvents: _showDockedEvents,
-                ),
-              ),
-            ),
-
-            // LAYER 1: Video Canvas with Zoom/Pan and Drawing (with top padding)
-            ListenableBuilder(
-              listenable: _drawing,
-              builder: (context, _) => Padding(
-                padding: const EdgeInsets.only(top: 64),
-                child: VideoCanvas(
-                  controller: controller,
-                  transformationController: _transformationController,
-                  isDrawingMode: _drawing.isDrawingMode,
-                  currentTool: _drawing.currentTool,
-                  drawingStrokes: _drawing.strokes,
-                  lineShapes: _drawing.lines,
-                  arrowShapes: _drawing.arrows,
-                  drawingColor: _drawing.drawingColor,
-                  strokeWidth: _drawing.strokeWidth,
-                  drawingRevision: _drawing.revision,
-                  videoAspectRatio: _videoAspectRatio,
-                  onStrokeCompleted: _onStrokeCompleted,
-                  onLineCompleted: _onLineCompleted,
-                  onArrowCompleted: _onArrowCompleted,
-                  onClearDrawing: _clearDrawing,
-                ),
-              ),
-            ),
-
-            // LAYER 2: Laser trails and cursor (No zoom scaling - overlay)
-            // Only show when laser is active or there are trails to display
-            if (hasVideoLoaded)
-              ListenableBuilder(
-                listenable: _drawing,
-                builder: (context, _) {
-                  if (_drawing.currentTool != DrawingTool.laser &&
-                      _drawing.laserTrails.isEmpty) {
-                    return const SizedBox.shrink();
-                  }
-                  return LaserPointerOverlay(
-                    isActive: _drawing.currentTool == DrawingTool.laser,
-                    isDrawingMode: _drawing.isDrawingMode,
-                    trails: _drawing.laserTrails,
-                    color: _drawing.drawingColor,
-                    strokeWidth: _drawing.strokeWidth,
-                    videoAspectRatio: _videoAspectRatio,
-                    onCompleteDrawing: _completeLaserDrawing,
-                    onRemoveTrail: _removeTrail,
-                  );
-                },
-              ),
-
-            // LAYER 3–5c: All dockable panels via DockLayout
-            if (hasVideoLoaded)
-              ListenableBuilder(
-                listenable: _uiController,
-                builder: (context, _) => DockLayout(
-                  uiController: _uiController,
-                  panels: [
-                  // Playback Controls
-                  DockPanelEntry(
-                    id: PanelId.playbackControls,
-                    title: 'Playback',
-                    icon: Icons.play_circle_outline,
-                    defaultFloatingPosition: const Offset(20, 80),
-                    builder: (dockEdge) => DraggableControlBar(
-                      player: player,
-                      onSpeedChange: _changeSpeed,
-                      onJumpForward: _jumpForward,
-                      onJumpBackward: _jumpBackward,
-                      onTogglePlayPause: _togglePlayPause,
-                      dockEdge: dockEdge,
+                  // LAYER 0: Branded Title Bar (Top)
+                  ListenableBuilder(
+                    listenable: _uiController,
+                    builder: (context, _) => Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      child: BrandedTitleBar(
+                        onShowShortcuts: _toggleShortcutsPanel,
+                        showShortcuts: _showShortcuts,
+                        currentMode: _uiController.currentMode,
+                        onModeChanged: _changeMode,
+                        onSaveEvents: hasVideoLoaded ? _saveEvents : null,
+                        onLoadEvents: hasVideoLoaded ? _loadEvents : null,
+                        onShowEventsTable: hasVideoLoaded
+                            ? _showEventsTable
+                            : null,
+                        onShowSettings: hasVideoLoaded ? _showSettings : null,
+                        onToggleDockedEvents: hasVideoLoaded
+                            ? _toggleDockedEvents
+                            : null,
+                        showDockedEvents: _showDockedEvents,
+                      ),
                     ),
                   ),
-                  // Drawing Tools
-                  DockPanelEntry(
-                    id: PanelId.drawingTools,
-                    title: 'Drawing',
-                    icon: Icons.draw,
-                    defaultFloatingPosition: Offset(
-                      MediaQuery.of(context).size.width - 240,
-                      200,
-                    ),
-                    builder: (dockEdge) => ListenableBuilder(
-                      listenable: _drawing,
-                      builder: (context, _) => DrawingToolsPanel(
+
+                  // LAYER 1: Video Canvas with Zoom/Pan and Drawing (with top padding)
+                  ListenableBuilder(
+                    listenable: _drawing,
+                    builder: (context, _) => Padding(
+                      padding: const EdgeInsets.only(top: 64),
+                      child: VideoCanvas(
+                        controller: controller,
+                        transformationController: _transformationController,
                         isDrawingMode: _drawing.isDrawingMode,
                         currentTool: _drawing.currentTool,
+                        drawingStrokes: _drawing.strokes,
+                        lineShapes: _drawing.lines,
+                        arrowShapes: _drawing.arrows,
                         drawingColor: _drawing.drawingColor,
-                        onToggleDrawingMode: _toggleDrawingMode,
-                        onResetZoom: _resetZoom,
+                        strokeWidth: _drawing.strokeWidth,
+                        drawingRevision: _drawing.revision,
+                        videoAspectRatio: _videoAspectRatio,
+                        onStrokeCompleted: _onStrokeCompleted,
+                        onLineCompleted: _onLineCompleted,
+                        onArrowCompleted: _onArrowCompleted,
                         onClearDrawing: _clearDrawing,
-                        onToolChange: _drawing.setTool,
-                        onColorChange: _drawing.setColor,
-                        dockEdge: dockEdge,
                       ),
                     ),
                   ),
-                  // Event Navigation (Review mode)
-                  DockPanelEntry(
-                    id: PanelId.eventNavigation,
-                    title: 'Event Navigation',
-                    icon: Icons.search,
-                    defaultFloatingPosition: const Offset(20, 200),
-                    builder: (dockEdge) => StreamBuilder<Duration>(
-                      stream: player.stream.position,
-                      builder: (context, snapshot) => EventNavigationPanel(
-                        controller: _eventsController,
-                        onOpenEventsTable: _showEventsTable,
-                        onNavigateTo: _navigateToEvent,
-                        currentPosition: snapshot.data ?? player.state.position,
-                      ),
-                    ),
-                  ),
-                  // Player Tracking (Tracking mode)
-                  DockPanelEntry(
-                    id: PanelId.playerTracking,
-                    title: 'Player Tracking',
-                    icon: Icons.people,
-                    defaultFloatingPosition: const Offset(20, 200),
-                    builder: (dockEdge) => ListenableBuilder(
-                      listenable: _trackingController,
-                      builder: (context, _) => PlayerTrackingPanel(
-                        controller: _trackingController,
-                        player: player,
-                        dockEdge: dockEdge,
-                        onSave: _saveTrackingSession,
-                        onLoad: _loadTrackingSession,
-                        onExportCsv: _exportTrackingCsv,
-                      ),
-                    ),
-                  ),
-                ],
-                ),
-              ),
 
-            // LAYER 5: Event Buttons with SmartHUD (Record mode)
-            if (hasVideoLoaded)
-              ListenableBuilder(
-                listenable: Listenable.merge([_uiController, _eventsController, _altKey]),
-                builder: (context, _) {
-                  if (!_uiController.panelVisible(PanelId.eventButtons)) {
-                    return const SizedBox.shrink();
-                  }
-                  return Positioned(
-                    bottom: 80,
-                    left: 0,
-                    right: 0,
-                    child: Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Smart HUD
-                          if (_eventsController.activeEvent != null)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 10),
-                              child: SmartHUD(
-                                event: _eventsController.activeEvent!,
-                                onUpdateEvent: _updateEvent,
-                                onDeleteEvent: _deleteEvent,
-                                onDismiss: _dismissHUD,
-                                isAltPressed: _altKey.isEntryActive,
-                                showTagNumbers: _altKey.showLabelNumbers,
-                                showGradeNumbers: _altKey.showGradeNumbers,
-                                taxonomy: _taxonomy,
+                  // LAYER 2: Laser trails and cursor (No zoom scaling - overlay)
+                  // Only show when laser is active or there are trails to display
+                  if (hasVideoLoaded)
+                    ListenableBuilder(
+                      listenable: _drawing,
+                      builder: (context, _) {
+                        if (_drawing.currentTool != DrawingTool.laser &&
+                            _drawing.laserTrails.isEmpty) {
+                          return const SizedBox.shrink();
+                        }
+                        return LaserPointerOverlay(
+                          isActive: _drawing.currentTool == DrawingTool.laser,
+                          isDrawingMode: _drawing.isDrawingMode,
+                          trails: _drawing.laserTrails,
+                          color: _drawing.drawingColor,
+                          strokeWidth: _drawing.strokeWidth,
+                          videoAspectRatio: _videoAspectRatio,
+                          onCompleteDrawing: _completeLaserDrawing,
+                          onRemoveTrail: _removeTrail,
+                        );
+                      },
+                    ),
+
+                  // LAYER 3–5c: All dockable panels via DockLayout
+                  if (hasVideoLoaded)
+                    ListenableBuilder(
+                      listenable: _uiController,
+                      builder: (context, _) => DockLayout(
+                        uiController: _uiController,
+                        panels: [
+                          // Playback Controls
+                          DockPanelEntry(
+                            id: PanelId.playbackControls,
+                            title: 'Playback',
+                            icon: Icons.play_circle_outline,
+                            defaultFloatingPosition: const Offset(20, 80),
+                            builder: (dockEdge) => DraggableControlBar(
+                              player: player,
+                              onSpeedChange: _changeSpeed,
+                              onJumpForward: _jumpForward,
+                              onJumpBackward: _jumpBackward,
+                              onTogglePlayPause: _togglePlayPause,
+                              dockEdge: dockEdge,
+                            ),
+                          ),
+                          // Drawing Tools
+                          DockPanelEntry(
+                            id: PanelId.drawingTools,
+                            title: 'Drawing',
+                            icon: Icons.draw,
+                            defaultFloatingPosition: Offset(
+                              MediaQuery.of(context).size.width - 240,
+                              200,
+                            ),
+                            builder: (dockEdge) => ListenableBuilder(
+                              listenable: _drawing,
+                              builder: (context, _) => DrawingToolsPanel(
+                                isDrawingMode: _drawing.isDrawingMode,
+                                currentTool: _drawing.currentTool,
+                                drawingColor: _drawing.drawingColor,
+                                onToggleDrawingMode: _toggleDrawingMode,
+                                onResetZoom: _resetZoom,
+                                onClearDrawing: _clearDrawing,
+                                onToolChange: _drawing.setTool,
+                                onColorChange: _drawing.setColor,
+                                dockEdge: dockEdge,
                               ),
                             ),
-
-                          // Event Buttons Row (with optional number badges)
-                          EventButtonsPanel(
-                            onEventTriggered: _onEventTriggered,
-                            taxonomy: _taxonomy,
-                            showNumbers: _altKey.showCategoryNumbers,
+                          ),
+                          // Event Navigation (Review mode)
+                          DockPanelEntry(
+                            id: PanelId.eventNavigation,
+                            title: 'Event Navigation',
+                            icon: Icons.search,
+                            defaultFloatingPosition: const Offset(20, 200),
+                            builder: (dockEdge) => StreamBuilder<Duration>(
+                              stream: player.stream.position,
+                              builder: (context, snapshot) =>
+                                  EventNavigationPanel(
+                                    controller: _eventsController,
+                                    onOpenEventsTable: _showEventsTable,
+                                    onNavigateTo: _navigateToEvent,
+                                    currentPosition:
+                                        snapshot.data ?? player.state.position,
+                                  ),
+                            ),
+                          ),
+                          // Player Tracking (Tracking mode)
+                          DockPanelEntry(
+                            id: PanelId.playerTracking,
+                            title: 'Player Tracking',
+                            icon: Icons.people,
+                            defaultFloatingPosition: const Offset(20, 200),
+                            builder: (dockEdge) => PlayerTrackingPanel(
+                              controller: _trackingController,
+                              player: player,
+                              dockEdge: dockEdge,
+                              onSave: _saveTrackingSession,
+                              onLoad: _loadTrackingSession,
+                              onExportCsv: _exportTrackingCsv,
+                            ),
                           ),
                         ],
                       ),
                     ),
-                  );
-                },
-              ),
 
-            // LAYER 6: Video Progress Bar
-            if (hasVideoLoaded)
-              ListenableBuilder(
-                listenable: _eventsController,
-                builder: (context, _) => VideoProgressBar(
-                  player: player,
-                  events: _eventsController.filteredEvents,
-                  onEventTap: _navigateToEvent,
-                ),
-              ),
+                  // LAYER 5: Event Buttons with SmartHUD (Record mode)
+                  if (hasVideoLoaded)
+                    ListenableBuilder(
+                      listenable: Listenable.merge([
+                        _uiController,
+                        _eventsController,
+                        _altKey,
+                      ]),
+                      builder: (context, _) {
+                        if (!_uiController.panelVisible(PanelId.eventButtons)) {
+                          return const SizedBox.shrink();
+                        }
+                        return Positioned(
+                          bottom: 80,
+                          left: 0,
+                          right: 0,
+                          child: Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // Smart HUD
+                                if (_eventsController.activeEvent != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 10),
+                                    child: SmartHUD(
+                                      event: _eventsController.activeEvent!,
+                                      onUpdateEvent: _updateEvent,
+                                      onDeleteEvent: _deleteEvent,
+                                      onDismiss: _dismissHUD,
+                                      isAltPressed: _altKey.isEntryActive,
+                                      showTagNumbers: _altKey.showLabelNumbers,
+                                      showGradeNumbers:
+                                          _altKey.showGradeNumbers,
+                                      taxonomy: _taxonomy,
+                                    ),
+                                  ),
 
-            // LAYER 7: Shortcuts Panel (toggleable and draggable)
-            if (hasVideoLoaded && _showShortcuts)
-              ShortcutsPanel(
-                isVisible: _showShortcuts,
-                onToggle: _toggleShortcutsPanel,
-                positionX: _shortcutsPanelX,
-                positionY: _shortcutsPanelY,
-                onPositionChanged: _onShortcutsPanelDragged,
-                onResetPosition: _resetShortcutsPanelPosition,
-              ),
+                                // Event Buttons Row (with optional number badges)
+                                EventButtonsPanel(
+                                  onEventTriggered: _onEventTriggered,
+                                  taxonomy: _taxonomy,
+                                  showNumbers: _altKey.showCategoryNumbers,
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
 
-            // Video Picker (shown when no video is loaded)
-            if (!hasVideoLoaded)
-              VideoPicker(
-                onPickVideo: _pickVideo,
-                onLoadTestVideo: _loadTestVideo,
-                onLoadUrl: _loadUrl,
-                onSportSelected: _onSportSelected,
-              ),
+                  // LAYER 6: Video Progress Bar
+                  if (hasVideoLoaded)
+                    ListenableBuilder(
+                      listenable: _eventsController.dataRevision,
+                      builder: (context, _) => VideoProgressBar(
+                        player: player,
+                        events: _eventsController.filteredEvents,
+                        onEventTap: _navigateToEvent,
+                        onScrubStart: _eventPreview.cancel,
+                      ),
+                    ),
+
+                  // LAYER 7: Shortcuts Panel (toggleable and draggable)
+                  if (hasVideoLoaded && _showShortcuts)
+                    ShortcutsPanel(
+                      isVisible: _showShortcuts,
+                      onToggle: _toggleShortcutsPanel,
+                      positionX: _shortcutsPanelX,
+                      positionY: _shortcutsPanelY,
+                      onPositionChanged: _onShortcutsPanelDragged,
+                      onResetPosition: _resetShortcutsPanelPosition,
+                    ),
+
+                  // Video Picker (shown when no video is loaded)
+                  if (!hasVideoLoaded)
+                    VideoPicker(
+                      onPickVideo: _pickVideo,
+                      onLoadTestVideo: _loadTestVideo,
+                      onLoadUrl: _loadUrl,
+                      onSportSelected: _onSportSelected,
+                    ),
                 ],
               ),
             ),

@@ -331,8 +331,5 @@ class HockeyTrackingPresets {
     timeInBattle,
   ];
 
-  static const List<TrackingDefinition> all = [
-    ...allCounters,
-    ...allTimers,
-  ];
+  static const List<TrackingDefinition> all = [...allCounters, ...allTimers];
 }

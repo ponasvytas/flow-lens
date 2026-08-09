@@ -8,9 +8,6 @@ class SmartHUD extends StatefulWidget {
   final Function(GameEvent) onUpdateEvent;
   final Function(GameEvent) onDeleteEvent;
   final VoidCallback onDismiss;
-  final Function(int)? onNumberPressed; // Callback for number key presses
-  final VoidCallback? onEnterPressed; // Callback for Enter key
-  final VoidCallback? onEscPressed; // Callback for Esc key
   final bool isAltPressed; // Whether Alt key is currently held
   final bool showTagNumbers;
   final bool showGradeNumbers;
@@ -21,9 +18,6 @@ class SmartHUD extends StatefulWidget {
     required this.onUpdateEvent,
     required this.onDeleteEvent,
     required this.onDismiss,
-    this.onNumberPressed,
-    this.onEnterPressed,
-    this.onEscPressed,
     this.isAltPressed = false,
     this.showTagNumbers = false,
     this.showGradeNumbers = false,
@@ -55,11 +49,11 @@ class _SmartHUDState extends State<SmartHUD>
   @override
   void didUpdateWidget(SmartHUD oldWidget) {
     super.didUpdateWidget(oldWidget);
-    
+
     // If Alt key state changed, handle timer accordingly
     if (widget.isAltPressed != _wasAltPressed) {
       _wasAltPressed = widget.isAltPressed;
-      
+
       if (widget.isAltPressed) {
         // Alt pressed: cancel timer to keep HUD visible
         _dismissTimer?.cancel();
@@ -72,7 +66,7 @@ class _SmartHUDState extends State<SmartHUD>
 
   void _resetTimer() {
     _dismissTimer?.cancel();
-    
+
     // Don't start timer if Alt is held
     if (!widget.isAltPressed && mounted) {
       _dismissTimer = Timer(const Duration(seconds: 4), () {
@@ -166,10 +160,10 @@ class _SmartHUDState extends State<SmartHUD>
                       child: Container(
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
-                          color: Colors.red.withOpacity(0.2),
+                          color: Colors.red.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(4),
                           border: Border.all(
-                            color: Colors.red.withOpacity(0.5),
+                            color: Colors.red.withValues(alpha: 0.5),
                           ),
                         ),
                         child: const Icon(
@@ -207,7 +201,12 @@ class _SmartHUDState extends State<SmartHUD>
     );
   }
 
-  Widget _buildGradeButton(EventGrade grade, IconData icon, Color color, int number) {
+  Widget _buildGradeButton(
+    EventGrade grade,
+    IconData icon,
+    Color color,
+    int number,
+  ) {
     final isSelected = widget.event.grade == grade;
     return InkWell(
       onTap: () {
@@ -261,8 +260,10 @@ class _SmartHUDState extends State<SmartHUD>
   }
 
   Widget _buildTagButton(EventTypeTaxonomy eventType, int index) {
-    final isSelected = widget.event.eventTypeId == eventType.eventTypeId ||
-        (widget.event.eventTypeId == null && widget.event.detail == eventType.name);
+    final isSelected =
+        widget.event.eventTypeId == eventType.eventTypeId ||
+        (widget.event.eventTypeId == null &&
+            widget.event.detail == eventType.name);
     return InkWell(
       onTap: () {
         _handleInteraction();

@@ -47,9 +47,7 @@ class _VideoPickerState extends State<VideoPicker> {
   @override
   Widget build(BuildContext context) {
     if (_selectedSport == null) {
-      return SportProfileSelector(
-        onProfileSelected: _onSportSelected,
-      );
+      return SportProfileSelector(onProfileSelected: _onSportSelected);
     }
 
     return _buildVideoSelector(context);
@@ -113,10 +111,7 @@ class _VideoPickerState extends State<VideoPicker> {
                 Expanded(child: Divider(color: Colors.white24)),
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(
-                    "OR",
-                    style: TextStyle(color: Colors.white54),
-                  ),
+                  child: Text("OR", style: TextStyle(color: Colors.white54)),
                 ),
                 Expanded(child: Divider(color: Colors.white24)),
               ],

@@ -4,10 +4,7 @@ import '../controllers/settings_controller.dart';
 class SettingsView extends StatefulWidget {
   final SettingsController controller;
 
-  const SettingsView({
-    required this.controller,
-    super.key,
-  });
+  const SettingsView({required this.controller, super.key});
 
   @override
   State<SettingsView> createState() => _SettingsViewState();
@@ -65,9 +62,7 @@ class _SettingsViewState extends State<SettingsView> {
         ),
       );
     } else {
-      return Scaffold(
-        body: SafeArea(child: content),
-      );
+      return Scaffold(body: SafeArea(child: content));
     }
   }
 
@@ -448,7 +443,8 @@ class _SettingsViewState extends State<SettingsView> {
             setState(() {
               _fastPlaySpeed = widget.controller.settings.fastPlaySpeed;
               _slowPlaybackSpeed = widget.controller.settings.slowPlaybackSpeed;
-              _defaultPlaybackSpeed = widget.controller.settings.defaultPlaybackSpeed;
+              _defaultPlaybackSpeed =
+                  widget.controller.settings.defaultPlaybackSpeed;
               _leadInSeconds = widget.controller.settings.leadIn.inSeconds;
               _leadOutSeconds = widget.controller.settings.leadOut.inSeconds;
             });

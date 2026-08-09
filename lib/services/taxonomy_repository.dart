@@ -11,8 +11,9 @@ class TaxonomyRepository {
     }
 
     try {
-      final jsonString =
-          await rootBundle.loadString('assets/sports/$sportId.json');
+      final jsonString = await rootBundle.loadString(
+        'assets/sports/$sportId.json',
+      );
       final jsonData = jsonDecode(jsonString) as Map<String, dynamic>;
       final taxonomy = SportTaxonomy.fromJson(jsonData);
 
