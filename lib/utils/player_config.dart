@@ -4,5 +4,4 @@ import 'player_config_stub.dart'
 
 import 'package:media_kit/media_kit.dart';
 
-void configureNativePlayer(Player player) =>
-    impl.configureNativePlayer(player);
+void configureNativePlayer(Player player) => impl.configureNativePlayer(player);

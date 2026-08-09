@@ -1,71 +1,56 @@
 import 'dart:async';
-import 'dart:html' as html;
+import 'dart:js_interop';
 
-Future<String?> getUrlFromBytes(List<int> bytes) async {
-  final blob = html.Blob([bytes]);
-  return html.Url.createObjectUrlFromBlob(blob);
+import 'package:web/web.dart' as web;
+
+final Set<String> _ownedVideoUrls = <String>{};
+
+String _own(String url) {
+  _ownedVideoUrls.add(url);
+  return url;
 }
 
-/// Creates a blob URL directly from the browser's native File object.
-/// This avoids loading the entire file into Dart memory, allowing large files (>2GB).
-Future<String?> createUrlFromPlatformFile(dynamic platformFile) async {
-  // Not used in the new approach
-  return null;
-}
-
-/// Creates a blob URL from an HTML File input element's file.
-String? createUrlFromHtmlFile(dynamic file) {
-  if (file is html.File) {
-    return html.Url.createObjectUrlFromBlob(file);
-  }
-  return null;
-}
-
-/// Pick a video file using native HTML file input and return a blob URL.
-/// This avoids loading the file into memory, allowing files >2GB.
 Future<String?> pickVideoFileWeb() async {
   final completer = Completer<String?>();
+  final input = web.HTMLInputElement()
+    ..type = 'file'
+    ..accept = 'video/*';
 
-  final input = html.FileUploadInputElement()..accept = 'video/*';
+  late final JSFunction changeListener;
+  late final JSFunction abortListener;
+  late final JSFunction focusListener;
 
-  StreamSubscription<html.Event>? changeSub;
-  StreamSubscription<html.Event>? abortSub;
-  html.EventListener? focusListener;
-
-  // Complete the future at most once and tear down every listener so a stale
-  // handler can never fire against an already-completed completer (which throws
-  // "Bad state: Future already completed") or leak across invocations.
   void resolve(String? url) {
     if (completer.isCompleted) return;
-    changeSub?.cancel();
-    abortSub?.cancel();
-    if (focusListener != null) {
-      html.window.removeEventListener('focus', focusListener);
-    }
+    input.removeEventListener('change', changeListener);
+    input.removeEventListener('abort', abortListener);
+    web.window.removeEventListener('focus', focusListener);
     completer.complete(url);
   }
 
-  changeSub = input.onChange.listen((event) {
+  changeListener = ((web.Event event) {
     final files = input.files;
-    if (files != null && files.isNotEmpty) {
-      final file = files[0];
-      resolve(html.Url.createObjectUrlFromBlob(file));
+    if (files != null && files.length > 0) {
+      resolve(_own(web.URL.createObjectURL(files.item(0)!)));
     } else {
       resolve(null);
     }
-  });
+  }).toJS;
+  abortListener = ((web.Event event) => resolve(null)).toJS;
+  focusListener = ((web.Event event) {
+    Timer(const Duration(milliseconds: 300), () => resolve(null));
+  }).toJS;
 
-  // Handle cancel (user closes dialog without selecting)
-  abortSub = input.onAbort.listen((_) => resolve(null));
-
-  // Fallback: if the dialog is dismissed, the window regains focus. Give the
-  // change event a moment to arrive first, then resolve as cancelled.
-  focusListener = (event) {
-    Future.delayed(const Duration(milliseconds: 300), () => resolve(null));
-  };
-  html.window.addEventListener('focus', focusListener);
-
+  input.addEventListener('change', changeListener);
+  input.addEventListener('abort', abortListener);
+  web.window.addEventListener('focus', focusListener);
   input.click();
-
   return completer.future;
 }
+
+void releaseVideoUrl(String? url) {
+  if (url == null || !_ownedVideoUrls.remove(url)) return;
+  web.URL.revokeObjectURL(url);
+}
+
+bool isOwnedVideoUrl(String url) => _ownedVideoUrls.contains(url);

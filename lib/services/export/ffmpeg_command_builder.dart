@@ -78,6 +78,7 @@ class FfmpegCommandBuilder {
         ':box=1:boxcolor=black@0.5:boxborderw=12'
         ':x=$x:y=$y';
   }
+
   /// Format a [Duration] as HH:MM:SS.mmm for FFmpeg's -ss / -to flags.
   static String _formatTimestamp(Duration d) {
     final hours = d.inHours;
@@ -132,7 +133,9 @@ class FfmpegCommandBuilder {
 
     // Scale to uniform output size so all clips can be concatenated with -c copy
     if (outputWidth != null && outputHeight != null) {
-      filters.add('scale=$outputWidth:$outputHeight:force_original_aspect_ratio=decrease');
+      filters.add(
+        'scale=$outputWidth:$outputHeight:force_original_aspect_ratio=decrease',
+      );
       filters.add('pad=$outputWidth:$outputHeight:(ow-iw)/2:(oh-ih)/2');
       filters.add('setsar=1');
     }
@@ -162,14 +165,20 @@ class FfmpegCommandBuilder {
 
     return [
       '-y',
-      '-ss', _formatTimestamp(startTime),
-      '-to', _formatTimestamp(endTime),
-      '-i', inputPath,
+      '-ss',
+      _formatTimestamp(startTime),
+      '-to',
+      _formatTimestamp(endTime),
+      '-i',
+      inputPath,
       if (filters.isNotEmpty) ...['-vf', filters.join(',')],
       ..._encoderArgs(encoder),
-      '-c:a', 'aac',
-      '-b:a', '192k',
-      '-movflags', '+faststart',
+      '-c:a',
+      'aac',
+      '-b:a',
+      '192k',
+      '-movflags',
+      '+faststart',
       outputPath,
     ];
   }
@@ -211,7 +220,9 @@ class FfmpegCommandBuilder {
 
     // Scale to uniform output size
     if (outputWidth != null && outputHeight != null) {
-      vFilters.add('scale=$outputWidth:$outputHeight:force_original_aspect_ratio=decrease');
+      vFilters.add(
+        'scale=$outputWidth:$outputHeight:force_original_aspect_ratio=decrease',
+      );
       vFilters.add('pad=$outputWidth:$outputHeight:(ow-iw)/2:(oh-ih)/2');
       vFilters.add('setsar=1');
     }
@@ -255,16 +266,23 @@ class FfmpegCommandBuilder {
 
     return [
       '-y',
-      '-ss', _formatTimestamp(startTime),
-      '-to', _formatTimestamp(endTime),
-      '-i', inputPath,
-      '-vf', vFilters.join(','),
+      '-ss',
+      _formatTimestamp(startTime),
+      '-to',
+      _formatTimestamp(endTime),
+      '-i',
+      inputPath,
+      '-vf',
+      vFilters.join(','),
       if (!dropAudio) ...['-af', aFilters.join(',')],
       if (dropAudio) ...['-an'],
       ..._encoderArgs(encoder),
-      '-c:a', 'aac',
-      '-b:a', '192k',
-      '-movflags', '+faststart',
+      '-c:a',
+      'aac',
+      '-b:a',
+      '192k',
+      '-movflags',
+      '+faststart',
       outputPath,
     ];
   }
@@ -289,11 +307,16 @@ class FfmpegCommandBuilder {
   }) {
     return [
       '-y',
-      '-f', 'concat',
-      '-safe', '0',
-      '-i', concatFilePath,
-      '-c', 'copy',
-      '-movflags', '+faststart',
+      '-f',
+      'concat',
+      '-safe',
+      '0',
+      '-i',
+      concatFilePath,
+      '-c',
+      'copy',
+      '-movflags',
+      '+faststart',
       outputPath,
     ];
   }
@@ -301,10 +324,14 @@ class FfmpegCommandBuilder {
   /// Build arguments to probe video dimensions using ffprobe.
   static List<String> buildProbeArgs(String inputPath) {
     return [
-      '-v', 'error',
-      '-select_streams', 'v:0',
-      '-show_entries', 'stream=width,height',
-      '-of', 'csv=p=0',
+      '-v',
+      'error',
+      '-select_streams',
+      'v:0',
+      '-show_entries',
+      'stream=width,height',
+      '-of',
+      'csv=p=0',
       inputPath,
     ];
   }

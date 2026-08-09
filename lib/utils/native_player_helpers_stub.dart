@@ -4,6 +4,9 @@ void nativeMutePlayer(Player player) {
   // No-op on web
 }
 
-Future<void> nativeResyncAfterFF(Player player, bool Function() isStillActive) async {
+Future<void> nativeResyncAfterFF(
+  Player player,
+  bool Function() isStillActive,
+) async {
   // No-op on web
 }

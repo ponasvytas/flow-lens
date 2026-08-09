@@ -5,6 +5,8 @@ import 'export_models.dart';
 import 'export_service.dart';
 import 'ffmpeg_command_builder.dart';
 import 'crop_calculator.dart';
+import 'export_diagnostics.dart';
+import '../../utils/app_log.dart';
 
 class ExportServiceImpl implements ExportService {
   Process? _activeProcess;
@@ -57,6 +59,7 @@ class ExportServiceImpl implements ExportService {
   @override
   Stream<ExportProgress> export(ExportJob job) {
     final controller = StreamController<ExportProgress>();
+    controller.onCancel = cancel;
     _runExport(job, controller);
     return controller.stream;
   }
@@ -68,49 +71,58 @@ class ExportServiceImpl implements ExportService {
     _cancelled = false;
     final tempDir = await Directory.systemTemp.createTemp('flowlens_export_');
     final tempClipPaths = <String>[];
-    final logBuffer = <String>[];
+    final logBuffer = BoundedLineBuffer();
+    final dispatcher = ExportProgressDispatcher((progress) {
+      if (!ctrl.isClosed) ctrl.add(progress);
+    });
 
     void log(String line) {
       logBuffer.add(line);
-      // Keep last 200 lines to avoid unbounded growth
-      if (logBuffer.length > 200) logBuffer.removeAt(0);
     }
 
     void emit(ExportProgress p) {
-      if (!ctrl.isClosed) ctrl.add(p.copyWith(logLines: List.of(logBuffer)));
+      dispatcher.emit(p.copyWith(logLines: logBuffer.lines));
     }
 
     try {
       // --- Step 0: Detect best encoder ---
-      emit(const ExportProgress(
-        status: ExportStatus.preparing,
-        message: 'Detecting hardware encoder…',
-      ));
+      emit(
+        const ExportProgress(
+          status: ExportStatus.preparing,
+          message: 'Detecting hardware encoder…',
+        ),
+      );
 
       _detectedEncoder = await _detectEncoder();
       log('Encoder: $_detectedEncoder');
 
-      emit(ExportProgress(
-        status: ExportStatus.preparing,
-        message: _detectedEncoder == 'h264_nvenc'
-            ? 'Using NVIDIA NVENC hardware encoder'
-            : 'Using software encoder (libx264)',
-      ));
+      emit(
+        ExportProgress(
+          status: ExportStatus.preparing,
+          message: _detectedEncoder == 'h264_nvenc'
+              ? 'Using NVIDIA NVENC hardware encoder'
+              : 'Using software encoder (libx264)',
+        ),
+      );
 
       // --- Step 1: Probe video dimensions ---
-      emit(const ExportProgress(
-        status: ExportStatus.preparing,
-        message: 'Probing video dimensions…',
-      ));
+      emit(
+        const ExportProgress(
+          status: ExportStatus.preparing,
+          message: 'Probing video dimensions…',
+        ),
+      );
 
       final videoDimensions = await _probeVideoDimensions(job.sourceVideoPath);
       if (videoDimensions == null) {
-        emit(const ExportProgress(
-          status: ExportStatus.failed,
-          errorMessage: 'Could not determine video dimensions. '
-              'Is ffprobe available on your PATH?',
-        ));
-        ctrl.close();
+        emit(
+          const ExportProgress(
+            status: ExportStatus.failed,
+            errorMessage:
+                'Could not determine video dimensions. '
+                'Is ffprobe available on your PATH?',
+          ),
+        );
         return;
       }
       final (videoWidth, videoHeight) = videoDimensions;
@@ -132,11 +144,12 @@ class ExportServiceImpl implements ExportService {
 
       for (var i = 0; i < job.clips.length; i++) {
         if (_cancelled) {
-          emit(const ExportProgress(
-            status: ExportStatus.cancelled,
-            message: 'Export cancelled.',
-          ));
-          ctrl.close();
+          emit(
+            const ExportProgress(
+              status: ExportStatus.cancelled,
+              message: 'Export cancelled.',
+            ),
+          );
           return;
         }
 
@@ -144,10 +157,14 @@ class ExportServiceImpl implements ExportService {
         final clipDurationMs = clip.duration.inMilliseconds;
 
         // Calculate crop rect from the event's viewTransform
-        final cropRect = clip.cropRegion ??
+        final cropRect =
+            clip.cropRegion ??
             (clip.event.viewTransform != null
                 ? CropCalculator.transformToCropRect(
-                    clip.event.viewTransform!, videoWidth, videoHeight)
+                    clip.event.viewTransform!,
+                    videoWidth,
+                    videoHeight,
+                  )
                 : null);
 
         // --- Normal-speed clip ---
@@ -158,14 +175,16 @@ class ExportServiceImpl implements ExportService {
         final baseProgress = segmentIndex / totalSegments;
         final segmentWeight = 1.0 / totalSegments;
 
-        emit(ExportProgress(
-          status: ExportStatus.extractingClips,
-          currentClipIndex: i,
-          totalClips: job.clips.length,
-          overallProgress: baseProgress,
-          message:
-              'Extracting clip ${i + 1}/${job.clips.length}: ${clip.event.label}',
-        ));
+        emit(
+          ExportProgress(
+            status: ExportStatus.extractingClips,
+            currentClipIndex: i,
+            totalClips: job.clips.length,
+            overallProgress: baseProgress,
+            message:
+                'Extracting clip ${i + 1}/${job.clips.length}: ${clip.event.label}',
+          ),
+        );
 
         final normalArgs = FfmpegCommandBuilder.buildClipArgs(
           inputPath: job.sourceVideoPath,
@@ -189,23 +208,27 @@ class ExportServiceImpl implements ExportService {
           clipDurationMs: clipDurationMs,
           onLog: log,
           onProgress: (fraction, detail) {
-            emit(ExportProgress(
-              status: ExportStatus.extractingClips,
-              currentClipIndex: i,
-              totalClips: job.clips.length,
-              overallProgress: baseProgress + fraction * segmentWeight,
-              message:
-                  'Clip ${i + 1}/${job.clips.length}: ${clip.event.label} — '
-                  '${(fraction * 100).toInt()}% ($detail)',
-            ));
+            emit(
+              ExportProgress(
+                status: ExportStatus.extractingClips,
+                currentClipIndex: i,
+                totalClips: job.clips.length,
+                overallProgress: baseProgress + fraction * segmentWeight,
+                message:
+                    'Clip ${i + 1}/${job.clips.length}: ${clip.event.label} — '
+                    '${(fraction * 100).toInt()}% ($detail)',
+              ),
+            );
           },
         );
         if (!normalOk) {
-          emit(ExportProgress(
-            status: ExportStatus.failed,
-            errorMessage: 'Failed to extract clip ${i + 1} (${clip.event.label}).',
-          ));
-          ctrl.close();
+          emit(
+            ExportProgress(
+              status: ExportStatus.failed,
+              errorMessage:
+                  'Failed to extract clip ${i + 1} (${clip.event.label}).',
+            ),
+          );
           return;
         }
         segmentIndex++;
@@ -213,11 +236,12 @@ class ExportServiceImpl implements ExportService {
         // --- Slow-motion replay ---
         if (clip.appendSlowReplay) {
           if (_cancelled) {
-            emit(const ExportProgress(
-              status: ExportStatus.cancelled,
-              message: 'Export cancelled.',
-            ));
-            ctrl.close();
+            emit(
+              const ExportProgress(
+                status: ExportStatus.cancelled,
+                message: 'Export cancelled.',
+              ),
+            );
             return;
           }
 
@@ -231,14 +255,16 @@ class ExportServiceImpl implements ExportService {
           final slowDurationMs =
               (slowSourceDurationMs / job.config.slowReplaySpeed).round();
 
-          emit(ExportProgress(
-            status: ExportStatus.extractingClips,
-            currentClipIndex: i,
-            totalClips: job.clips.length,
-            overallProgress: slowBaseProgress,
-            message:
-                'Creating slow-mo replay for clip ${i + 1}: ${clip.event.label}',
-          ));
+          emit(
+            ExportProgress(
+              status: ExportStatus.extractingClips,
+              currentClipIndex: i,
+              totalClips: job.clips.length,
+              overallProgress: slowBaseProgress,
+              message:
+                  'Creating slow-mo replay for clip ${i + 1}: ${clip.event.label}',
+            ),
+          );
 
           final slowArgs = FfmpegCommandBuilder.buildSlowMotionClipArgs(
             inputPath: job.sourceVideoPath,
@@ -264,24 +290,27 @@ class ExportServiceImpl implements ExportService {
             clipDurationMs: slowDurationMs,
             onLog: log,
             onProgress: (fraction, detail) {
-              emit(ExportProgress(
-                status: ExportStatus.extractingClips,
-                currentClipIndex: i,
-                totalClips: job.clips.length,
-                overallProgress: slowBaseProgress + fraction * segmentWeight,
-                message:
-                    'Slow-mo ${i + 1}/${job.clips.length}: ${clip.event.label} — '
-                    '${(fraction * 100).toInt()}% ($detail)',
-              ));
+              emit(
+                ExportProgress(
+                  status: ExportStatus.extractingClips,
+                  currentClipIndex: i,
+                  totalClips: job.clips.length,
+                  overallProgress: slowBaseProgress + fraction * segmentWeight,
+                  message:
+                      'Slow-mo ${i + 1}/${job.clips.length}: ${clip.event.label} — '
+                      '${(fraction * 100).toInt()}% ($detail)',
+                ),
+              );
             },
           );
           if (!slowOk) {
-            emit(ExportProgress(
-              status: ExportStatus.failed,
-              errorMessage:
-                  'Failed to create slow-mo for clip ${i + 1} (${clip.event.label}).',
-            ));
-            ctrl.close();
+            emit(
+              ExportProgress(
+                status: ExportStatus.failed,
+                errorMessage:
+                    'Failed to create slow-mo for clip ${i + 1} (${clip.event.label}).',
+              ),
+            );
             return;
           }
           segmentIndex++;
@@ -289,28 +318,33 @@ class ExportServiceImpl implements ExportService {
       }
 
       if (_cancelled) {
-        emit(const ExportProgress(
-          status: ExportStatus.cancelled,
-          message: 'Export cancelled.',
-        ));
-        ctrl.close();
+        emit(
+          const ExportProgress(
+            status: ExportStatus.cancelled,
+            message: 'Export cancelled.',
+          ),
+        );
         return;
       }
 
       // --- Step 3: Concatenate all segments ---
       if (tempClipPaths.length == 1) {
-        emit(const ExportProgress(
-          status: ExportStatus.concatenating,
-          overallProgress: 0.95,
-          message: 'Finalizing…',
-        ));
+        emit(
+          const ExportProgress(
+            status: ExportStatus.concatenating,
+            overallProgress: 0.95,
+            message: 'Finalizing…',
+          ),
+        );
         await File(tempClipPaths.first).copy(job.outputPath);
       } else {
-        emit(ExportProgress(
-          status: ExportStatus.concatenating,
-          overallProgress: 0.9,
-          message: 'Concatenating ${tempClipPaths.length} segments…',
-        ));
+        emit(
+          ExportProgress(
+            status: ExportStatus.concatenating,
+            overallProgress: 0.9,
+            message: 'Concatenating ${tempClipPaths.length} segments…',
+          ),
+        );
 
         // All clips are encoded to the same resolution, so concat demuxer
         // with -c copy is safe and near-instant.
@@ -327,25 +361,29 @@ class ExportServiceImpl implements ExportService {
 
         final concatOk = await _runFfmpeg(concatArgs, onLog: log);
         if (!concatOk) {
-          emit(const ExportProgress(
-            status: ExportStatus.failed,
-            errorMessage: 'Failed to concatenate clips.',
-          ));
-          ctrl.close();
+          emit(
+            const ExportProgress(
+              status: ExportStatus.failed,
+              errorMessage: 'Failed to concatenate clips.',
+            ),
+          );
           return;
         }
       }
 
-      emit(ExportProgress(
-        status: ExportStatus.done,
-        overallProgress: 1.0,
-        message: 'Export complete: ${job.outputPath}',
-      ));
+      emit(
+        ExportProgress(
+          status: ExportStatus.done,
+          overallProgress: 1.0,
+          message: 'Export complete: ${job.outputPath}',
+        ),
+      );
     } finally {
       try {
         await tempDir.delete(recursive: true);
       } catch (_) {}
-      ctrl.close();
+      dispatcher.close();
+      if (!ctrl.isClosed) await ctrl.close();
     }
   }
 
@@ -354,8 +392,15 @@ class ExportServiceImpl implements ExportService {
   Future<String> _detectEncoder() async {
     try {
       final result = await Process.run('ffmpeg', [
-        '-f', 'lavfi', '-i', 'nullsrc=s=256x256:d=0.1',
-        '-c:v', 'h264_nvenc', '-f', 'null', '-',
+        '-f',
+        'lavfi',
+        '-i',
+        'nullsrc=s=256x256:d=0.1',
+        '-c:v',
+        'h264_nvenc',
+        '-f',
+        'null',
+        '-',
       ]);
       if (result.exitCode == 0) return 'h264_nvenc';
     } catch (_) {}
@@ -379,7 +424,7 @@ class ExportServiceImpl implements ExportService {
 
       return (width, height);
     } catch (e) {
-      print('ffprobe error: $e');
+      AppLog.debug('ffprobe error: $e');
       return null;
     }
   }
@@ -407,42 +452,47 @@ class ExportServiceImpl implements ExportService {
       _activeProcess!.stdout.transform(utf8.decoder).listen((_) {});
 
       // Always drain stderr — parse for progress, log for debugging
-      final stderrLines = <String>[];
+      final stderrLines = BoundedLineBuffer();
       _activeProcess!.stderr
           .transform(utf8.decoder)
           .transform(const LineSplitter())
           .listen((line) {
-        stderrLines.add(line);
-        logLine(line);
+            stderrLines.add(line);
+            logLine(line);
 
-        if (onProgress != null) {
-          final timeMatch = RegExp(r'time=(\d+):(\d+):(\d+)\.(\d+)').firstMatch(line);
-          if (timeMatch != null) {
-            final h = int.parse(timeMatch.group(1)!);
-            final m = int.parse(timeMatch.group(2)!);
-            final s = int.parse(timeMatch.group(3)!);
-            final cs = int.parse(timeMatch.group(4)!);
-            final currentMs = ((h * 3600 + m * 60 + s) * 1000 + cs * 10);
+            if (onProgress != null) {
+              final timeMatch = RegExp(
+                r'time=(\d+):(\d+):(\d+)\.(\d+)',
+              ).firstMatch(line);
+              if (timeMatch != null) {
+                final h = int.parse(timeMatch.group(1)!);
+                final m = int.parse(timeMatch.group(2)!);
+                final s = int.parse(timeMatch.group(3)!);
+                final cs = int.parse(timeMatch.group(4)!);
+                final currentMs = ((h * 3600 + m * 60 + s) * 1000 + cs * 10);
 
-            final fraction = clipDurationMs != null && clipDurationMs > 0
-                ? (currentMs / clipDurationMs).clamp(0.0, 1.0)
-                : 0.0;
+                final fraction = clipDurationMs != null && clipDurationMs > 0
+                    ? (currentMs / clipDurationMs).clamp(0.0, 1.0)
+                    : 0.0;
 
-            final speedMatch = RegExp(r'speed=\s*([\d.]+)x').firstMatch(line);
-            final speed = speedMatch?.group(1) ?? '?';
+                final speedMatch = RegExp(
+                  r'speed=\s*([\d.]+)x',
+                ).firstMatch(line);
+                final speed = speedMatch?.group(1) ?? '?';
 
-            onProgress(fraction, 'speed: ${speed}x');
-          }
-        }
-      });
+                onProgress(fraction, 'speed: ${speed}x');
+              }
+            }
+          });
 
       final exitCode = await _activeProcess!.exitCode;
       _activeProcess = null;
 
       if (exitCode != 0) {
-        final tail = stderrLines.length > 10
-            ? stderrLines.sublist(stderrLines.length - 10)
-            : stderrLines;
+        final allLines = stderrLines.lines;
+        final tail = allLines.length > 10
+            ? allLines.sublist(allLines.length - 10)
+            : allLines;
         logLine('FAILED (exit $exitCode). Last output:');
         for (final line in tail) {
           logLine('  $line');
@@ -452,10 +502,9 @@ class ExportServiceImpl implements ExportService {
       logLine('OK (exit 0)');
       return true;
     } catch (e) {
-      (onLog ?? print)('Exception: $e');
+      (onLog ?? AppLog.debug)('Exception: $e');
       _activeProcess = null;
       return false;
     }
   }
-
 }

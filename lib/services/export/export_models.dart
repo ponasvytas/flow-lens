@@ -121,20 +121,20 @@ class ExportConfig {
 
   /// Serialize to a JSON-compatible map for persistence.
   Map<String, dynamic> toJson() => {
-        'easeInSeconds': easeInSeconds,
-        'easeOutSeconds': easeOutSeconds,
-        'includeSlowReplay': includeSlowReplay,
-        'slowReplaySpeed': slowReplaySpeed,
-        'slowMoEaseInSeconds': slowMoEaseInSeconds,
-        'slowMoEaseOutSeconds': slowMoEaseOutSeconds,
-        'muteSlowReplay': muteSlowReplay,
-        'fadeDurationSeconds': fadeDurationSeconds,
-        'outputFormat': outputFormat,
-        'includeLabels': includeLabels,
-        'labelImpactStyle': labelImpactStyle.name,
-        'labelPosition': labelPosition.name,
-        'labelSize': labelSize.name,
-      };
+    'easeInSeconds': easeInSeconds,
+    'easeOutSeconds': easeOutSeconds,
+    'includeSlowReplay': includeSlowReplay,
+    'slowReplaySpeed': slowReplaySpeed,
+    'slowMoEaseInSeconds': slowMoEaseInSeconds,
+    'slowMoEaseOutSeconds': slowMoEaseOutSeconds,
+    'muteSlowReplay': muteSlowReplay,
+    'fadeDurationSeconds': fadeDurationSeconds,
+    'outputFormat': outputFormat,
+    'includeLabels': includeLabels,
+    'labelImpactStyle': labelImpactStyle.name,
+    'labelPosition': labelPosition.name,
+    'labelSize': labelSize.name,
+  };
 
   /// Restore from a previously serialized map, falling back to defaults for
   /// any missing or invalid fields.
@@ -150,28 +150,42 @@ class ExportConfig {
     return ExportConfig(
       easeInSeconds:
           (json['easeInSeconds'] as num?)?.toDouble() ?? defaults.easeInSeconds,
-      easeOutSeconds: (json['easeOutSeconds'] as num?)?.toDouble() ??
+      easeOutSeconds:
+          (json['easeOutSeconds'] as num?)?.toDouble() ??
           defaults.easeOutSeconds,
       includeSlowReplay:
           json['includeSlowReplay'] as bool? ?? defaults.includeSlowReplay,
-      slowReplaySpeed: (json['slowReplaySpeed'] as num?)?.toDouble() ??
+      slowReplaySpeed:
+          (json['slowReplaySpeed'] as num?)?.toDouble() ??
           defaults.slowReplaySpeed,
-      slowMoEaseInSeconds: (json['slowMoEaseInSeconds'] as num?)?.toDouble() ??
+      slowMoEaseInSeconds:
+          (json['slowMoEaseInSeconds'] as num?)?.toDouble() ??
           defaults.slowMoEaseInSeconds,
-      slowMoEaseOutSeconds: (json['slowMoEaseOutSeconds'] as num?)?.toDouble() ??
+      slowMoEaseOutSeconds:
+          (json['slowMoEaseOutSeconds'] as num?)?.toDouble() ??
           defaults.slowMoEaseOutSeconds,
       muteSlowReplay:
           json['muteSlowReplay'] as bool? ?? defaults.muteSlowReplay,
-      fadeDurationSeconds: (json['fadeDurationSeconds'] as num?)?.toDouble() ??
+      fadeDurationSeconds:
+          (json['fadeDurationSeconds'] as num?)?.toDouble() ??
           defaults.fadeDurationSeconds,
       outputFormat: json['outputFormat'] as String? ?? defaults.outputFormat,
       includeLabels: json['includeLabels'] as bool? ?? defaults.includeLabels,
-      labelImpactStyle: enumFromName(LabelImpactStyle.values,
-          json['labelImpactStyle'], defaults.labelImpactStyle),
+      labelImpactStyle: enumFromName(
+        LabelImpactStyle.values,
+        json['labelImpactStyle'],
+        defaults.labelImpactStyle,
+      ),
       labelPosition: enumFromName(
-          LabelPosition.values, json['labelPosition'], defaults.labelPosition),
+        LabelPosition.values,
+        json['labelPosition'],
+        defaults.labelPosition,
+      ),
       labelSize: enumFromName(
-          LabelSize.values, json['labelSize'], defaults.labelSize),
+        LabelSize.values,
+        json['labelSize'],
+        defaults.labelSize,
+      ),
     );
   }
 }

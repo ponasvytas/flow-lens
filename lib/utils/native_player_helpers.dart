@@ -4,8 +4,9 @@ import 'native_player_helpers_stub.dart'
 
 import 'package:media_kit/media_kit.dart';
 
-void nativeMutePlayer(Player player) =>
-    impl.nativeMutePlayer(player);
+void nativeMutePlayer(Player player) => impl.nativeMutePlayer(player);
 
-Future<void> nativeResyncAfterFF(Player player, bool Function() isStillActive) =>
-    impl.nativeResyncAfterFF(player, isStillActive);
+Future<void> nativeResyncAfterFF(
+  Player player,
+  bool Function() isStillActive,
+) => impl.nativeResyncAfterFF(player, isStillActive);

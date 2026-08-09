@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:media_kit/media_kit.dart';
+import 'app_log.dart';
 
 void nativeMutePlayer(Player player) {
   final np = player.platform as NativePlayer;
@@ -8,7 +9,10 @@ void nativeMutePlayer(Player player) {
   np.setProperty('video-sync', 'desync');
 }
 
-Future<void> nativeResyncAfterFF(Player player, bool Function() isStillActive) async {
+Future<void> nativeResyncAfterFF(
+  Player player,
+  bool Function() isStillActive,
+) async {
   try {
     final np = player.platform as NativePlayer;
     // Restore default A/V sync
@@ -19,8 +23,7 @@ Future<void> nativeResyncAfterFF(Player player, bool Function() isStillActive) a
       np.setProperty('mute', 'no');
     }
   } catch (e) {
-    print('resyncAfterFF error: $e');
+    AppLog.debug('resyncAfterFF error: $e');
     (player.platform as NativePlayer).setProperty('mute', 'no');
   }
 }
-

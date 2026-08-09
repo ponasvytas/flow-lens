@@ -73,6 +73,7 @@ class _ExportDialogState extends State<ExportDialog> {
 
   @override
   void dispose() {
+    _exportService?.cancel();
     _exportSub?.cancel();
     _logScrollController.dispose();
     // Persist the latest parameters so they're remembered next time.
@@ -93,9 +94,11 @@ class _ExportDialogState extends State<ExportDialog> {
 
     return sorted.map((event) {
       final easeIn = Duration(
-          milliseconds: (_config.easeInSeconds * 1000).round());
+        milliseconds: (_config.easeInSeconds * 1000).round(),
+      );
       final easeOut = Duration(
-          milliseconds: (_config.easeOutSeconds * 1000).round());
+        milliseconds: (_config.easeOutSeconds * 1000).round(),
+      );
 
       var start = event.timestamp - easeIn;
       if (start < Duration.zero) start = Duration.zero;
@@ -103,14 +106,16 @@ class _ExportDialogState extends State<ExportDialog> {
       var end = event.timestamp + easeOut;
       if (end > widget.videoDuration) end = widget.videoDuration;
 
-      final appendSlow = _config.includeSlowReplay ||
-          (_perEventSlowReplay[event.id] ?? false);
+      final appendSlow =
+          _config.includeSlowReplay || (_perEventSlowReplay[event.id] ?? false);
 
       // Slow-motion replays use their own (typically tighter) window.
       final slowEaseIn = Duration(
-          milliseconds: (_config.slowMoEaseInSeconds * 1000).round());
+        milliseconds: (_config.slowMoEaseInSeconds * 1000).round(),
+      );
       final slowEaseOut = Duration(
-          milliseconds: (_config.slowMoEaseOutSeconds * 1000).round());
+        milliseconds: (_config.slowMoEaseOutSeconds * 1000).round(),
+      );
 
       var slowStart = event.timestamp - slowEaseIn;
       if (slowStart < Duration.zero) slowStart = Duration.zero;
@@ -264,24 +269,26 @@ class _ExportDialogState extends State<ExportDialog> {
     );
 
     _exportService = ExportService();
-    _exportSub = _exportService!.export(job).listen(
-      (progress) {
-        if (mounted) setState(() => _progress = progress);
-      },
-      onDone: () {
-        // done
-      },
-      onError: (e) {
-        if (mounted) {
-          setState(() {
-            _progress = ExportProgress(
-              status: ExportStatus.failed,
-              errorMessage: e.toString(),
-            );
-          });
-        }
-      },
-    );
+    _exportSub = _exportService!
+        .export(job)
+        .listen(
+          (progress) {
+            if (mounted) setState(() => _progress = progress);
+          },
+          onDone: () {
+            // done
+          },
+          onError: (e) {
+            if (mounted) {
+              setState(() {
+                _progress = ExportProgress(
+                  status: ExportStatus.failed,
+                  errorMessage: e.toString(),
+                );
+              });
+            }
+          },
+        );
   }
 
   void _cancelExport() {
@@ -294,425 +301,484 @@ class _ExportDialogState extends State<ExportDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final isExporting = _progress != null &&
+    final isExporting =
+        _progress != null &&
         _progress!.status != ExportStatus.done &&
         _progress!.status != ExportStatus.failed &&
         _progress!.status != ExportStatus.cancelled;
 
-    return Dialog(
-      child: SizedBox(
-        width: 560,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Header
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: const BoxDecoration(
-                color: Color(0xFF753b8f),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(4)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.movie_creation, color: Colors.white),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Export ${widget.selectedEvents.length} Event(s)',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white70),
-                    onPressed:
-                        isExporting ? null : () => Navigator.of(context).pop(),
-                  ),
-                ],
-              ),
-            ),
-
-            if (!_ffmpegAvailable && !kIsWeb)
+    return PopScope(
+      canPop: !isExporting,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && isExporting) _cancelExport();
+      },
+      child: Dialog(
+        child: SizedBox(
+          width: 560,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                color: Colors.orange.shade100,
-                child: const Row(
+                padding: const EdgeInsets.all(16),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF753b8f),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(4)),
+                ),
+                child: Row(
                   children: [
-                    Icon(Icons.warning_amber, color: Colors.orange),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'FFmpeg not found on your system PATH. '
-                        'Install FFmpeg to enable video export.',
-                        style: TextStyle(fontSize: 13),
+                    const Icon(Icons.movie_creation, color: Colors.white),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Export ${widget.selectedEvents.length} Event(s)',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white70),
+                      onPressed: isExporting
+                          ? null
+                          : () => Navigator.of(context).pop(),
                     ),
                   ],
                 ),
               ),
 
-            // Settings body
-            if (_progress == null) ...[
-              Flexible(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              if (!_ffmpegAvailable && !kIsWeb)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  color: Colors.orange.shade100,
+                  child: const Row(
                     children: [
-                      // Ease In / Out
-                      const Text('Clip Timing',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 15)),
-                      const SizedBox(height: 8),
-                      _buildSlider(
-                        label: 'Ease-in (before event)',
-                        value: _config.easeInSeconds,
-                        min: 0,
-                        max: 10,
-                        suffix: 's',
-                        onChanged: (v) => setState(() {
-                          _config = _config.copyWith(
-                              easeInSeconds: double.parse(v.toStringAsFixed(1)));
-                        }),
-                      ),
-                      _buildSlider(
-                        label: 'Ease-out (after event)',
-                        value: _config.easeOutSeconds,
-                        min: 0,
-                        max: 10,
-                        suffix: 's',
-                        onChanged: (v) => setState(() {
-                          _config = _config.copyWith(
-                              easeOutSeconds:
-                                  double.parse(v.toStringAsFixed(1)));
-                        }),
-                      ),
-
-                      const Divider(height: 24),
-
-                      // Slow Replay
-                      const Text('Slow-Motion Replay',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 15)),
-                      const SizedBox(height: 8),
-                      SwitchListTile(
-                        title: const Text('Enable slow-mo for all clips'),
-                        subtitle: const Text(
-                            'Append a slow-motion replay after each clip'),
-                        value: _config.includeSlowReplay,
-                        contentPadding: EdgeInsets.zero,
-                        onChanged: (v) => setState(() {
-                          _config =
-                              _config.copyWith(includeSlowReplay: v);
-                        }),
-                      ),
-
-                      if (_config.includeSlowReplay ||
-                          _perEventSlowReplay.values.any((v) => v)) ...[
-                        _buildSlider(
-                          label: 'Replay speed',
-                          value: _config.slowReplaySpeed,
-                          min: 0.1,
-                          max: 0.75,
-                          suffix: 'x',
-                          divisions: 13,
-                          onChanged: (v) => setState(() {
-                            _config = _config.copyWith(
-                                slowReplaySpeed:
-                                    double.parse(v.toStringAsFixed(2)));
-                          }),
+                      Icon(Icons.warning_amber, color: Colors.orange),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'FFmpeg not found on your system PATH. '
+                          'Install FFmpeg to enable video export.',
+                          style: TextStyle(fontSize: 13),
                         ),
-                        _buildSlider(
-                          label: 'Replay lead-in (before event)',
-                          value: _config.slowMoEaseInSeconds,
-                          min: 0,
-                          max: 10,
-                          suffix: 's',
-                          onChanged: (v) => setState(() {
-                            _config = _config.copyWith(
-                                slowMoEaseInSeconds:
-                                    double.parse(v.toStringAsFixed(1)));
-                          }),
-                        ),
-                        _buildSlider(
-                          label: 'Replay lead-out (after event)',
-                          value: _config.slowMoEaseOutSeconds,
-                          min: 0,
-                          max: 10,
-                          suffix: 's',
-                          onChanged: (v) => setState(() {
-                            _config = _config.copyWith(
-                                slowMoEaseOutSeconds:
-                                    double.parse(v.toStringAsFixed(1)));
-                          }),
-                        ),
-                        SwitchListTile(
-                          title: const Text('Mute slow-mo replays'),
-                          subtitle: const Text(
-                              'Silence audio on slowed-down replay clips'),
-                          value: _config.muteSlowReplay,
-                          contentPadding: EdgeInsets.zero,
-                          onChanged: (v) => setState(() {
-                            _config = _config.copyWith(muteSlowReplay: v);
-                          }),
-                        ),
-                      ],
-
-                      if (!_config.includeSlowReplay) ...[
-                        const SizedBox(height: 8),
-                        const Text('Or enable per-event:',
-                            style: TextStyle(
-                                fontSize: 13, color: Colors.grey)),
-                        const SizedBox(height: 4),
-                        ...widget.selectedEvents.map((event) {
-                          return CheckboxListTile(
-                            title: Text(
-                              '${event.label} @ ${_formatDuration(event.timestamp)}',
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                            subtitle: Text(
-                              event.detail != null
-                                  ? '${event.detail!}  •  ${_gradeLabel(event.grade)}'
-                                  : 'Impact: ${_gradeLabel(event.grade)}',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                            value: _perEventSlowReplay[event.id] ?? false,
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            onChanged: (v) => setState(() {
-                              _perEventSlowReplay[event.id] = v ?? false;
-                            }),
-                          );
-                        }),
-                      ],
-
-                      const Divider(height: 24),
-
-                      // Event Labels
-                      const Text('Event Labels',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 15)),
-                      const SizedBox(height: 8),
-                      SwitchListTile(
-                        title: const Text('Burn labels onto all clips'),
-                        subtitle: const Text(
-                            'Show "Category - Event" text on each clip'),
-                        value: _config.includeLabels,
-                        contentPadding: EdgeInsets.zero,
-                        onChanged: (v) => setState(() {
-                          _config = _config.copyWith(includeLabels: v);
-                        }),
-                      ),
-
-                      if (_config.includeLabels ||
-                          _perEventLabels.values.any((v) => v)) ...[
-                        const SizedBox(height: 4),
-                        // Impact encoding
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            const SizedBox(
-                              width: 90,
-                              child: Text('Impact',
-                                  style: TextStyle(fontSize: 13)),
-                            ),
-                            Expanded(
-                              child: SegmentedButton<LabelImpactStyle>(
-                                showSelectedIcon: false,
-                                style: const ButtonStyle(
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                                segments: const [
-                                  ButtonSegment(
-                                      value: LabelImpactStyle.ascii,
-                                      label: Text('+/-')),
-                                  ButtonSegment(
-                                      value: LabelImpactStyle.word,
-                                      label: Text('Word')),
-                                  ButtonSegment(
-                                      value: LabelImpactStyle.color,
-                                      label: Text('Color')),
-                                  ButtonSegment(
-                                      value: LabelImpactStyle.none,
-                                      label: Text('None')),
-                                ],
-                                selected: {_config.labelImpactStyle},
-                                onSelectionChanged: (v) => setState(() {
-                                  _config = _config.copyWith(
-                                      labelImpactStyle: v.first);
-                                }),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        // Text size
-                        Row(
-                          children: [
-                            const SizedBox(
-                              width: 90,
-                              child: Text('Text size',
-                                  style: TextStyle(fontSize: 13)),
-                            ),
-                            Expanded(
-                              child: SegmentedButton<LabelSize>(
-                                showSelectedIcon: false,
-                                style: const ButtonStyle(
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                                segments: const [
-                                  ButtonSegment(
-                                      value: LabelSize.small,
-                                      label: Text('Small')),
-                                  ButtonSegment(
-                                      value: LabelSize.medium,
-                                      label: Text('Medium')),
-                                  ButtonSegment(
-                                      value: LabelSize.large,
-                                      label: Text('Large')),
-                                ],
-                                selected: {_config.labelSize},
-                                onSelectionChanged: (v) => setState(() {
-                                  _config =
-                                      _config.copyWith(labelSize: v.first);
-                                }),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        // Placement
-                        Row(
-                          children: [
-                            const SizedBox(
-                              width: 90,
-                              child: Text('Placement',
-                                  style: TextStyle(fontSize: 13)),
-                            ),
-                            Expanded(
-                              child: DropdownButton<LabelPosition>(
-                                isExpanded: true,
-                                value: _config.labelPosition,
-                                items: LabelPosition.values
-                                    .map((p) => DropdownMenuItem(
-                                          value: p,
-                                          child: Text(_positionLabel(p),
-                                              style:
-                                                  const TextStyle(fontSize: 13)),
-                                        ))
-                                    .toList(),
-                                onChanged: (v) => setState(() {
-                                  if (v != null) {
-                                    _config =
-                                        _config.copyWith(labelPosition: v);
-                                  }
-                                }),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-
-                      if (!_config.includeLabels) ...[
-                        const SizedBox(height: 8),
-                        const Text('Or enable per-event:',
-                            style: TextStyle(
-                                fontSize: 13, color: Colors.grey)),
-                        const SizedBox(height: 4),
-                        ...widget.selectedEvents.map((event) {
-                          return CheckboxListTile(
-                            title: Text(
-                              '${_buildLabelText(event)} @ ${_formatDuration(event.timestamp)}',
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                            value: _perEventLabels[event.id] ?? false,
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            onChanged: (v) => setState(() {
-                              _perEventLabels[event.id] = v ?? false;
-                            }),
-                          );
-                        }),
-                      ],
-
-                      const Divider(height: 24),
-
-                      // Transitions
-                      _buildSlider(
-                        label: 'Fade duration',
-                        value: _config.fadeDurationSeconds,
-                        min: 0,
-                        max: 2,
-                        suffix: 's',
-                        onChanged: (v) => setState(() {
-                          _config = _config.copyWith(
-                              fadeDurationSeconds:
-                                  double.parse(v.toStringAsFixed(1)));
-                        }),
-                      ),
-
-                      const SizedBox(height: 8),
-
-                      // Format
-                      Row(
-                        children: [
-                          const Text('Format: ',
-                              style: TextStyle(fontWeight: FontWeight.w500)),
-                          const SizedBox(width: 8),
-                          SegmentedButton<String>(
-                            segments: const [
-                              ButtonSegment(value: 'mp4', label: Text('MP4')),
-                              ButtonSegment(value: 'mov', label: Text('MOV')),
-                            ],
-                            selected: {_config.outputFormat},
-                            onSelectionChanged: (v) => setState(() {
-                              _config =
-                                  _config.copyWith(outputFormat: v.first);
-                            }),
-                          ),
-                        ],
                       ),
                     ],
                   ),
                 ),
-              ),
 
-              // Action buttons
-              Container(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
+              // Settings body
+              if (_progress == null) ...[
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Ease In / Out
+                        const Text(
+                          'Clip Timing',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        _buildSlider(
+                          label: 'Ease-in (before event)',
+                          value: _config.easeInSeconds,
+                          min: 0,
+                          max: 10,
+                          suffix: 's',
+                          onChanged: (v) => setState(() {
+                            _config = _config.copyWith(
+                              easeInSeconds: double.parse(v.toStringAsFixed(1)),
+                            );
+                          }),
+                        ),
+                        _buildSlider(
+                          label: 'Ease-out (after event)',
+                          value: _config.easeOutSeconds,
+                          min: 0,
+                          max: 10,
+                          suffix: 's',
+                          onChanged: (v) => setState(() {
+                            _config = _config.copyWith(
+                              easeOutSeconds: double.parse(
+                                v.toStringAsFixed(1),
+                              ),
+                            );
+                          }),
+                        ),
+
+                        const Divider(height: 24),
+
+                        // Slow Replay
+                        const Text(
+                          'Slow-Motion Replay',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        SwitchListTile(
+                          title: const Text('Enable slow-mo for all clips'),
+                          subtitle: const Text(
+                            'Append a slow-motion replay after each clip',
+                          ),
+                          value: _config.includeSlowReplay,
+                          contentPadding: EdgeInsets.zero,
+                          onChanged: (v) => setState(() {
+                            _config = _config.copyWith(includeSlowReplay: v);
+                          }),
+                        ),
+
+                        if (_config.includeSlowReplay ||
+                            _perEventSlowReplay.values.any((v) => v)) ...[
+                          _buildSlider(
+                            label: 'Replay speed',
+                            value: _config.slowReplaySpeed,
+                            min: 0.1,
+                            max: 0.75,
+                            suffix: 'x',
+                            divisions: 13,
+                            onChanged: (v) => setState(() {
+                              _config = _config.copyWith(
+                                slowReplaySpeed: double.parse(
+                                  v.toStringAsFixed(2),
+                                ),
+                              );
+                            }),
+                          ),
+                          _buildSlider(
+                            label: 'Replay lead-in (before event)',
+                            value: _config.slowMoEaseInSeconds,
+                            min: 0,
+                            max: 10,
+                            suffix: 's',
+                            onChanged: (v) => setState(() {
+                              _config = _config.copyWith(
+                                slowMoEaseInSeconds: double.parse(
+                                  v.toStringAsFixed(1),
+                                ),
+                              );
+                            }),
+                          ),
+                          _buildSlider(
+                            label: 'Replay lead-out (after event)',
+                            value: _config.slowMoEaseOutSeconds,
+                            min: 0,
+                            max: 10,
+                            suffix: 's',
+                            onChanged: (v) => setState(() {
+                              _config = _config.copyWith(
+                                slowMoEaseOutSeconds: double.parse(
+                                  v.toStringAsFixed(1),
+                                ),
+                              );
+                            }),
+                          ),
+                          SwitchListTile(
+                            title: const Text('Mute slow-mo replays'),
+                            subtitle: const Text(
+                              'Silence audio on slowed-down replay clips',
+                            ),
+                            value: _config.muteSlowReplay,
+                            contentPadding: EdgeInsets.zero,
+                            onChanged: (v) => setState(() {
+                              _config = _config.copyWith(muteSlowReplay: v);
+                            }),
+                          ),
+                        ],
+
+                        if (!_config.includeSlowReplay) ...[
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Or enable per-event:',
+                            style: TextStyle(fontSize: 13, color: Colors.grey),
+                          ),
+                          const SizedBox(height: 4),
+                          ...widget.selectedEvents.map((event) {
+                            return CheckboxListTile(
+                              title: Text(
+                                '${event.label} @ ${_formatDuration(event.timestamp)}',
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                              subtitle: Text(
+                                event.detail != null
+                                    ? '${event.detail!}  •  ${_gradeLabel(event.grade)}'
+                                    : 'Impact: ${_gradeLabel(event.grade)}',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              value: _perEventSlowReplay[event.id] ?? false,
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              onChanged: (v) => setState(() {
+                                _perEventSlowReplay[event.id] = v ?? false;
+                              }),
+                            );
+                          }),
+                        ],
+
+                        const Divider(height: 24),
+
+                        // Event Labels
+                        const Text(
+                          'Event Labels',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        SwitchListTile(
+                          title: const Text('Burn labels onto all clips'),
+                          subtitle: const Text(
+                            'Show "Category - Event" text on each clip',
+                          ),
+                          value: _config.includeLabels,
+                          contentPadding: EdgeInsets.zero,
+                          onChanged: (v) => setState(() {
+                            _config = _config.copyWith(includeLabels: v);
+                          }),
+                        ),
+
+                        if (_config.includeLabels ||
+                            _perEventLabels.values.any((v) => v)) ...[
+                          const SizedBox(height: 4),
+                          // Impact encoding
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              const SizedBox(
+                                width: 90,
+                                child: Text(
+                                  'Impact',
+                                  style: TextStyle(fontSize: 13),
+                                ),
+                              ),
+                              Expanded(
+                                child: SegmentedButton<LabelImpactStyle>(
+                                  showSelectedIcon: false,
+                                  style: const ButtonStyle(
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                  segments: const [
+                                    ButtonSegment(
+                                      value: LabelImpactStyle.ascii,
+                                      label: Text('+/-'),
+                                    ),
+                                    ButtonSegment(
+                                      value: LabelImpactStyle.word,
+                                      label: Text('Word'),
+                                    ),
+                                    ButtonSegment(
+                                      value: LabelImpactStyle.color,
+                                      label: Text('Color'),
+                                    ),
+                                    ButtonSegment(
+                                      value: LabelImpactStyle.none,
+                                      label: Text('None'),
+                                    ),
+                                  ],
+                                  selected: {_config.labelImpactStyle},
+                                  onSelectionChanged: (v) => setState(() {
+                                    _config = _config.copyWith(
+                                      labelImpactStyle: v.first,
+                                    );
+                                  }),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          // Text size
+                          Row(
+                            children: [
+                              const SizedBox(
+                                width: 90,
+                                child: Text(
+                                  'Text size',
+                                  style: TextStyle(fontSize: 13),
+                                ),
+                              ),
+                              Expanded(
+                                child: SegmentedButton<LabelSize>(
+                                  showSelectedIcon: false,
+                                  style: const ButtonStyle(
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                  segments: const [
+                                    ButtonSegment(
+                                      value: LabelSize.small,
+                                      label: Text('Small'),
+                                    ),
+                                    ButtonSegment(
+                                      value: LabelSize.medium,
+                                      label: Text('Medium'),
+                                    ),
+                                    ButtonSegment(
+                                      value: LabelSize.large,
+                                      label: Text('Large'),
+                                    ),
+                                  ],
+                                  selected: {_config.labelSize},
+                                  onSelectionChanged: (v) => setState(() {
+                                    _config = _config.copyWith(
+                                      labelSize: v.first,
+                                    );
+                                  }),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          // Placement
+                          Row(
+                            children: [
+                              const SizedBox(
+                                width: 90,
+                                child: Text(
+                                  'Placement',
+                                  style: TextStyle(fontSize: 13),
+                                ),
+                              ),
+                              Expanded(
+                                child: DropdownButton<LabelPosition>(
+                                  isExpanded: true,
+                                  value: _config.labelPosition,
+                                  items: LabelPosition.values
+                                      .map(
+                                        (p) => DropdownMenuItem(
+                                          value: p,
+                                          child: Text(
+                                            _positionLabel(p),
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ),
+                                      )
+                                      .toList(),
+                                  onChanged: (v) => setState(() {
+                                    if (v != null) {
+                                      _config = _config.copyWith(
+                                        labelPosition: v,
+                                      );
+                                    }
+                                  }),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+
+                        if (!_config.includeLabels) ...[
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Or enable per-event:',
+                            style: TextStyle(fontSize: 13, color: Colors.grey),
+                          ),
+                          const SizedBox(height: 4),
+                          ...widget.selectedEvents.map((event) {
+                            return CheckboxListTile(
+                              title: Text(
+                                '${_buildLabelText(event)} @ ${_formatDuration(event.timestamp)}',
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                              value: _perEventLabels[event.id] ?? false,
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              onChanged: (v) => setState(() {
+                                _perEventLabels[event.id] = v ?? false;
+                              }),
+                            );
+                          }),
+                        ],
+
+                        const Divider(height: 24),
+
+                        // Transitions
+                        _buildSlider(
+                          label: 'Fade duration',
+                          value: _config.fadeDurationSeconds,
+                          min: 0,
+                          max: 2,
+                          suffix: 's',
+                          onChanged: (v) => setState(() {
+                            _config = _config.copyWith(
+                              fadeDurationSeconds: double.parse(
+                                v.toStringAsFixed(1),
+                              ),
+                            );
+                          }),
+                        ),
+
+                        const SizedBox(height: 8),
+
+                        // Format
+                        Row(
+                          children: [
+                            const Text(
+                              'Format: ',
+                              style: TextStyle(fontWeight: FontWeight.w500),
+                            ),
+                            const SizedBox(width: 8),
+                            SegmentedButton<String>(
+                              segments: const [
+                                ButtonSegment(value: 'mp4', label: Text('MP4')),
+                                ButtonSegment(value: 'mov', label: Text('MOV')),
+                              ],
+                              selected: {_config.outputFormat},
+                              onSelectionChanged: (v) => setState(() {
+                                _config = _config.copyWith(
+                                  outputFormat: v.first,
+                                );
+                              }),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    ElevatedButton.icon(
-                      onPressed: _ffmpegAvailable ? _startExport : null,
-                      icon: const Icon(Icons.file_download),
-                      label: const Text('Export Video'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF753b8f),
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ],
 
-            // Progress view
-            if (_progress != null)
-              Padding(
-                padding: const EdgeInsets.all(24),
-                child: _buildProgressView(),
-              ),
-          ],
+                // Action buttons
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('Cancel'),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: _ffmpegAvailable ? _startExport : null,
+                        icon: const Icon(Icons.file_download),
+                        label: const Text('Export Video'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF753b8f),
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              // Progress view
+              if (_progress != null)
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: _buildProgressView(),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -753,8 +819,7 @@ class _ExportDialogState extends State<ExportDialog> {
           LinearProgressIndicator(
             value: p.overallProgress > 0 ? p.overallProgress : null,
             backgroundColor: Colors.grey[300],
-            valueColor:
-                const AlwaysStoppedAnimation<Color>(Color(0xFF753b8f)),
+            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF753b8f)),
           ),
           const SizedBox(height: 16),
         ],
@@ -762,27 +827,24 @@ class _ExportDialogState extends State<ExportDialog> {
           isDone
               ? Icons.check_circle
               : isFailed
-                  ? Icons.error
-                  : isCancelled
-                      ? Icons.cancel
-                      : Icons.movie_creation,
+              ? Icons.error
+              : isCancelled
+              ? Icons.cancel
+              : Icons.movie_creation,
           size: 48,
           color: isDone
               ? Colors.green
               : isFailed
-                  ? Colors.red
-                  : isCancelled
-                      ? Colors.orange
-                      : const Color(0xFF753b8f),
+              ? Colors.red
+              : isCancelled
+              ? Colors.orange
+              : const Color(0xFF753b8f),
         ),
         const SizedBox(height: 12),
         Text(
           p.message,
           textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 14,
-            color: isFailed ? Colors.red : null,
-          ),
+          style: TextStyle(fontSize: 14, color: isFailed ? Colors.red : null),
         ),
         if (p.errorMessage != null) ...[
           const SizedBox(height: 8),
@@ -832,8 +894,7 @@ class _ExportDialogState extends State<ExportDialog> {
               TextButton.icon(
                 onPressed: _copyLog,
                 icon: const Icon(Icons.copy, size: 16),
-                label: const Text('Copy Log',
-                    style: TextStyle(fontSize: 12)),
+                label: const Text('Copy Log', style: TextStyle(fontSize: 12)),
                 style: TextButton.styleFrom(
                   visualDensity: VisualDensity.compact,
                   foregroundColor: Colors.grey,
