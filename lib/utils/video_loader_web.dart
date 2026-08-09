@@ -28,29 +28,42 @@ Future<String?> pickVideoFileWeb() async {
 
   final input = html.FileUploadInputElement()..accept = 'video/*';
 
-  input.onChange.listen((event) {
+  StreamSubscription<html.Event>? changeSub;
+  StreamSubscription<html.Event>? abortSub;
+  html.EventListener? focusListener;
+
+  // Complete the future at most once and tear down every listener so a stale
+  // handler can never fire against an already-completed completer (which throws
+  // "Bad state: Future already completed") or leak across invocations.
+  void resolve(String? url) {
+    if (completer.isCompleted) return;
+    changeSub?.cancel();
+    abortSub?.cancel();
+    if (focusListener != null) {
+      html.window.removeEventListener('focus', focusListener);
+    }
+    completer.complete(url);
+  }
+
+  changeSub = input.onChange.listen((event) {
     final files = input.files;
     if (files != null && files.isNotEmpty) {
       final file = files[0];
-      final url = html.Url.createObjectUrlFromBlob(file);
-      completer.complete(url);
+      resolve(html.Url.createObjectUrlFromBlob(file));
     } else {
-      completer.complete(null);
+      resolve(null);
     }
   });
 
   // Handle cancel (user closes dialog without selecting)
-  input.onAbort.listen((_) => completer.complete(null));
+  abortSub = input.onAbort.listen((_) => resolve(null));
 
-  // Also handle if user doesn't select anything
-  html.window.addEventListener('focus', (event) {
-    // Give a small delay for the file dialog result
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (!completer.isCompleted) {
-        completer.complete(null);
-      }
-    });
-  });
+  // Fallback: if the dialog is dismissed, the window regains focus. Give the
+  // change event a moment to arrive first, then resolve as cancelled.
+  focusListener = (event) {
+    Future.delayed(const Duration(milliseconds: 300), () => resolve(null));
+  };
+  html.window.addEventListener('focus', focusListener);
 
   input.click();
 

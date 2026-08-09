@@ -11,6 +11,33 @@ class ExportServiceImpl implements ExportService {
   bool _cancelled = false;
   String? _detectedEncoder;
 
+  /// Locate a TrueType font file for `drawtext` label burn-in.
+  ///
+  /// `drawtext` requires an explicit fontfile on most builds (fontconfig is
+  /// usually unavailable on Windows). Returns the first existing candidate for
+  /// the current platform, or null if none are found.
+  String? _resolveFontFile() {
+    final candidates = <String>[
+      if (Platform.isWindows) ...[
+        r'C:\Windows\Fonts\arialbd.ttf',
+        r'C:\Windows\Fonts\arial.ttf',
+        r'C:\Windows\Fonts\segoeui.ttf',
+      ] else if (Platform.isMacOS) ...[
+        '/System/Library/Fonts/Helvetica.ttc',
+        '/Library/Fonts/Arial.ttf',
+        '/System/Library/Fonts/SFNS.ttf',
+      ] else ...[
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+        '/usr/share/fonts/TTF/DejaVuSans.ttf',
+      ],
+    ];
+    for (final path in candidates) {
+      if (File(path).existsSync()) return path;
+    }
+    return null;
+  }
+
   @override
   Future<bool> isFfmpegAvailable() async {
     try {
@@ -88,6 +115,14 @@ class ExportServiceImpl implements ExportService {
       }
       final (videoWidth, videoHeight) = videoDimensions;
 
+      // Resolve a font for label burn-in (null disables drawtext).
+      final fontFile = _resolveFontFile();
+      if (job.clips.any((c) => c.labelText != null) && fontFile == null) {
+        log('WARNING: No usable font found for labels; labels disabled.');
+      } else if (fontFile != null) {
+        log('Label font: $fontFile');
+      }
+
       // --- Step 2: Extract each clip ---
       final totalSegments = job.clips.fold<int>(
         0,
@@ -142,6 +177,11 @@ class ExportServiceImpl implements ExportService {
           encoder: _detectedEncoder ?? 'libx264',
           outputWidth: videoWidth,
           outputHeight: videoHeight,
+          labelText: clip.labelText,
+          labelColor: clip.labelColor,
+          labelFontFile: fontFile,
+          labelSize: job.config.labelSize,
+          labelPosition: job.config.labelPosition,
         );
 
         final normalOk = await _runFfmpeg(
@@ -186,8 +226,10 @@ class ExportServiceImpl implements ExportService {
           tempClipPaths.add(slowPath);
 
           final slowBaseProgress = segmentIndex / totalSegments;
+          final slowSourceDurationMs =
+              (clip.slowEnd - clip.slowStart).inMilliseconds;
           final slowDurationMs =
-              (clipDurationMs / job.config.slowReplaySpeed).round();
+              (slowSourceDurationMs / job.config.slowReplaySpeed).round();
 
           emit(ExportProgress(
             status: ExportStatus.extractingClips,
@@ -201,14 +243,20 @@ class ExportServiceImpl implements ExportService {
           final slowArgs = FfmpegCommandBuilder.buildSlowMotionClipArgs(
             inputPath: job.sourceVideoPath,
             outputPath: slowPath,
-            startTime: clip.startTime,
-            endTime: clip.endTime,
+            startTime: clip.slowStart,
+            endTime: clip.slowEnd,
             cropRegion: cropRect,
             speed: job.config.slowReplaySpeed,
             fadeDurationSeconds: job.config.fadeDurationSeconds,
+            mute: job.config.muteSlowReplay,
             encoder: _detectedEncoder ?? 'libx264',
             outputWidth: videoWidth,
             outputHeight: videoHeight,
+            labelText: clip.labelText,
+            labelColor: clip.labelColor,
+            labelFontFile: fontFile,
+            labelSize: job.config.labelSize,
+            labelPosition: job.config.labelPosition,
           );
 
           final slowOk = await _runFfmpeg(

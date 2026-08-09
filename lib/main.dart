@@ -138,28 +138,38 @@ class _DrawingState extends ChangeNotifier {
   }
 }
 
-/// Alt+number workflow state — only consumed by event buttons / SmartHUD.
+/// Alt+number workflow state (LATCHED) — consumed by event buttons / SmartHUD.
+///
+/// Tap Alt once to toggle "entry mode" on; number badges stay visible and the
+/// user presses digits WITHOUT holding Alt. Tap Alt again (or Esc, or finish a
+/// grade) to exit. This deliberately avoids holding Alt while pressing numbers,
+/// which on Flutter web causes the browser to swallow digit key-up events and
+/// corrupt HardwareKeyboard state (assertion at hardware_keyboard.dart:516).
 class _AltKeyState extends ChangeNotifier {
-  bool isPressed = false;
   bool isEntryActive = false;
   _AltEntryStage stage = _AltEntryStage.none;
 
   bool get showCategoryNumbers =>
-      isEntryActive && isPressed && stage == _AltEntryStage.categories;
+      isEntryActive && stage == _AltEntryStage.categories;
   bool get showLabelNumbers =>
-      isEntryActive && isPressed && stage == _AltEntryStage.labels;
+      isEntryActive && stage == _AltEntryStage.labels;
   bool get showGradeNumbers =>
-      isEntryActive && isPressed && stage == _AltEntryStage.grades;
+      isEntryActive && stage == _AltEntryStage.grades;
 
-  void onAltPressed() {
-    isPressed = true;
-    isEntryActive = true;
-    stage = _AltEntryStage.categories;
-    notifyListeners();
+  /// Toggle entry mode on an Alt tap.
+  void toggle() {
+    if (isEntryActive) {
+      exit();
+    } else {
+      isEntryActive = true;
+      stage = _AltEntryStage.categories;
+      notifyListeners();
+    }
   }
 
-  void onAltReleased() {
-    isPressed = false;
+  /// Exit entry mode (Esc / Alt tap / completion).
+  void exit() {
+    if (!isEntryActive && stage == _AltEntryStage.none) return;
     isEntryActive = false;
     stage = _AltEntryStage.none;
     notifyListeners();
@@ -197,6 +207,13 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   bool hasVideoLoaded = false;
   String? _videoSourcePath;
 
+  // Actual video aspect ratio (width / height). Defaults to 16:9 until the
+  // real dimensions are reported by the player. Used to size the video canvas
+  // and to normalize/denormalize zoom transforms so the export geometry
+  // matches what is shown on screen.
+  double _videoAspectRatio = 16 / 9;
+  StreamSubscription<VideoParams>? _videoParamsSub;
+
   // Event Tracking State
   final EventsController _eventsController = EventsController();
   final TaxonomyRepository _taxonomyRepository = TaxonomyRepository();
@@ -225,6 +242,9 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
   // Alt+number workflow state
   final _altKey = _AltKeyState();
+
+  // Root focus node — lets us reclaim keyboard focus after dialogs / HUD.
+  final FocusNode _rootFocus = FocusNode(debugLabel: 'rootShortcuts');
 
   // Speed control state for hold-to-speed shortcuts
   double _previousPlaybackSpeed = 1.0;
@@ -262,6 +282,20 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     configureNativePlayer(player);
 
     controller = VideoController(player);
+
+    // Track the real video aspect ratio so the canvas matches the source
+    // footage instead of assuming 16:9 (which letterboxes wider/narrower
+    // footage with black bars).
+    _videoParamsSub = player.stream.videoParams.listen((params) {
+      final w = params.dw ?? params.w;
+      final h = params.dh ?? params.h;
+      if (w != null && h != null && w > 0 && h > 0) {
+        final aspect = w / h;
+        if ((aspect - _videoAspectRatio).abs() > 0.001 && mounted) {
+          setState(() => _videoAspectRatio = aspect);
+        }
+      }
+    });
 
     _settingsController.loadSettings();
 
@@ -332,7 +366,9 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
   @override
   void dispose() {
+    _rootFocus.dispose();
     _zoomAnimationController?.dispose();
+    _videoParamsSub?.cancel();
     player.dispose(); // Always clean up video memory!
     _eventsController.dispose();
     _uiController.dispose();
@@ -629,7 +665,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   /// Translations are stored as fractions of video width/height.
   Matrix4 _normalizeTransform(Matrix4 transform) {
     final w = _videoWidth;
-    final h = w * 9 / 16;
+    final h = w / _videoAspectRatio;
     final normalized = transform.clone();
     normalized.setEntry(0, 3, transform.entry(0, 3) / w);
     normalized.setEntry(1, 3, transform.entry(1, 3) / h);
@@ -639,7 +675,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   /// Convert a normalized transform back to pixel values for the current size.
   Matrix4 _denormalizeTransform(Matrix4 transform) {
     final w = _videoWidth;
-    final h = w * 9 / 16;
+    final h = w / _videoAspectRatio;
     final denormalized = transform.clone();
     denormalized.setEntry(0, 3, transform.entry(0, 3) * w);
     denormalized.setEntry(1, 3, transform.entry(1, 3) * h);
@@ -838,7 +874,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     final activeEvent = _eventsController.activeEvent;
     if (activeEvent == null) return;
 
-    if (!_altKey.isEntryActive || !_altKey.isPressed) return;
+    if (!_altKey.isEntryActive) return;
 
     if (_altKey.stage == _AltEntryStage.labels) {
       final didSelect = _selectTagByNumber(number);
@@ -976,10 +1012,14 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   void _deleteEvent(GameEvent event) {
     _eventsController.deleteEvent(event);
     print("EVENT DELETED: ${event.label}");
+    // Reclaim keyboard focus — removing the SmartHUD can leave focus orphaned.
+    _rootFocus.requestFocus();
   }
 
   void _dismissHUD() {
     _eventsController.selectEvent(null);
+    // Reclaim keyboard focus — removing the SmartHUD can leave focus orphaned.
+    _rootFocus.requestFocus();
   }
 
 
@@ -988,6 +1028,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     Perf.rebuildCount('HockeyAnalyzerScreen');
 
     return Focus(
+      focusNode: _rootFocus,
       autofocus: true,
       onKeyEvent: (node, event) {
         // =====================================================================
@@ -1026,17 +1067,32 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
             return KeyEventResult.handled;
           }
 
-          // Alt key press: begin alt-entry workflow (record mode)
+          // Alt key TAP: toggle latched alt-entry workflow (record mode).
+          // Latched so the user does NOT hold Alt while pressing numbers.
           if (event.logicalKey == LogicalKeyboardKey.altLeft ||
               event.logicalKey == LogicalKeyboardKey.altRight) {
             if (mode == AppMode.record) {
-              _altKey.onAltPressed();
+              _altKey.toggle();
+              return KeyEventResult.handled;
             }
+            return KeyEventResult.ignored;
+          }
+
+          // Entry-mode Esc: exit the latched workflow (and cancel any draft).
+          if (mode == AppMode.record &&
+              _altKey.isEntryActive &&
+              !isTextFieldFocused &&
+              event.logicalKey == LogicalKeyboardKey.escape) {
+            if (_eventsController.activeEvent != null) {
+              _cancelAndCloseSmartHud();
+            }
+            _altKey.exit();
             return KeyEventResult.handled;
           }
 
-          // Alt+number: Create event / SmartHUD grade (record mode only)
-          if (isAltPressed && _altKey.isEntryActive && mode == AppMode.record) {
+          // Number (no Alt held): Create event / SmartHUD grade while the
+          // latched entry mode is active (record mode only).
+          if (_altKey.isEntryActive && mode == AppMode.record) {
             // SmartHUD label/grade selection when HUD is active
             if (_eventsController.activeEvent != null &&
                 !_drawing.isDrawingMode) {
@@ -1113,14 +1169,19 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
             }
             if (event.logicalKey == LogicalKeyboardKey.escape) {
               _cancelAndCloseSmartHud();
+              _altKey.exit();
               return KeyEventResult.handled;
             }
           }
 
           // -----------------------------------------------------------------
           // 3. Tracking hotkeys (tracking mode, NOT in text fields)
+          //    Skip when Alt/Ctrl held — those are system/app shortcuts.
           // -----------------------------------------------------------------
-          if (mode == AppMode.tracking && !isTextFieldFocused) {
+          if (mode == AppMode.tracking &&
+              !isTextFieldFocused &&
+              !isAltPressed &&
+              !isCtrlPressed) {
             final keyLabel = event.logicalKey.keyLabel.toLowerCase();
             if (keyLabel.isNotEmpty &&
                 _trackingController.handleHotkeyDown(
@@ -1276,7 +1337,10 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
         // =====================================================================
         if (event is KeyUpEvent) {
           // Tracking hold-mode timer release (tracking mode, not text fields)
-          if (mode == AppMode.tracking && !isTextFieldFocused) {
+          if (mode == AppMode.tracking &&
+              !isTextFieldFocused &&
+              !isAltPressed &&
+              !isCtrlPressed) {
             final keyLabel = event.logicalKey.keyLabel.toLowerCase();
             if (keyLabel.isNotEmpty &&
                 _trackingController.handleHotkeyUp(
@@ -1285,11 +1349,14 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
             }
           }
 
-          // Alt key released
+          // Alt key released — entry mode is latched, so state is unchanged.
+          // Consume in record mode to suppress the browser/OS menu activation.
           if (event.logicalKey == LogicalKeyboardKey.altLeft ||
               event.logicalKey == LogicalKeyboardKey.altRight) {
-            _altKey.onAltReleased();
-            return KeyEventResult.handled;
+            if (mode == AppMode.record) {
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
           }
 
           // Release 'F' to restore previous speed
@@ -1351,6 +1418,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                   drawingColor: _drawing.drawingColor,
                   strokeWidth: _drawing.strokeWidth,
                   drawingRevision: _drawing.revision,
+                  videoAspectRatio: _videoAspectRatio,
                   onStrokeCompleted: _onStrokeCompleted,
                   onLineCompleted: _onLineCompleted,
                   onArrowCompleted: _onArrowCompleted,
@@ -1375,6 +1443,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                     trails: _drawing.laserTrails,
                     color: _drawing.drawingColor,
                     strokeWidth: _drawing.strokeWidth,
+                    videoAspectRatio: _videoAspectRatio,
                     onCompleteDrawing: _completeLaserDrawing,
                     onRemoveTrail: _removeTrail,
                   );
@@ -1490,7 +1559,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                                 onUpdateEvent: _updateEvent,
                                 onDeleteEvent: _deleteEvent,
                                 onDismiss: _dismissHUD,
-                                isAltPressed: _altKey.isPressed,
+                                isAltPressed: _altKey.isEntryActive,
                                 showTagNumbers: _altKey.showLabelNumbers,
                                 showGradeNumbers: _altKey.showGradeNumbers,
                                 taxonomy: _taxonomy,

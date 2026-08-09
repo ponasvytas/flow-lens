@@ -46,6 +46,8 @@ class ExportServiceImpl implements ExportService {
             : null,
         'viewTransform': clip.event.viewTransform?.storage.toList(),
         'appendSlowReplay': clip.appendSlowReplay,
+        'slowStartMs': clip.slowStart.inMilliseconds,
+        'slowEndMs': clip.slowEnd.inMilliseconds,
       };
     }).toList();
 
@@ -56,6 +58,9 @@ class ExportServiceImpl implements ExportService {
         'easeInSeconds': job.config.easeInSeconds,
         'easeOutSeconds': job.config.easeOutSeconds,
         'slowReplaySpeed': job.config.slowReplaySpeed,
+        'slowMoEaseInSeconds': job.config.slowMoEaseInSeconds,
+        'slowMoEaseOutSeconds': job.config.slowMoEaseOutSeconds,
+        'muteSlowReplay': job.config.muteSlowReplay,
         'fadeDurationSeconds': job.config.fadeDurationSeconds,
         'outputFormat': job.config.outputFormat,
       },

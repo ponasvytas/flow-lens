@@ -26,8 +26,59 @@ class EventsTableView extends StatefulWidget {
   State<EventsTableView> createState() => _EventsTableViewState();
 }
 
+enum _SortColumn { time, category, event, impact }
+
 class _EventsTableViewState extends State<EventsTableView> {
-  final Set<String> _selectedEventIds = {};
+  /// Multi-selection is stored on the controller so it persists across the
+  /// table being closed/reopened and across actions like video export.
+  Set<String> get _selectedEventIds => widget.controller.selectedEventIds;
+  _SortColumn _sortColumn = _SortColumn.time;
+  bool _sortAscending = true;
+
+  void _setSort(_SortColumn column) {
+    setState(() {
+      if (_sortColumn == column) {
+        _sortAscending = !_sortAscending;
+      } else {
+        _sortColumn = column;
+        _sortAscending = true;
+      }
+    });
+  }
+
+  List<GameEvent> _sortEvents(List<GameEvent> source) {
+    final list = List<GameEvent>.from(source);
+    int impactRank(EventGrade? g) => switch (g) {
+          EventGrade.negative => 0,
+          EventGrade.neutral => 1,
+          null => 1,
+          EventGrade.positive => 2,
+        };
+    int cmp(GameEvent a, GameEvent b) {
+      switch (_sortColumn) {
+        case _SortColumn.time:
+          return a.timestamp.compareTo(b.timestamp);
+        case _SortColumn.category:
+          final r = _getCategoryName(a.categoryId)
+              .toLowerCase()
+              .compareTo(_getCategoryName(b.categoryId).toLowerCase());
+          return r != 0 ? r : a.timestamp.compareTo(b.timestamp);
+        case _SortColumn.event:
+          final r = _getEventTypeName(a)
+              .toLowerCase()
+              .compareTo(_getEventTypeName(b).toLowerCase());
+          return r != 0 ? r : a.timestamp.compareTo(b.timestamp);
+        case _SortColumn.impact:
+          final r = impactRank(a.grade).compareTo(impactRank(b.grade));
+          return r != 0 ? r : a.timestamp.compareTo(b.timestamp);
+      }
+    }
+    list.sort(cmp);
+    if (!_sortAscending) {
+      return list.reversed.toList();
+    }
+    return list;
+  }
 
   @override
   void initState() {
@@ -43,41 +94,27 @@ class _EventsTableViewState extends State<EventsTableView> {
 
   void _onControllerUpdate() {
     if (mounted) {
-      setState(() {
-        // Clear selection if filtered events changed
-        _selectedEventIds.removeWhere(
-          (id) => !widget.controller.filteredEvents.any((e) => e.id == id),
-        );
-      });
+      setState(() {});
     }
   }
 
   bool get _isAllSelected {
     final events = widget.controller.filteredEvents;
-    return events.isNotEmpty && _selectedEventIds.length == events.length;
+    return events.isNotEmpty &&
+        events.every((e) => _selectedEventIds.contains(e.id));
   }
 
   void _toggleSelectAll() {
-    setState(() {
-      if (_isAllSelected) {
-        _selectedEventIds.clear();
-      } else {
-        _selectedEventIds.clear();
-        _selectedEventIds.addAll(
-          widget.controller.filteredEvents.map((e) => e.id),
-        );
-      }
-    });
+    if (_isAllSelected) {
+      widget.controller.clearSelection();
+    } else {
+      widget.controller
+          .setSelection(widget.controller.filteredEvents.map((e) => e.id));
+    }
   }
 
   void _toggleEventSelection(String eventId) {
-    setState(() {
-      if (_selectedEventIds.contains(eventId)) {
-        _selectedEventIds.remove(eventId);
-      } else {
-        _selectedEventIds.add(eventId);
-      }
-    });
+    widget.controller.toggleSelection(eventId);
   }
 
   String _formatDuration(Duration duration) {
@@ -313,6 +350,7 @@ class _EventsTableViewState extends State<EventsTableView> {
         selectedEvents: selectedEvents,
         sourceVideoPath: videoPath,
         videoDuration: widget.videoDuration,
+        taxonomy: widget.taxonomy,
       ),
     );
   }
@@ -343,9 +381,7 @@ class _EventsTableViewState extends State<EventsTableView> {
               for (final event in selectedEvents) {
                 widget.controller.deleteEvent(event);
               }
-              setState(() {
-                _selectedEventIds.clear();
-              });
+              widget.controller.clearSelection();
               Navigator.of(context).pop();
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -368,7 +404,7 @@ class _EventsTableViewState extends State<EventsTableView> {
   @override
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width > 600;
-    final events = widget.controller.filteredEvents;
+    final events = _sortEvents(widget.controller.filteredEvents);
 
     final content = Column(
       children: [
@@ -461,13 +497,18 @@ class _EventsTableViewState extends State<EventsTableView> {
                   onChanged: (_) => _toggleSelectAll(),
                 ),
               ),
-              _buildHeaderCell('Time', flex: 2),
+              _buildHeaderCell(
+                'Time',
+                flex: 2,
+                sortColumn: _SortColumn.time,
+              ),
               _buildHeaderCell(
                 'Category',
                 flex: 3,
                 hasFilter: true,
                 isFiltered: widget.controller.filter.categoryIds != null,
                 onFilterTap: _showCategoryFilter,
+                sortColumn: _SortColumn.category,
               ),
               _buildHeaderCell(
                 'Event',
@@ -475,6 +516,7 @@ class _EventsTableViewState extends State<EventsTableView> {
                 hasFilter: true,
                 isFiltered: widget.controller.filter.eventTypeIds != null,
                 onFilterTap: _showEventTypeFilter,
+                sortColumn: _SortColumn.event,
               ),
               _buildHeaderCell(
                 'Impact',
@@ -482,6 +524,7 @@ class _EventsTableViewState extends State<EventsTableView> {
                 hasFilter: true,
                 isFiltered: widget.controller.filter.impacts != null,
                 onFilterTap: _showImpactFilter,
+                sortColumn: _SortColumn.impact,
               ),
               _buildHeaderCell('', flex: 1), // Delete column
             ],
@@ -584,7 +627,34 @@ class _EventsTableViewState extends State<EventsTableView> {
     bool hasFilter = false,
     bool isFiltered = false,
     VoidCallback? onFilterTap,
+    _SortColumn? sortColumn,
   }) {
+    final isActiveSort = sortColumn != null && _sortColumn == sortColumn;
+    final labelRow = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+              color: isActiveSort ? const Color(0xFF753b8f) : Colors.black87,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        if (isActiveSort) ...[
+          const SizedBox(width: 2),
+          Icon(
+            _sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
+            size: 14,
+            color: const Color(0xFF753b8f),
+          ),
+        ],
+      ],
+    );
+
     return Expanded(
       flex: flex,
       child: Container(
@@ -592,13 +662,12 @@ class _EventsTableViewState extends State<EventsTableView> {
         child: Row(
           children: [
             Expanded(
-              child: Text(
-                label,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
-              ),
+              child: sortColumn != null
+                  ? InkWell(
+                      onTap: () => _setSort(sortColumn),
+                      child: labelRow,
+                    )
+                  : labelRow,
             ),
             if (hasFilter)
               InkWell(

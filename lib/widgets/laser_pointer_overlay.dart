@@ -10,6 +10,8 @@ class LaserPointerOverlay extends StatefulWidget {
   final List<LaserTrail> trails;
   final Color color;
   final double strokeWidth;
+  /// Source video aspect ratio (width / height), to match the video canvas.
+  final double videoAspectRatio;
   final Function(List<DrawingPoint>) onCompleteDrawing;
   final Function(LaserTrail) onRemoveTrail;
 
@@ -19,6 +21,7 @@ class LaserPointerOverlay extends StatefulWidget {
     required this.trails,
     required this.color,
     required this.strokeWidth,
+    required this.videoAspectRatio,
     required this.onCompleteDrawing,
     required this.onRemoveTrail,
     super.key,
@@ -36,8 +39,8 @@ class _LaserPointerOverlayState extends State<LaserPointerOverlay>
   // Animation management - each trail gets its own controller
   final Map<LaserTrail, AnimationController> _animationControllers = {};
 
-  static const Duration _animationDelay = Duration(milliseconds: 2000);
-  static const Duration _animationDuration = Duration(milliseconds: 500);
+  static const Duration _animationDelay = Duration(milliseconds: 1000);
+  static const Duration _animationDuration = Duration(milliseconds: 400);
 
   @override
   void didUpdateWidget(LaserPointerOverlay oldWidget) {
@@ -116,7 +119,7 @@ class _LaserPointerOverlayState extends State<LaserPointerOverlay>
     return Center(
       child: SizedBox(
         width: MediaQuery.of(context).size.width,
-        height: MediaQuery.of(context).size.width * (9 / 16),
+        height: MediaQuery.of(context).size.width / widget.videoAspectRatio,
         child: IgnorePointer(
           ignoring: !widget.isActive || !widget.isDrawingMode,
           child: MouseRegion(

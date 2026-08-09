@@ -41,6 +41,9 @@ class VideoCanvas extends StatelessWidget {
   final Color drawingColor;
   final double strokeWidth;
   final int drawingRevision;
+  /// Source video aspect ratio (width / height). Used to size the canvas so
+  /// the video fills it without black letterbox bars.
+  final double videoAspectRatio;
   final Function(DrawingStroke) onStrokeCompleted;
   final Function(LineShape) onLineCompleted;
   final Function(ArrowShape) onArrowCompleted;
@@ -57,6 +60,7 @@ class VideoCanvas extends StatelessWidget {
     required this.drawingColor,
     required this.strokeWidth,
     required this.drawingRevision,
+    required this.videoAspectRatio,
     required this.onStrokeCompleted,
     required this.onLineCompleted,
     required this.onArrowCompleted,
@@ -74,8 +78,9 @@ class VideoCanvas extends StatelessWidget {
       final localPosition = renderBox.globalToLocal(event.position);
       final currentScale = transformationController.value.getMaxScaleOnAxis();
 
-      // Determine zoom direction and calculate new scale
-      const zoomFactor = 0.1;
+      // Determine zoom direction and calculate new scale.
+      // Smaller factor = finer, more precise zoom steps per scroll tick.
+      const zoomFactor = 0.03;
       double newScale;
       if (event.scrollDelta.dy < 0) {
         // Scroll up = zoom in
@@ -109,7 +114,7 @@ class VideoCanvas extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final availableWidth = constraints.maxWidth;
-          final videoHeight = availableWidth * (9 / 16);
+          final videoHeight = availableWidth / videoAspectRatio;
           return InteractiveViewer(
             transformationController: transformationController,
             panEnabled: !isDrawingMode, // Disable pan when drawing

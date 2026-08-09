@@ -35,7 +35,7 @@ class DockPanelEntry {
 ///
 /// * **Top / Bottom**: centered [Row] of panels side-by-side.
 /// * **Left / Right**: [Column] of panels stacked top-to-bottom.
-/// * **Floating**: absolutely positioned with drag-to-snap.
+/// * **Floating**: absolutely positioned and freely draggable.
 ///
 /// All dock-edge and floating-position state lives in [UIController].
 class DockLayout extends StatefulWidget {
@@ -173,7 +173,7 @@ class _DockLayoutState extends State<DockLayout> {
   }
 
   // -------------------------------------------------------------------------
-  // Floating panel — absolutely positioned with drag-to-snap
+  // Floating panel — absolutely positioned and freely draggable
   // -------------------------------------------------------------------------
 
   Widget _buildFloatingPanel(DockPanelEntry entry, Size screenSize) {
@@ -185,7 +185,7 @@ class _DockLayoutState extends State<DockLayout> {
       top: pos.dy,
       child: GestureDetector(
         onPanUpdate: (d) => _onFloatingDragUpdate(entry.id, d, entry),
-        onPanEnd: (d) => _onFloatingDragEnd(entry.id, d, screenSize, entry),
+        onPanEnd: (_) => _onFloatingDragEnd(entry.id, screenSize, entry),
         child: _wrapPanel(entry, PanelDockEdge.floating, screenSize),
       ),
     );
@@ -210,7 +210,6 @@ class _DockLayoutState extends State<DockLayout> {
 
   void _onFloatingDragEnd(
     PanelId id,
-    DragEndDetails details,
     Size screenSize,
     DockPanelEntry entry,
   ) {
@@ -219,38 +218,14 @@ class _DockLayoutState extends State<DockLayout> {
             id, entry.defaultFloatingPosition);
     double x = pos.dx;
     double y = pos.dy;
-    PanelDockEdge newEdge = PanelDockEdge.floating;
-
-    // Snap to left
-    if (x < kSnapThreshold) {
-      newEdge = PanelDockEdge.left;
-    }
-    // Snap to right (use fallback width estimate)
-    else if (x + kPanelFallbackWidth > screenSize.width - kSnapThreshold) {
-      newEdge = PanelDockEdge.right;
-    }
-
-    // Snap to top
-    if (y < kAppTitleBarHeight + kSnapThreshold) {
-      if (newEdge == PanelDockEdge.floating) newEdge = PanelDockEdge.top;
-    }
-    // Snap to bottom
-    else if (y + kPanelTitleStripHeight >
-        screenSize.height - kProgressBarReserve - kSnapThreshold) {
-      if (newEdge == PanelDockEdge.floating) newEdge = PanelDockEdge.bottom;
-    }
 
     _dragOffsets.remove(id);
 
-    if (newEdge != PanelDockEdge.floating) {
-      // Docked — let the zone position it
-      widget.uiController.setDockEdge(id, newEdge);
-    } else {
-      // Stays floating — persist clamped position
-      x = x.clamp(0, screenSize.width - 60);
-      y = y.clamp(kAppTitleBarHeight, screenSize.height - kProgressBarReserve);
-      widget.uiController.setFloatingPosition(id, Offset(x, y));
-    }
+    // Dragging only moves a floating panel. Docking is an explicit action
+    // available from the panel's dock-position menu.
+    x = x.clamp(0, screenSize.width - 60);
+    y = y.clamp(kAppTitleBarHeight, screenSize.height - kProgressBarReserve);
+    widget.uiController.setFloatingPosition(id, Offset(x, y));
   }
 
   // -------------------------------------------------------------------------

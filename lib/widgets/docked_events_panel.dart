@@ -106,7 +106,8 @@ class _DockedEventsPanelState extends State<DockedEventsPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final events = widget.controller.filteredEvents;
+    final events = List<GameEvent>.from(widget.controller.filteredEvents)
+      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
     final activeId = widget.controller.activeEvent?.id;
 
     return Container(

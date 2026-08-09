@@ -1,0 +1,21 @@
+# Project-local Codex config for flow-lens.
+# Loaded automatically because this project is marked trusted in global config.
+# Note: provider/auth keys (model_provider, model_providers) are ignored here by
+# design — keep those in ~/.codex/config.toml. On Windows, dart/flutter/firebase/
+# npx are .cmd scripts, so they must be launched via `cmd /c`.
+
+[mcp_servers.dart]
+command = "cmd"
+args = ["/c", "dart", "mcp-server"]
+startup_timeout_sec = 60
+
+[mcp_servers.firebase]
+command = "cmd"
+args = ["/c", "npx", "-y", "firebase-tools", "experimental:mcp"]
+# npx may re-download under VPN; allow a slow cold start.
+startup_timeout_sec = 60
+
+[mcp_servers.context7]
+command = "cmd"
+args = ["/c", "npx", "-y", "@upstash/context7-mcp"]
+startup_timeout_sec = 60

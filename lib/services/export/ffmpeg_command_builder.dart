@@ -1,7 +1,83 @@
 import 'dart:ui';
+import 'export_models.dart';
 
 /// Builds FFmpeg CLI argument lists for clip extraction and concatenation.
 class FfmpegCommandBuilder {
+  /// Escape arbitrary text for use inside a single-quoted `drawtext` value.
+  ///
+  /// The colon is escaped because `drawtext`'s own option parser (the second
+  /// escaping level, applied after the filtergraph strips the quotes) splits
+  /// key=value pairs on ':'.
+  static String _escapeDrawText(String text) {
+    return text
+        .replaceAll('\\', '\\\\')
+        .replaceAll("'", "\\'")
+        .replaceAll('%', '\\%')
+        .replaceAll(':', '\\:');
+  }
+
+  /// Escape a font file path for embedding in a single-quoted `drawtext`
+  /// `fontfile` value.
+  ///
+  /// Uses forward slashes (FFmpeg accepts them on Windows) and escapes the
+  /// Windows drive colon with a backslash. Because the caller wraps the result
+  /// in single quotes, the filtergraph parser passes the backslash through
+  /// literally and `drawtext`'s option parser then unescapes `\:` back to a
+  /// literal colon.
+  static String _escapeFontPath(String path) {
+    return path.replaceAll('\\', '/').replaceAll(':', '\\:');
+  }
+
+  /// FFmpeg `fontsize` expression for the given [LabelSize] (fraction of
+  /// frame height).
+  static String _fontSizeExpr(LabelSize size) {
+    switch (size) {
+      case LabelSize.small:
+        return 'h/30';
+      case LabelSize.medium:
+        return 'h/22';
+      case LabelSize.large:
+        return 'h/15';
+    }
+  }
+
+  /// FFmpeg `x` / `y` expressions for the given [LabelPosition].
+  static (String x, String y) _positionExpr(LabelPosition position) {
+    const margin = '(h*0.04)';
+    switch (position) {
+      case LabelPosition.topLeft:
+        return (margin, margin);
+      case LabelPosition.topCenter:
+        return ('(w-text_w)/2', margin);
+      case LabelPosition.topRight:
+        return ('w-text_w-$margin', margin);
+      case LabelPosition.bottomLeft:
+        return (margin, 'h-text_h-$margin');
+      case LabelPosition.bottomCenter:
+        return ('(w-text_w)/2', 'h-text_h-$margin');
+      case LabelPosition.bottomRight:
+        return ('w-text_w-$margin', 'h-text_h-$margin');
+    }
+  }
+
+  /// Build a `drawtext` filter string, or null if a label cannot be drawn
+  /// (no text or no available font file).
+  static String? buildLabelFilter({
+    required String? text,
+    required String color,
+    required String? fontFile,
+    required LabelSize size,
+    required LabelPosition position,
+  }) {
+    if (text == null || text.trim().isEmpty || fontFile == null) return null;
+    final (x, y) = _positionExpr(position);
+    return "drawtext=fontfile='${_escapeFontPath(fontFile)}'"
+        ":text='${_escapeDrawText(text)}'"
+        ':fontcolor=$color'
+        ':fontsize=${_fontSizeExpr(size)}'
+        ':box=1:boxcolor=black@0.5:boxborderw=12'
+        ':x=$x:y=$y';
+  }
   /// Format a [Duration] as HH:MM:SS.mmm for FFmpeg's -ss / -to flags.
   static String _formatTimestamp(Duration d) {
     final hours = d.inHours;
@@ -36,6 +112,11 @@ class FfmpegCommandBuilder {
     String encoder = 'libx264',
     int? outputWidth,
     int? outputHeight,
+    String? labelText,
+    String labelColor = 'white',
+    String? labelFontFile,
+    LabelSize labelSize = LabelSize.medium,
+    LabelPosition labelPosition = LabelPosition.bottomCenter,
   }) {
     final clipDuration = (endTime - startTime).inMilliseconds / 1000.0;
 
@@ -55,6 +136,16 @@ class FfmpegCommandBuilder {
       filters.add('pad=$outputWidth:$outputHeight:(ow-iw)/2:(oh-ih)/2');
       filters.add('setsar=1');
     }
+
+    // Burn-in event label
+    final labelFilter = buildLabelFilter(
+      text: labelText,
+      color: labelColor,
+      fontFile: labelFontFile,
+      size: labelSize,
+      position: labelPosition,
+    );
+    if (labelFilter != null) filters.add(labelFilter);
 
     // Fade-in at the start
     if (fadeDurationSeconds > 0) {
@@ -94,9 +185,15 @@ class FfmpegCommandBuilder {
     Rect? cropRegion,
     double speed = 0.5,
     double fadeDurationSeconds = 0.5,
+    bool mute = true,
     String encoder = 'libx264',
     int? outputWidth,
     int? outputHeight,
+    String? labelText,
+    String labelColor = 'white',
+    String? labelFontFile,
+    LabelSize labelSize = LabelSize.medium,
+    LabelPosition labelPosition = LabelPosition.bottomCenter,
   }) {
     final ptsMultiplier = 1.0 / speed; // e.g. 0.5 speed → 2.0× PTS
     final slowDuration =
@@ -119,6 +216,16 @@ class FfmpegCommandBuilder {
       vFilters.add('setsar=1');
     }
 
+    // Burn-in event label (drawn before setpts so it stays on every frame)
+    final labelFilter = buildLabelFilter(
+      text: labelText,
+      color: labelColor,
+      fontFile: labelFontFile,
+      size: labelSize,
+      position: labelPosition,
+    );
+    if (labelFilter != null) vFilters.add(labelFilter);
+
     vFilters.add('setpts=$ptsMultiplier*PTS');
 
     if (fadeDurationSeconds > 0) {
@@ -132,14 +239,19 @@ class FfmpegCommandBuilder {
     // Audio filters: atempo only supports 0.5–2.0, so chain for lower speeds.
     // e.g. 0.25× = atempo=0.5,atempo=0.5
     final aFilters = <String>[];
-    var remaining = speed;
-    while (remaining < 0.5) {
-      aFilters.add('atempo=0.5');
-      remaining *= 2;
+    if (!mute) {
+      var remaining = speed;
+      while (remaining < 0.5) {
+        aFilters.add('atempo=0.5');
+        remaining *= 2;
+      }
+      if (remaining < 2.0) {
+        aFilters.add('atempo=$remaining');
+      }
     }
-    if (remaining < 2.0) {
-      aFilters.add('atempo=$remaining');
-    }
+
+    // Drop audio entirely when muted or when the speed can't be expressed.
+    final dropAudio = mute || aFilters.isEmpty;
 
     return [
       '-y',
@@ -147,8 +259,8 @@ class FfmpegCommandBuilder {
       '-to', _formatTimestamp(endTime),
       '-i', inputPath,
       '-vf', vFilters.join(','),
-      if (aFilters.isNotEmpty) ...['-af', aFilters.join(',')],
-      if (aFilters.isEmpty) ...['-an'], // drop audio if speed is unsupported
+      if (!dropAudio) ...['-af', aFilters.join(',')],
+      if (dropAudio) ...['-an'],
       ..._encoderArgs(encoder),
       '-c:a', 'aac',
       '-b:a', '192k',

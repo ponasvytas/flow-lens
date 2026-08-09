@@ -61,12 +61,43 @@ class EventsController extends ChangeNotifier {
     if (_activeEvent?.id == event.id) {
       _activeEvent = null;
     }
+    _selectedEventIds.remove(event.id);
     _invalidateCache();
     notifyListeners();
   }
 
   void selectEvent(GameEvent? event) {
     _activeEvent = event;
+    notifyListeners();
+  }
+
+  // --- Multi-selection (e.g. for export) ---------------------------------
+  // Held here so it survives the events table being closed and reopened,
+  // and persists across actions like video export.
+  final Set<String> _selectedEventIds = {};
+
+  /// IDs of events currently multi-selected.
+  Set<String> get selectedEventIds => Set.unmodifiable(_selectedEventIds);
+
+  bool isSelected(String eventId) => _selectedEventIds.contains(eventId);
+
+  void toggleSelection(String eventId) {
+    if (!_selectedEventIds.add(eventId)) {
+      _selectedEventIds.remove(eventId);
+    }
+    notifyListeners();
+  }
+
+  void setSelection(Iterable<String> eventIds) {
+    _selectedEventIds
+      ..clear()
+      ..addAll(eventIds);
+    notifyListeners();
+  }
+
+  void clearSelection() {
+    if (_selectedEventIds.isEmpty) return;
+    _selectedEventIds.clear();
     notifyListeners();
   }
 
@@ -85,6 +116,7 @@ class EventsController extends ChangeNotifier {
   void clearEvents() {
     _allEvents.clear();
     _activeEvent = null;
+    _selectedEventIds.clear();
     _invalidateCache();
     notifyListeners();
   }

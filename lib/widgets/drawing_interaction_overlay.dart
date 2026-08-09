@@ -56,13 +56,17 @@ class _DrawingInteractionOverlayState extends State<DrawingInteractionOverlay> {
     if (!widget.isDrawingMode) return;
     setState(() {
       if (widget.currentTool == DrawingTool.freehand) {
-        _currentStroke.add(
+        // Assign a new list so CustomPainter.shouldRepaint sees a length change
+        // (it compares against oldDelegate's list, which would be the same
+        // reference if we mutated in place).
+        _currentStroke = [
+          ..._currentStroke,
           DrawingPoint(
             details.localPosition,
             widget.drawingColor,
             widget.strokeWidth,
           ),
-        );
+        ];
       } else {
         _currentDrawPosition = details.localPosition;
       }
