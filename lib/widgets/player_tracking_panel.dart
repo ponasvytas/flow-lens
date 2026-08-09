@@ -111,7 +111,11 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
         ),
       ),
     ),
-    Object.hashAll(widget.controller.hotkeys.entries),
+    Object.hashAll(
+      widget.controller.hotkeys.entries.map(
+        (entry) => Object.hash(entry.key, entry.value),
+      ),
+    ),
     widget.controller.activeSubjectId,
   );
 

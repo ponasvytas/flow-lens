@@ -8,6 +8,7 @@ import '../utils/perf.dart';
 
 class EventsController extends ChangeNotifier {
   final List<GameEvent> _allEvents = <GameEvent>[];
+  final Map<String, int> _eventIndices = <String, int>{};
   final Set<String> _selectedEventIds = <String>{};
   late final UnmodifiableListView<GameEvent> _allEventsView =
       UnmodifiableListView<GameEvent>(_allEvents);
@@ -53,8 +54,7 @@ class EventsController extends ChangeNotifier {
 
   int get totalEventCount => _allEvents.length;
   int get filteredEventCount => filteredEvents.length;
-  bool containsEvent(String eventId) =>
-      _allEvents.any((event) => event.id == eventId);
+  bool containsEvent(String eventId) => _eventIndices.containsKey(eventId);
   bool isSelected(String eventId) => _selectedEventIds.contains(eventId);
 
   void _dataChanged() {
@@ -73,20 +73,25 @@ class EventsController extends ChangeNotifier {
     _allEvents
       ..clear()
       ..addAll(events);
-    _selectedEventIds.removeWhere(
-      (id) => !_allEvents.any((event) => event.id == id),
-    );
+    _rebuildEventIndices();
+    _selectedEventIds.removeWhere((id) => !_eventIndices.containsKey(id));
     _dataChanged();
   }
 
   void addEvent(GameEvent event) {
+    if (containsEvent(event.id)) {
+      upsertEvent(event);
+      return;
+    }
+    _eventIndices[event.id] = _allEvents.length;
     _allEvents.add(event);
     _dataChanged();
   }
 
   void upsertEvent(GameEvent event) {
-    final index = _allEvents.indexWhere((current) => current.id == event.id);
-    if (index < 0) {
+    final index = _eventIndices[event.id];
+    if (index == null) {
+      _eventIndices[event.id] = _allEvents.length;
       _allEvents.add(event);
     } else {
       _allEvents[index] = event;
@@ -110,6 +115,7 @@ class EventsController extends ChangeNotifier {
     _allEvents.removeWhere((event) => ids.contains(event.id));
     final removed = before - _allEvents.length;
     if (removed == 0) return 0;
+    _rebuildEventIndices();
     if (_activeEvent != null && ids.contains(_activeEvent!.id)) {
       _activeEvent = null;
     }
@@ -158,6 +164,7 @@ class EventsController extends ChangeNotifier {
   void clearEvents() {
     if (_allEvents.isEmpty && _selectedEventIds.isEmpty) return;
     _allEvents.clear();
+    _eventIndices.clear();
     _activeEvent = null;
     _selectedEventIds.clear();
     selectionRevision.value++;
@@ -169,5 +176,12 @@ class EventsController extends ChangeNotifier {
     dataRevision.dispose();
     selectionRevision.dispose();
     super.dispose();
+  }
+
+  void _rebuildEventIndices() {
+    _eventIndices.clear();
+    for (var index = 0; index < _allEvents.length; index++) {
+      _eventIndices[_allEvents[index].id] = index;
+    }
   }
 }
