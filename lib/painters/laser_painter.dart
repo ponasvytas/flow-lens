@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/drawing_models.dart';
@@ -90,4 +91,39 @@ class LaserPainter extends CustomPainter {
         strokeWidth != oldDelegate.strokeWidth ||
         showCursor != oldDelegate.showCursor;
   }
+}
+
+/// Lightweight cursor-only layer. Pointer movement schedules paint directly
+/// without rebuilding widgets or repainting fading trails.
+class LaserCursorPainter extends CustomPainter {
+  LaserCursorPainter({
+    required this.position,
+    required this.color,
+    required this.visible,
+  }) : _glowPaint = Paint()..color = color.withValues(alpha: 0.3),
+       _cursorPaint = Paint()..color = color,
+       _centerPaint = Paint()..color = Colors.white,
+       super(repaint: position);
+
+  final ValueListenable<Offset?> position;
+  final Color color;
+  final bool visible;
+  final Paint _glowPaint;
+  final Paint _cursorPaint;
+  final Paint _centerPaint;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final point = position.value;
+    if (!visible || point == null) return;
+    canvas.drawCircle(point, 12, _glowPaint);
+    canvas.drawCircle(point, 8, _cursorPaint);
+    canvas.drawCircle(point, 3, _centerPaint);
+  }
+
+  @override
+  bool shouldRepaint(LaserCursorPainter oldDelegate) =>
+      position != oldDelegate.position ||
+      color != oldDelegate.color ||
+      visible != oldDelegate.visible;
 }

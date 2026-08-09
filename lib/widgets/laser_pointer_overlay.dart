@@ -34,16 +34,15 @@ class LaserPointerOverlay extends StatefulWidget {
 class _LaserPointerOverlayState extends State<LaserPointerOverlay>
     with TickerProviderStateMixin {
   static const drawingThrottle = Duration(milliseconds: 16);
-  static const idleThrottle = Duration(milliseconds: 50);
   static const trailDelay = Duration(milliseconds: 1500);
   static const trailFade = Duration(milliseconds: 1000);
 
   final DrawingCaptureBuffer _capture = DrawingCaptureBuffer();
+  final ValueNotifier<Offset?> _cursorPosition = ValueNotifier<Offset?>(null);
   final Map<LaserTrail, AnimationController> _controllers = {};
   final Map<LaserTrail, Timer> _timers = {};
-  Offset? _cursorPosition;
   Offset? _latestDrawPosition;
-  DateTime? _lastCursorUpdate;
+  DateTime? _lastTrailUpdate;
 
   @override
   void initState() {
@@ -88,17 +87,13 @@ class _LaserPointerOverlayState extends State<LaserPointerOverlay>
     });
   }
 
-  bool _acceptCursor(Offset position, Duration interval) {
-    if (_cursorPosition != null &&
-        (position - _cursorPosition!).distance < 5.0) {
-      return false;
-    }
+  bool _mayCaptureTrailPoint() {
     final now = DateTime.now();
-    if (_lastCursorUpdate != null &&
-        now.difference(_lastCursorUpdate!) < interval) {
+    if (_lastTrailUpdate != null &&
+        now.difference(_lastTrailUpdate!) < drawingThrottle) {
       return false;
     }
-    _lastCursorUpdate = now;
+    _lastTrailUpdate = now;
     return true;
   }
 
@@ -111,6 +106,7 @@ class _LaserPointerOverlayState extends State<LaserPointerOverlay>
       controller.dispose();
     }
     _capture.dispose();
+    _cursorPosition.dispose();
     super.dispose();
   }
 
@@ -127,19 +123,18 @@ class _LaserPointerOverlayState extends State<LaserPointerOverlay>
                 ? SystemMouseCursors.none
                 : SystemMouseCursors.basic,
             onHover: (event) {
-              if (widget.isActive &&
-                  widget.isDrawingMode &&
-                  _acceptCursor(event.localPosition, idleThrottle)) {
-                setState(() => _cursorPosition = event.localPosition);
+              if (widget.isActive && widget.isDrawingMode) {
+                _cursorPosition.value = event.localPosition;
               }
             },
             onExit: (_) {
-              if (widget.isActive) setState(() => _cursorPosition = null);
+              if (widget.isActive) _cursorPosition.value = null;
             },
             child: GestureDetector(
               onPanStart: (details) {
                 if (!widget.isActive || !widget.isDrawingMode) return;
                 _latestDrawPosition = details.localPosition;
+                _lastTrailUpdate = DateTime.now();
                 _capture.start(
                   DrawingPoint(
                     details.localPosition,
@@ -147,12 +142,13 @@ class _LaserPointerOverlayState extends State<LaserPointerOverlay>
                     widget.strokeWidth,
                   ),
                 );
-                setState(() => _cursorPosition = details.localPosition);
+                _cursorPosition.value = details.localPosition;
               },
               onPanUpdate: (details) {
                 if (!widget.isActive || !widget.isDrawingMode) return;
                 _latestDrawPosition = details.localPosition;
-                if (_acceptCursor(details.localPosition, drawingThrottle)) {
+                _cursorPosition.value = details.localPosition;
+                if (_mayCaptureTrailPoint()) {
                   _capture.add(
                     DrawingPoint(
                       details.localPosition,
@@ -160,7 +156,6 @@ class _LaserPointerOverlayState extends State<LaserPointerOverlay>
                       widget.strokeWidth,
                     ),
                   );
-                  setState(() => _cursorPosition = details.localPosition);
                 }
               },
               onPanEnd: (_) {
@@ -177,22 +172,36 @@ class _LaserPointerOverlayState extends State<LaserPointerOverlay>
                 _latestDrawPosition = null;
                 if (points.isNotEmpty) widget.onCompleteDrawing(points);
               },
-              child: RepaintBoundary(
-                child: CustomPaint(
-                  painter: LaserPainter(
-                    widget.trails,
-                    const <DrawingPoint>[],
-                    _cursorPosition,
-                    widget.color,
-                    widget.strokeWidth,
-                    widget.isActive && widget.isDrawingMode,
-                    activeCapture: _capture,
-                    trailAnimations: <LaserTrail, Animation<double>>{
-                      for (final entry in _controllers.entries)
-                        entry.key: entry.value,
-                    },
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  RepaintBoundary(
+                    child: CustomPaint(
+                      painter: LaserPainter(
+                        widget.trails,
+                        const <DrawingPoint>[],
+                        null,
+                        widget.color,
+                        widget.strokeWidth,
+                        false,
+                        activeCapture: _capture,
+                        trailAnimations: <LaserTrail, Animation<double>>{
+                          for (final entry in _controllers.entries)
+                            entry.key: entry.value,
+                        },
+                      ),
+                    ),
                   ),
-                ),
+                  RepaintBoundary(
+                    child: CustomPaint(
+                      painter: LaserCursorPainter(
+                        position: _cursorPosition,
+                        color: widget.color,
+                        visible: widget.isActive && widget.isDrawingMode,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

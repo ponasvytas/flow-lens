@@ -28,7 +28,7 @@ flutter run --profile -d windows --dart-define=FLOW_LENS_PERF=true
 | 2026-08-09 | Pre-change test | Blocked | Combined command timed out before result. |
 | 2026-08-09 | `dart format lib test` | Pass | 74 Dart files checked after remediation. |
 | 2026-08-09 | `flutter analyze` | Pass | No issues found. |
-| 2026-08-09 | `flutter test` | Pass | 40 tests passed. |
+| 2026-08-09 | `flutter test` | Pass | 41 tests passed. |
 | 2026-08-09 | `flutter build web` | Pass | Release build and Wasm dry run succeeded. |
 | 2026-08-09 | `flutter build windows` | Pass | Release executable built successfully; dependency CMake deprecation warnings only. |
 | Pending | Chrome profile scenarios | Pending | Interactive reference machine required. |

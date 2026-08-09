@@ -25,3 +25,10 @@ This log is append-only.
   make all clear actions immediate. Drawings are intentionally short-lived,
   temporal coaching annotations, so fast clearing is more valuable than a
   confirmation step. This supersedes the Phase 04 explicit-only clear decision.
+
+## 2026-08-09 — Laser cursor rendering revision
+
+- Cursor motion is no longer throttled or distance-reduced. The colored cursor
+  uses a dedicated repaint-only layer so pointer movement never rebuilds the
+  overlay or repaints fading trails. The 16 ms throttle and 5 px reduction now
+  apply only to captured trail points.

@@ -10,8 +10,9 @@ Phase 00 instrumentation.
 
 ## Implementation
 
-Use incremental active paths and cached completed paths, reduced/throttled input,
-one seek per scrub, and generation-based preview coordination.
+Use incremental active paths and cached completed paths, reduced/throttled trail
+capture, an unthrottled repaint-only laser cursor, one seek per scrub, and
+generation-based preview coordination.
 
 ## API changes
 
@@ -37,4 +38,3 @@ preview boundary/cancellation cases.
 ## Completion record
 
 Implemented 2026-08-09; manual profile gate remains pending.
-
