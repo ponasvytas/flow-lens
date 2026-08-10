@@ -34,6 +34,7 @@ class DockPanel extends StatefulWidget {
   final ValueChanged<PanelDockEdge> onDockEdgeChanged;
   final DockPresentationMode presentationMode;
   final ValueChanged<DockPresentationMode> onPresentationModeChanged;
+  final GestureDragStartCallback? onDragStart;
   final GestureDragUpdateCallback? onDragUpdate;
   final GestureDragEndCallback? onDragEnd;
   final BoxConstraints constraints;
@@ -50,6 +51,7 @@ class DockPanel extends StatefulWidget {
     required this.presentationMode,
     required this.onPresentationModeChanged,
     required this.child,
+    this.onDragStart,
     this.onDragUpdate,
     this.onDragEnd,
     this.constraints = const BoxConstraints(),
@@ -278,6 +280,7 @@ class _DockPanelState extends State<DockPanel>
       cursor: SystemMouseCursors.move,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
+        onPanStart: widget.onDragStart,
         onPanUpdate: widget.onDragUpdate,
         onPanEnd: widget.onDragEnd,
         child: strip,

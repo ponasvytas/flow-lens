@@ -136,6 +136,7 @@ class DockLayout extends StatefulWidget {
 
 class _DockLayoutState extends State<DockLayout> {
   final Map<PanelId, Offset> _dragPositions = {};
+  final Map<PanelId, (Offset pointer, Offset panel)> _dragAnchors = {};
   final Map<PanelId, Size> _dragSizes = {};
   final Map<(PanelId, PanelDockEdge, Object?), Widget> _panelChildren = {};
   DockEdgeExtents? _resizingExtents;
@@ -151,6 +152,7 @@ class _DockLayoutState extends State<DockLayout> {
       (key, child) => !ids.contains(key.$1) || revisions[key.$1] != key.$3,
     );
     _dragPositions.removeWhere((id, position) => !ids.contains(id));
+    _dragAnchors.removeWhere((id, anchor) => !ids.contains(id));
     _dragSizes.removeWhere((id, size) => !ids.contains(id));
   }
 
@@ -373,9 +375,17 @@ class _DockLayoutState extends State<DockLayout> {
               entry,
               PanelDockEdge.floating,
               workspaceSize,
-              onDragUpdate: (details) => setState(
-                () => _dragPositions[entry.id] = position + details.delta,
-              ),
+              onDragStart: (details) {
+                _dragAnchors[entry.id] = (details.globalPosition, position);
+              },
+              onDragUpdate: (details) {
+                final anchor = _dragAnchors[entry.id];
+                if (anchor == null) return;
+                setState(() {
+                  _dragPositions[entry.id] =
+                      anchor.$2 + details.globalPosition - anchor.$1;
+                });
+              },
               onDragEnd: (_) =>
                   _finishFloatingDrag(entry, clampedSize, workspaceSize),
             ),
@@ -443,7 +453,10 @@ class _DockLayoutState extends State<DockLayout> {
       panelSize,
       workspaceSize,
     );
-    setState(() => _dragPositions.remove(entry.id));
+    setState(() {
+      _dragPositions.remove(entry.id);
+      _dragAnchors.remove(entry.id);
+    });
     widget.uiController.setFloatingPosition(entry.id, position);
   }
 
@@ -462,6 +475,7 @@ class _DockLayoutState extends State<DockLayout> {
     DockPanelEntry entry,
     PanelDockEdge edge,
     Size workspaceSize, {
+    GestureDragStartCallback? onDragStart,
     GestureDragUpdateCallback? onDragUpdate,
     GestureDragEndCallback? onDragEnd,
   }) {
@@ -477,6 +491,7 @@ class _DockLayoutState extends State<DockLayout> {
       onDockEdgeChanged: (newEdge) => ui.setDockEdge(entry.id, newEdge),
       presentationMode: ui.dockPresentationMode,
       onPresentationModeChanged: ui.setDockPresentationMode,
+      onDragStart: onDragStart,
       onDragUpdate: onDragUpdate,
       onDragEnd: onDragEnd,
       constraints: sideDock

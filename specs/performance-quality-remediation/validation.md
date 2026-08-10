@@ -32,7 +32,7 @@ flutter run --profile -d windows --dart-define=FLOW_LENS_PERF=true
 | 2026-08-09 | `flutter build web` | Pass | Release build and Wasm dry run succeeded. |
 | 2026-08-09 | `flutter build windows` | Pass | Release executable built successfully; dependency CMake deprecation warnings only. |
 | 2026-08-09 | Dock workspace `flutter analyze` | Pass | No issues found after persisted responsive docking refactor. |
-| 2026-08-09 | Dock workspace `flutter test` | Pass | 48 tests passed, including geometry, persistence, resize, and interaction coverage. |
+| 2026-08-09 | Dock workspace `flutter test` | Pass | 49 tests passed, including geometry, persistence, resize, and interaction coverage. |
 | 2026-08-09 | Dock workspace `flutter build web` | Pass | Release build and Wasm dry run succeeded. |
 | 2026-08-09 | Dock workspace `flutter build windows` | Pass | Release executable built; dependency CMake deprecation warnings only. |
 | Pending | Chrome profile scenarios | Pending | Interactive reference machine required. |

@@ -92,6 +92,21 @@ void main() {
     );
   });
 
+  testWidgets('floating panel tracks the full global pointer displacement', (
+    tester,
+  ) async {
+    final controller = UIController();
+    await tester.pumpWidget(buildLayout(controller));
+
+    await tester.drag(find.text('Test Panel'), const Offset(120, 60));
+    await tester.pump();
+
+    expect(
+      controller.floatingPosition(panelId, defaultPosition),
+      const Offset(220, 160),
+    );
+  });
+
   testWidgets('dock menu still docks a floating panel', (tester) async {
     final controller = UIController();
     await tester.pumpWidget(buildLayout(controller));
