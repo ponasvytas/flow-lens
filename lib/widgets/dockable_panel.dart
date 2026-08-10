@@ -7,13 +7,12 @@ enum PanelDockEdge {
   right,
   top,
   bottom,
-  floating, // Not snapped to any edge
+  floating, // Freely positioned; docking is an explicit menu action.
 }
 
 // ---------------------------------------------------------------------------
 // Layout constants — single source of truth
 // ---------------------------------------------------------------------------
-const double kSnapThreshold = 30.0;
 const double kAppTitleBarHeight = 64.0;
 const double kProgressBarReserve = 70.0;
 const double kPanelTitleStripHeight = 32.0;

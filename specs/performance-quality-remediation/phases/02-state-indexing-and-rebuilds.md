@@ -13,7 +13,7 @@ Phase 01 input behavior.
 
 Maintain tracking indexes and scoped cell listenables; expose stable event
 views, cached chronology, batched mutations, taxonomy lookup maps, lazy timeline
-painting, binary navigation, and local drag state with edge snapping.
+painting, binary navigation, and local drag state with explicit-only docking.
 
 ## API changes
 
@@ -29,7 +29,7 @@ notifiers. Invalid IDs are ignored.
 ## Tests
 
 Aggregate rebuilding, ID collision prevention, event cache/revisions/batch
-notification, binary navigation, painter hit testing, and edge snapping.
+notification, binary navigation, painter hit testing, and edge-drag behavior.
 
 ## Acceptance checklist
 
@@ -41,4 +41,3 @@ notification, binary navigation, painter hit testing, and edge snapping.
 ## Completion record
 
 Implemented 2026-08-09; manual profile gate remains pending.
-

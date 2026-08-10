@@ -32,3 +32,9 @@ This log is append-only.
   uses a dedicated repaint-only layer so pointer movement never rebuilds the
   overlay or repaints fading trails. The 16 ms throttle and 5 px reduction now
   apply only to captured trail points.
+
+## 2026-08-09 — Explicit-only panel docking revision
+
+- Dragging a floating panel only changes its clamped screen position. Docking
+  now occurs exclusively through the panel dock-position menu. This supersedes
+  the earlier drag-to-snap decision for every app mode, including Tracking.

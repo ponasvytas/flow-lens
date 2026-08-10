@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import '../controllers/ui_controller.dart';
 import '../models/app_mode.dart';
@@ -225,20 +227,16 @@ class _DockLayoutState extends State<DockLayout> {
     final pos =
         _dragOffsets[id] ??
         widget.uiController.floatingPosition(id, entry.defaultFloatingPosition);
-    double x = pos.dx;
-    double y = pos.dy;
-
     setState(() => _dragOffsets.remove(id));
     final panelSize =
         _panelKeys[id]?.currentContext?.size ?? const Size(220, 100);
-    final snapEdge = nearestDockEdge(pos, panelSize, screenSize);
-    if (snapEdge != PanelDockEdge.floating) {
-      widget.uiController.setDockEdge(id, snapEdge);
-      return;
-    }
-
-    x = x.clamp(0, screenSize.width - 60);
-    y = y.clamp(kAppTitleBarHeight, screenSize.height - kProgressBarReserve);
+    final maxX = math.max(0.0, screenSize.width - panelSize.width);
+    final maxY = math.max(
+      kAppTitleBarHeight,
+      screenSize.height - kProgressBarReserve - panelSize.height,
+    );
+    final x = pos.dx.clamp(0.0, maxX);
+    final y = pos.dy.clamp(kAppTitleBarHeight, maxY);
     widget.uiController.setFloatingPosition(id, Offset(x, y));
   }
 
@@ -273,29 +271,4 @@ class _DockLayoutState extends State<DockLayout> {
       ), () => entry.builder(edge)),
     );
   }
-}
-
-/// Chooses the nearest edge within [threshold]. At corners, distance decides.
-PanelDockEdge nearestDockEdge(
-  Offset position,
-  Size panelSize,
-  Size screenSize, {
-  double threshold = kSnapThreshold,
-}) {
-  final distances = <PanelDockEdge, double>{
-    PanelDockEdge.left: position.dx.abs(),
-    PanelDockEdge.right: (screenSize.width - position.dx - panelSize.width)
-        .abs(),
-    PanelDockEdge.top: (position.dy - kAppTitleBarHeight).abs(),
-    PanelDockEdge.bottom:
-        (screenSize.height -
-                kProgressBarReserve -
-                position.dy -
-                panelSize.height)
-            .abs(),
-  };
-  final nearest = distances.entries.reduce(
-    (a, b) => a.value <= b.value ? a : b,
-  );
-  return nearest.value <= threshold ? nearest.key : PanelDockEdge.floating;
 }

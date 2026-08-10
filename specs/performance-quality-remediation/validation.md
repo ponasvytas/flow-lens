@@ -39,7 +39,8 @@ flutter run --profile -d windows --dart-define=FLOW_LENS_PERF=true
 
 1. `625bcd2` — Phase 00 specification and measurement guardrails.
 2. `f544d4d` — Phase 01 drawing, laser, seeking, and preview coordination.
-3. `0a994e0` — Phase 02 indexes, stable caches, rebuild isolation, and snapping.
+3. `0a994e0` — Phase 02 indexes, stable caches, rebuild isolation, and the
+   initial snapping behavior later superseded by explicit-only docking.
 4. `a255dce` — Phase 03 video/export resource and platform lifecycle.
 5. `b656cd6` — Phase 04 integration, accessibility, logging, and analyzer cleanup.
 
