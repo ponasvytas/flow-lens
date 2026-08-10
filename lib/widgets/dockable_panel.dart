@@ -1,14 +1,8 @@
 import 'package:flutter/material.dart';
 import '../models/app_mode.dart';
+import '../models/dock_layout_state.dart';
 
-/// Which edge a panel is docked to (or floating freely)
-enum PanelDockEdge {
-  left,
-  right,
-  top,
-  bottom,
-  floating, // Freely positioned; docking is an explicit menu action.
-}
+export '../models/dock_layout_state.dart';
 
 // ---------------------------------------------------------------------------
 // Layout constants — single source of truth
@@ -38,6 +32,10 @@ class DockPanel extends StatefulWidget {
   final ValueChanged<bool> onCollapsedChanged;
   final PanelDockEdge dockEdge;
   final ValueChanged<PanelDockEdge> onDockEdgeChanged;
+  final DockPresentationMode presentationMode;
+  final ValueChanged<DockPresentationMode> onPresentationModeChanged;
+  final GestureDragUpdateCallback? onDragUpdate;
+  final GestureDragEndCallback? onDragEnd;
   final BoxConstraints constraints;
   final Widget child;
 
@@ -49,7 +47,11 @@ class DockPanel extends StatefulWidget {
     required this.onCollapsedChanged,
     required this.dockEdge,
     required this.onDockEdgeChanged,
+    required this.presentationMode,
+    required this.onPresentationModeChanged,
     required this.child,
+    this.onDragUpdate,
+    this.onDragEnd,
     this.constraints = const BoxConstraints(),
     super.key,
   });
@@ -99,7 +101,7 @@ class _DockPanelState extends State<DockPanel>
     final RenderBox box = context.findRenderObject() as RenderBox;
     final Offset topLeft = box.localToGlobal(Offset.zero);
 
-    showMenu<PanelDockEdge>(
+    showMenu<Object>(
       context: context,
       color: const Color(0xFF1E1E2E),
       shape: RoundedRectangleBorder(
@@ -126,19 +128,50 @@ class _DockPanelState extends State<DockPanel>
           'Dock Bottom',
         ),
         _menuItem(PanelDockEdge.floating, Icons.open_with, 'Float'),
+        const PopupMenuDivider(),
+        PopupMenuItem<Object>(
+          value: _DockMenuCommand.togglePresentation,
+          height: 40,
+          child: Row(
+            children: [
+              Icon(
+                widget.presentationMode == DockPresentationMode.overlay
+                    ? Icons.layers
+                    : Icons.view_quilt,
+                size: 16,
+                color: Colors.white60,
+              ),
+              const SizedBox(width: 10),
+              Text(
+                widget.presentationMode == DockPresentationMode.overlay
+                    ? 'Docks overlay video'
+                    : 'Docks squeeze video',
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
       ],
-    ).then((edge) {
-      if (edge != null) widget.onDockEdgeChanged(edge);
+    ).then((selection) {
+      if (selection is PanelDockEdge) {
+        widget.onDockEdgeChanged(selection);
+      } else if (selection == _DockMenuCommand.togglePresentation) {
+        widget.onPresentationModeChanged(
+          widget.presentationMode == DockPresentationMode.overlay
+              ? DockPresentationMode.squeeze
+              : DockPresentationMode.overlay,
+        );
+      }
     });
   }
 
-  PopupMenuItem<PanelDockEdge> _menuItem(
+  PopupMenuItem<Object> _menuItem(
     PanelDockEdge edge,
     IconData icon,
     String label,
   ) {
     final isActive = widget.dockEdge == edge;
-    return PopupMenuItem<PanelDockEdge>(
+    return PopupMenuItem<Object>(
       value: edge,
       height: 36,
       child: Row(
@@ -190,23 +223,29 @@ class _DockPanelState extends State<DockPanel>
           ),
         ],
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _buildTitleStrip(compact: isVertical),
-          SizeTransition(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final content = SizeTransition(
             sizeFactor: _collapseAnimation,
             axisAlignment: -1.0,
-            child: widget.child,
-          ),
-        ],
+            child: SingleChildScrollView(child: widget.child),
+          );
+          return Column(
+            mainAxisSize: constraints.hasBoundedHeight
+                ? MainAxisSize.max
+                : MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildTitleStrip(compact: isVertical),
+              if (constraints.hasBoundedHeight)
+                Expanded(child: content)
+              else
+                content,
+            ],
+          );
+        },
       ),
     );
-
-    if (isVertical || widget.dockEdge == PanelDockEdge.floating) {
-      panel = IntrinsicWidth(child: panel);
-    }
 
     return Material(color: Colors.transparent, child: panel);
   }
@@ -216,7 +255,7 @@ class _DockPanelState extends State<DockPanel>
   // -------------------------------------------------------------------------
 
   Widget _buildTitleStrip({bool compact = false}) {
-    return Container(
+    final strip = Container(
       height: kPanelTitleStripHeight,
       padding: const EdgeInsets.symmetric(horizontal: 6),
       decoration: BoxDecoration(
@@ -233,6 +272,16 @@ class _DockPanelState extends State<DockPanel>
         ),
       ),
       child: compact ? _buildCompactStrip() : _buildFullStrip(),
+    );
+    if (widget.onDragUpdate == null) return strip;
+    return MouseRegion(
+      cursor: SystemMouseCursors.move,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onPanUpdate: widget.onDragUpdate,
+        onPanEnd: widget.onDragEnd,
+        child: strip,
+      ),
     );
   }
 
@@ -326,3 +375,5 @@ class _DockPanelState extends State<DockPanel>
     );
   }
 }
+
+enum _DockMenuCommand { togglePresentation }

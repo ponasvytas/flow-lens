@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:file_picker/file_picker.dart';
@@ -30,6 +31,7 @@ import 'services/event_storage_service.dart';
 import 'services/tracking_storage_service.dart';
 import 'services/taxonomy_repository.dart';
 import 'services/settings_repository.dart';
+import 'services/dock_layout_repository.dart';
 import 'models/sport_taxonomy.dart';
 import 'controllers/events_controller.dart';
 import 'controllers/settings_controller.dart';
@@ -37,7 +39,9 @@ import 'controllers/ui_controller.dart';
 import 'controllers/tracking_controller.dart';
 import 'controllers/event_preview_coordinator.dart';
 import 'models/app_mode.dart';
+import 'models/dock_layout_state.dart';
 import 'widgets/dock_layout.dart';
+import 'widgets/dockable_panel.dart' show kAppTitleBarHeight;
 import 'widgets/settings_view.dart';
 import 'widgets/event_navigation_panel.dart';
 import 'widgets/player_tracking_panel.dart';
@@ -224,7 +228,9 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   );
 
   // UI mode & panel management
-  final UIController _uiController = UIController();
+  final UIController _uiController = UIController(
+    SharedPreferencesDockLayoutRepository(),
+  );
 
   // Player tracking
   final TrackingController _trackingController = TrackingController();
@@ -317,7 +323,10 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   }
 
   Future<void> _initializeSettingsAndDeepLink() async {
-    await _settingsController.loadSettings();
+    await Future.wait([
+      _settingsController.loadSettings(),
+      _uiController.loadDockLayouts(),
+    ]);
     if (!mounted) return;
     await player.setRate(_settingsController.settings.defaultPlaybackSpeed);
     WidgetsBinding.instance.addPostFrameCallback((_) => _handleDeepLink());
@@ -670,8 +679,26 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
   /// Current video container width (accounts for docked panel).
   double get _videoWidth {
-    final screenWidth = MediaQuery.of(context).size.width;
-    return _showDockedEvents ? screenWidth - 340 : screenWidth;
+    final screenSize = MediaQuery.sizeOf(context);
+    final workspaceWidth = math.max(
+      0.0,
+      screenSize.width - (_showDockedEvents ? 340 : 0),
+    );
+    if (_uiController.dockPresentationMode == DockPresentationMode.overlay) {
+      return workspaceWidth;
+    }
+    final activeEdges = <PanelDockEdge>{};
+    for (final id in PanelId.values) {
+      if (!_uiController.panelVisible(id)) continue;
+      final edge = _uiController.dockEdge(id);
+      if (edge != PanelDockEdge.floating) activeEdges.add(edge);
+    }
+    return resolveDockGeometry(
+      size: Size(workspaceWidth, math.max(0, screenSize.height - 64)),
+      activeEdges: activeEdges,
+      extents: _uiController.dockExtents,
+      presentationMode: DockPresentationMode.squeeze,
+    ).contentRect.width;
   }
 
   /// Normalize a pixel-based transform to be resolution-independent.
@@ -1050,6 +1077,147 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     // Reclaim keyboard focus — removing the SmartHUD can leave focus orphaned.
     _rootFocus.requestFocus();
   }
+
+  Widget _buildVideoSurface() {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        ListenableBuilder(
+          listenable: _drawing,
+          builder: (context, _) => VideoCanvas(
+            controller: controller,
+            transformationController: _transformationController,
+            isDrawingMode: _drawing.isDrawingMode,
+            currentTool: _drawing.currentTool,
+            drawingStrokes: _drawing.strokes,
+            lineShapes: _drawing.lines,
+            arrowShapes: _drawing.arrows,
+            drawingColor: _drawing.drawingColor,
+            strokeWidth: _drawing.strokeWidth,
+            drawingRevision: _drawing.revision,
+            videoAspectRatio: _videoAspectRatio,
+            onStrokeCompleted: _onStrokeCompleted,
+            onLineCompleted: _onLineCompleted,
+            onArrowCompleted: _onArrowCompleted,
+            onClearDrawing: _clearDrawing,
+          ),
+        ),
+        ListenableBuilder(
+          listenable: _drawing,
+          builder: (context, _) {
+            if (_drawing.currentTool != DrawingTool.laser &&
+                _drawing.laserTrails.isEmpty) {
+              return const SizedBox.shrink();
+            }
+            return LaserPointerOverlay(
+              isActive: _drawing.currentTool == DrawingTool.laser,
+              isDrawingMode: _drawing.isDrawingMode,
+              trails: _drawing.laserTrails,
+              color: _drawing.drawingColor,
+              strokeWidth: _drawing.strokeWidth,
+              videoAspectRatio: _videoAspectRatio,
+              onCompleteDrawing: _completeLaserDrawing,
+              onRemoveTrail: _removeTrail,
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  List<DockPanelEntry> _buildDockPanels(BuildContext context) => [
+    DockPanelEntry(
+      id: PanelId.eventButtons,
+      title: 'Event Entry',
+      icon: Icons.add_task,
+      defaultFloatingPosition: const Offset(360, 360),
+      defaultFloatingSize: const Size(640, 118),
+      horizontalDockWidth: 900,
+      contentRevision: _taxonomy,
+      builder: (dockEdge) => ListenableBuilder(
+        listenable: _altKey,
+        builder: (context, _) => EventButtonsPanel(
+          onEventTriggered: _onEventTriggered,
+          taxonomy: _taxonomy,
+          showNumbers: _altKey.showCategoryNumbers,
+        ),
+      ),
+    ),
+    DockPanelEntry(
+      id: PanelId.playbackControls,
+      title: 'Playback',
+      icon: Icons.play_circle_outline,
+      defaultFloatingPosition: const Offset(20, 16),
+      defaultFloatingSize: const Size(320, 170),
+      horizontalDockWidth: 620,
+      builder: (dockEdge) => DraggableControlBar(
+        player: player,
+        onSpeedChange: _changeSpeed,
+        onJumpForward: _jumpForward,
+        onJumpBackward: _jumpBackward,
+        onTogglePlayPause: _togglePlayPause,
+        dockEdge: dockEdge,
+      ),
+    ),
+    DockPanelEntry(
+      id: PanelId.drawingTools,
+      title: 'Drawing',
+      icon: Icons.draw,
+      defaultFloatingPosition: Offset(
+        MediaQuery.sizeOf(context).width - 320,
+        136,
+      ),
+      defaultFloatingSize: const Size(300, 250),
+      horizontalDockWidth: 520,
+      builder: (dockEdge) => ListenableBuilder(
+        listenable: _drawing,
+        builder: (context, _) => DrawingToolsPanel(
+          isDrawingMode: _drawing.isDrawingMode,
+          currentTool: _drawing.currentTool,
+          drawingColor: _drawing.drawingColor,
+          onToggleDrawingMode: _toggleDrawingMode,
+          onResetZoom: _resetZoom,
+          onClearDrawing: _clearDrawing,
+          onToolChange: _drawing.setTool,
+          onColorChange: _drawing.setColor,
+          dockEdge: dockEdge,
+        ),
+      ),
+    ),
+    DockPanelEntry(
+      id: PanelId.eventNavigation,
+      title: 'Event Navigation',
+      icon: Icons.search,
+      defaultFloatingPosition: const Offset(20, 136),
+      defaultFloatingSize: const Size(300, 180),
+      horizontalDockWidth: 360,
+      builder: (dockEdge) => StreamBuilder<Duration>(
+        stream: player.stream.position,
+        builder: (context, snapshot) => EventNavigationPanel(
+          controller: _eventsController,
+          onOpenEventsTable: _showEventsTable,
+          onNavigateTo: _navigateToEvent,
+          currentPosition: snapshot.data ?? player.state.position,
+        ),
+      ),
+    ),
+    DockPanelEntry(
+      id: PanelId.playerTracking,
+      title: 'Player Tracking',
+      icon: Icons.people,
+      defaultFloatingPosition: const Offset(20, 136),
+      defaultFloatingSize: const Size(420, 520),
+      horizontalDockWidth: 760,
+      builder: (dockEdge) => PlayerTrackingPanel(
+        controller: _trackingController,
+        player: player,
+        dockEdge: dockEdge,
+        onSave: _saveTrackingSession,
+        onLoad: _loadTrackingSession,
+        onExportCsv: _exportTrackingCsv,
+      ),
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -1464,34 +1632,35 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                     ),
                   ),
 
-                  // LAYER 1: Video Canvas with Zoom/Pan and Drawing (with top padding)
-                  ListenableBuilder(
-                    listenable: _drawing,
-                    builder: (context, _) => Padding(
-                      padding: const EdgeInsets.only(top: 64),
-                      child: VideoCanvas(
-                        controller: controller,
-                        transformationController: _transformationController,
-                        isDrawingMode: _drawing.isDrawingMode,
-                        currentTool: _drawing.currentTool,
-                        drawingStrokes: _drawing.strokes,
-                        lineShapes: _drawing.lines,
-                        arrowShapes: _drawing.arrows,
-                        drawingColor: _drawing.drawingColor,
-                        strokeWidth: _drawing.strokeWidth,
-                        drawingRevision: _drawing.revision,
-                        videoAspectRatio: _videoAspectRatio,
-                        onStrokeCompleted: _onStrokeCompleted,
-                        onLineCompleted: _onLineCompleted,
-                        onArrowCompleted: _onArrowCompleted,
-                        onClearDrawing: _clearDrawing,
+                  // Video canvas is hosted by DockLayout after a video loads.
+                  if (!hasVideoLoaded)
+                    ListenableBuilder(
+                      listenable: _drawing,
+                      builder: (context, _) => Padding(
+                        padding: const EdgeInsets.only(top: 64),
+                        child: VideoCanvas(
+                          controller: controller,
+                          transformationController: _transformationController,
+                          isDrawingMode: _drawing.isDrawingMode,
+                          currentTool: _drawing.currentTool,
+                          drawingStrokes: _drawing.strokes,
+                          lineShapes: _drawing.lines,
+                          arrowShapes: _drawing.arrows,
+                          drawingColor: _drawing.drawingColor,
+                          strokeWidth: _drawing.strokeWidth,
+                          drawingRevision: _drawing.revision,
+                          videoAspectRatio: _videoAspectRatio,
+                          onStrokeCompleted: _onStrokeCompleted,
+                          onLineCompleted: _onLineCompleted,
+                          onArrowCompleted: _onArrowCompleted,
+                          onClearDrawing: _clearDrawing,
+                        ),
                       ),
                     ),
-                  ),
 
                   // LAYER 2: Laser trails and cursor (No zoom scaling - overlay)
                   // Only show when laser is active or there are trails to display
-                  if (hasVideoLoaded)
+                  if (!hasVideoLoaded)
                     ListenableBuilder(
                       listenable: _drawing,
                       builder: (context, _) {
@@ -1516,86 +1685,17 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                   if (hasVideoLoaded)
                     ListenableBuilder(
                       listenable: _uiController,
-                      builder: (context, _) => DockLayout(
-                        uiController: _uiController,
-                        panels: [
-                          // Playback Controls
-                          DockPanelEntry(
-                            id: PanelId.playbackControls,
-                            title: 'Playback',
-                            icon: Icons.play_circle_outline,
-                            defaultFloatingPosition: const Offset(20, 80),
-                            builder: (dockEdge) => DraggableControlBar(
-                              player: player,
-                              onSpeedChange: _changeSpeed,
-                              onJumpForward: _jumpForward,
-                              onJumpBackward: _jumpBackward,
-                              onTogglePlayPause: _togglePlayPause,
-                              dockEdge: dockEdge,
-                            ),
-                          ),
-                          // Drawing Tools
-                          DockPanelEntry(
-                            id: PanelId.drawingTools,
-                            title: 'Drawing',
-                            icon: Icons.draw,
-                            defaultFloatingPosition: Offset(
-                              MediaQuery.of(context).size.width - 240,
-                              200,
-                            ),
-                            builder: (dockEdge) => ListenableBuilder(
-                              listenable: _drawing,
-                              builder: (context, _) => DrawingToolsPanel(
-                                isDrawingMode: _drawing.isDrawingMode,
-                                currentTool: _drawing.currentTool,
-                                drawingColor: _drawing.drawingColor,
-                                onToggleDrawingMode: _toggleDrawingMode,
-                                onResetZoom: _resetZoom,
-                                onClearDrawing: _clearDrawing,
-                                onToolChange: _drawing.setTool,
-                                onColorChange: _drawing.setColor,
-                                dockEdge: dockEdge,
-                              ),
-                            ),
-                          ),
-                          // Event Navigation (Review mode)
-                          DockPanelEntry(
-                            id: PanelId.eventNavigation,
-                            title: 'Event Navigation',
-                            icon: Icons.search,
-                            defaultFloatingPosition: const Offset(20, 200),
-                            builder: (dockEdge) => StreamBuilder<Duration>(
-                              stream: player.stream.position,
-                              builder: (context, snapshot) =>
-                                  EventNavigationPanel(
-                                    controller: _eventsController,
-                                    onOpenEventsTable: _showEventsTable,
-                                    onNavigateTo: _navigateToEvent,
-                                    currentPosition:
-                                        snapshot.data ?? player.state.position,
-                                  ),
-                            ),
-                          ),
-                          // Player Tracking (Tracking mode)
-                          DockPanelEntry(
-                            id: PanelId.playerTracking,
-                            title: 'Player Tracking',
-                            icon: Icons.people,
-                            defaultFloatingPosition: const Offset(20, 200),
-                            builder: (dockEdge) => PlayerTrackingPanel(
-                              controller: _trackingController,
-                              player: player,
-                              dockEdge: dockEdge,
-                              onSave: _saveTrackingSession,
-                              onLoad: _loadTrackingSession,
-                              onExportCsv: _exportTrackingCsv,
-                            ),
-                          ),
-                        ],
+                      builder: (context, _) => Padding(
+                        padding: const EdgeInsets.only(top: kAppTitleBarHeight),
+                        child: DockLayout(
+                          uiController: _uiController,
+                          panels: _buildDockPanels(context),
+                          child: _buildVideoSurface(),
+                        ),
                       ),
                     ),
 
-                  // LAYER 5: Event Buttons with SmartHUD (Record mode)
+                  // SmartHUD stays over the video while event buttons use the dock.
                   if (hasVideoLoaded)
                     ListenableBuilder(
                       listenable: Listenable.merge([
@@ -1604,7 +1704,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                         _altKey,
                       ]),
                       builder: (context, _) {
-                        if (!_uiController.panelVisible(PanelId.eventButtons)) {
+                        if (!_uiController.panelVisible(PanelId.eventButtons) ||
+                            _eventsController.activeEvent == null) {
                           return const SizedBox.shrink();
                         }
                         return Positioned(
@@ -1612,33 +1713,15 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                           left: 0,
                           right: 0,
                           child: Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                // Smart HUD
-                                if (_eventsController.activeEvent != null)
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 10),
-                                    child: SmartHUD(
-                                      event: _eventsController.activeEvent!,
-                                      onUpdateEvent: _updateEvent,
-                                      onDeleteEvent: _deleteEvent,
-                                      onDismiss: _dismissHUD,
-                                      isAltPressed: _altKey.isEntryActive,
-                                      showTagNumbers: _altKey.showLabelNumbers,
-                                      showGradeNumbers:
-                                          _altKey.showGradeNumbers,
-                                      taxonomy: _taxonomy,
-                                    ),
-                                  ),
-
-                                // Event Buttons Row (with optional number badges)
-                                EventButtonsPanel(
-                                  onEventTriggered: _onEventTriggered,
-                                  taxonomy: _taxonomy,
-                                  showNumbers: _altKey.showCategoryNumbers,
-                                ),
-                              ],
+                            child: SmartHUD(
+                              event: _eventsController.activeEvent!,
+                              onUpdateEvent: _updateEvent,
+                              onDeleteEvent: _deleteEvent,
+                              onDismiss: _dismissHUD,
+                              isAltPressed: _altKey.isEntryActive,
+                              showTagNumbers: _altKey.showLabelNumbers,
+                              showGradeNumbers: _altKey.showGradeNumbers,
+                              taxonomy: _taxonomy,
                             ),
                           ),
                         );

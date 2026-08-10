@@ -38,3 +38,17 @@ This log is append-only.
 - Dragging a floating panel only changes its clamped screen position. Docking
   now occurs exclusively through the panel dock-position menu. This supersedes
   the earlier drag-to-snap decision for every app mode, including Tracking.
+
+## 2026-08-09 — Dock workspace architecture
+
+- Treat top, bottom, left, right, center, and floating panels as one workspace.
+  Side regions occupy only the space between top and bottom regions.
+- Persist panel placement, floating geometry, collapsed/visible state, dock
+  extents, and overlay/squeeze presentation independently for Record, Review,
+  and Track workflows.
+- Resize dock regions and floating panels locally during pointer movement, then
+  commit the final geometry through `UIController`.
+- Keep docking explicit. Floating panels move only from their title strip so
+  content gestures remain available to controls and scrolling.
+- The workspace preserves a bounded center area on constrained windows. A
+  broader phone/tablet and whole-app responsive audit remains separate scope.
