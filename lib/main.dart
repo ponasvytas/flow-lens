@@ -574,17 +574,6 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     _uiController.setMode(mode);
   }
 
-  Future<void> _loadTestVideo() async {
-    // Using a reliable test video that works well on mobile browsers.
-    const testVideoUrl =
-        // "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
-        "https://firebasestorage.googleapis.com/v0/b/flow-video-analyzer.firebasestorage.app/o/12U%20Storm%20Select%20vs%2012U%20Pelicans%20Mexico.mp4?alt=media&token=efa9d272-61e6-445c-972c-f444970d494e";
-    // Alternative: Your GitHub video
-    // const testVideoUrl = "https://github.com/ponasvytas/hockey-video-analyst/releases/download/v0.0.1-alpha/part5.mp4";
-
-    await _replaceVideoSource(testVideoUrl);
-  }
-
   Future<void> _loadUrl(String url, {Duration? initialPosition}) async {
     await _replaceVideoSource(url, initialPosition: initialPosition);
   }
@@ -1933,7 +1922,6 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                   if (!hasVideoLoaded)
                     VideoPicker(
                       onPickVideo: _pickVideo,
-                      onLoadTestVideo: _loadTestVideo,
                       onLoadUrl: _loadUrl,
                       onSportSelected: _onSportSelected,
                     ),
