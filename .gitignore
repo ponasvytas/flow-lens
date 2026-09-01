@@ -86,3 +86,7 @@ ui-debug.log
 **/*.Identifier
 **/*:Zone.Identifier
 **/*:Zone.Identifier.*
+
+/dev_docs/
+
+.local/
