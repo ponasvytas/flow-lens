@@ -35,4 +35,3 @@ can be performed in this checkout is recorded in [validation.md](validation.md).
 4. [Resources, platform, and export](phases/03-resources-platform-and-export.md)
 5. [Usability and code quality](phases/04-usability-and-code-quality.md)
 6. [Final validation and rollout](phases/05-final-validation-and-rollout.md)
-

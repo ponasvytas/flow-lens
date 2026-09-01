@@ -32,4 +32,3 @@ Captured 2026-08-09 before remediation.
 
 Interactive frame/memory baselines could not be truthfully manufactured in a
 non-interactive session and remain explicitly pending in validation.
-

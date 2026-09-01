@@ -39,4 +39,3 @@ Exercise percentile calculation and reset through deterministic snapshots.
 
 Implemented 2026-08-09. Interactive baseline capture remains unavailable and is
 recorded rather than inferred.
-

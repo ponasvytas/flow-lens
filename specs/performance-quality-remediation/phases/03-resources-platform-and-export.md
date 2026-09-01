@@ -37,4 +37,3 @@ cancellation, and cleanup.
 ## Completion record
 
 Implemented 2026-08-09.
-
