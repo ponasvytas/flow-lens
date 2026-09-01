@@ -5,11 +5,11 @@ cmake_minimum_required(VERSION 3.14)
 # This is needed for CMake 4.x compatibility with older SDKs
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "Minimum CMake policy version")
 
-project(coach_flow_video_analyzer LANGUAGES CXX)
+project(flow_lens LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
-set(BINARY_NAME "coach_flow_video_analyzer")
+set(BINARY_NAME "flow_lens")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.

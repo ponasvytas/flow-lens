@@ -8,33 +8,65 @@ import '../models/events_filter.dart';
 /// Shows the current position within filtered results (e.g. "3 / 12"),
 /// Prev / Next buttons, and a tappable filter summary that opens the
 /// events table for filter editing.
+///
+/// Navigation is based on the current seekbar position:
+/// - **Previous**: last event before current position (skips back further
+///   if within [proximityThreshold] of that event). Loops to last event.
+/// - **Next**: first event after current position. Loops to first event.
 class EventNavigationPanel extends StatelessWidget {
   final EventsController controller;
   final VoidCallback onOpenEventsTable;
   final void Function(GameEvent event) onNavigateTo;
+  final Duration currentPosition;
+
+  /// If the seekbar is within this duration of the nearest earlier event,
+  /// "Previous" will skip past it to the one before.
+  static const proximityThreshold = Duration(seconds: 10);
 
   const EventNavigationPanel({
     required this.controller,
     required this.onOpenEventsTable,
     required this.onNavigateTo,
+    required this.currentPosition,
     super.key,
   });
 
   @override
   Widget build(BuildContext context) {
-    final filtered = controller.filteredEvents;
-    final active = controller.activeEvent;
+    final sorted = controller.chronologicalFilteredEvents;
+    final total = sorted.length;
+    final hasEvents = total > 0;
 
-    // Find current index within filtered list
-    int currentIndex = -1;
-    if (active != null) {
-      currentIndex = filtered.indexWhere((e) => e.id == active.id);
+    // Use effective position that accounts for lead-in: if the seekbar is
+    // up to proximityThreshold *before* an event, we consider ourselves
+    // "at" that event (since navigation seeks to timestamp − leadIn).
+    final effectivePosition = currentPosition + proximityThreshold;
+
+    // Find the "current" event index: the last event at or before effectivePosition
+    final currentIndex = eventIndexAtOrBefore(sorted, effectivePosition);
+
+    // Determine previous target
+    GameEvent? prevTarget;
+    if (hasEvents) {
+      if (currentIndex > 0) {
+        prevTarget = sorted[currentIndex - 1];
+      } else {
+        // At first event or before all events — loop to last
+        prevTarget = sorted.last;
+      }
     }
 
-    final total = filtered.length;
-    final hasEvents = total > 0;
-    final hasPrev = hasEvents && currentIndex > 0;
-    final hasNext = hasEvents && currentIndex < total - 1;
+    // Determine next target
+    GameEvent? nextTarget;
+    if (hasEvents) {
+      final nextIndex = currentIndex + 1;
+      if (nextIndex < sorted.length) {
+        nextTarget = sorted[nextIndex];
+      } else {
+        // Past last event — loop to first
+        nextTarget = sorted.first;
+      }
+    }
 
     final positionLabel = hasEvents
         ? '${currentIndex == -1 ? '-' : currentIndex + 1} / $total'
@@ -53,12 +85,8 @@ class EventNavigationPanel extends StatelessWidget {
               _NavButton(
                 icon: Icons.skip_previous,
                 tooltip: 'Previous event',
-                enabled: hasPrev,
-                onTap: () {
-                  final event = filtered[currentIndex - 1];
-                  controller.selectEvent(event);
-                  onNavigateTo(event);
-                },
+                enabled: prevTarget != null,
+                onTap: () => onNavigateTo(prevTarget!),
               ),
 
               // Counter
@@ -75,14 +103,8 @@ class EventNavigationPanel extends StatelessWidget {
               _NavButton(
                 icon: Icons.skip_next,
                 tooltip: 'Next event',
-                enabled: hasNext,
-                onTap: () {
-                  final target = currentIndex == -1
-                      ? filtered.first
-                      : filtered[currentIndex + 1];
-                  controller.selectEvent(target);
-                  onNavigateTo(target);
-                },
+                enabled: nextTarget != null,
+                onTap: () => onNavigateTo(nextTarget!),
               ),
             ],
           ),
@@ -98,6 +120,22 @@ class EventNavigationPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Returns the last event at or before [position], or -1 when all are later.
+/// [events] must be ordered by timestamp.
+int eventIndexAtOrBefore(List<GameEvent> events, Duration position) {
+  var low = 0;
+  var high = events.length;
+  while (low < high) {
+    final middle = low + ((high - low) >> 1);
+    if (events[middle].timestamp <= position) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+  return low - 1;
 }
 
 class _NavButton extends StatelessWidget {
@@ -141,18 +179,20 @@ class _FilterSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = filter.isActive ? 'Filtered · $total events' : 'All events · $total';
+    final label = filter.isActive
+        ? 'Filtered · $total events'
+        : 'All events · $total';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: filter.isActive
-            ? const Color(0xFF753b8f).withOpacity(0.6)
-            : Colors.white.withOpacity(0.08),
+            ? const Color(0xFF753b8f).withValues(alpha: 0.6)
+            : Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: filter.isActive
-              ? const Color(0xFF9b5fb8).withOpacity(0.7)
+              ? const Color(0xFF9b5fb8).withValues(alpha: 0.7)
               : Colors.white24,
           width: 1,
         ),

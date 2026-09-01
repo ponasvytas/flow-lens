@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../models/game_event.dart';
 import '../models/sport_taxonomy.dart';
 import '../utils/perf.dart';
@@ -19,87 +20,98 @@ class EventTimeline extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (totalDuration.inMilliseconds == 0) return const SizedBox.shrink();
-
+    if (totalDuration <= Duration.zero) return const SizedBox.shrink();
     Perf.rebuildCount('EventTimeline');
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
-
-        return SizedBox(
-          height: 24, // Height for the timeline markers
-          width: width,
-          child: Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.centerLeft,
-            children: events.map((event) {
-              // Calculate position (0.0 to 1.0)
-              final percent =
-                  event.timestamp.inMilliseconds / totalDuration.inMilliseconds;
-
-              // Clamp to ensure it stays within bounds
-              final clampedPercent = percent.clamp(0.0, 1.0);
-
-              // Calculate left offset
-              // Icon width is 16px, so subtract half (8px) to center it on the timestamp
-              // The padding is already applied by video_progress_bar.dart, so use full width
-              const iconWidth = 16.0;
-              final left = (width * clampedPercent) - (iconWidth / 2);
-
-              return Positioned(
-                left: left,
-                child: GestureDetector(
-                  onTap: () => onEventTap(event),
-                  child: Tooltip(
-                    message:
-                        '${event.label} (${_formatDuration(event.timestamp)})',
-                    child: _buildEventMarker(event),
-                  ),
+        return Semantics(
+          label: '${events.length} event markers on the video timeline',
+          child: Tooltip(
+            message: 'Select the nearest event marker',
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapUp: (details) {
+                final event = nearestTimelineEvent(
+                  events,
+                  totalDuration,
+                  width,
+                  details.localPosition.dx,
+                );
+                if (event != null) onEventTap(event);
+              },
+              child: CustomPaint(
+                size: Size(width, 24),
+                painter: EventTimelinePainter(
+                  events: events,
+                  totalDuration: totalDuration,
+                  taxonomy: taxonomy,
                 ),
-              );
-            }).toList(),
+              ),
+            ),
           ),
         );
       },
     );
   }
+}
 
-  Widget _buildEventMarker(GameEvent event) {
-    // Get icon from taxonomy
-    IconData iconData = Icons.circle;
-    if (taxonomy != null) {
-      final category = taxonomy!.getCategoryById(event.categoryId);
-      if (category != null) {
-        iconData = category.getIcon();
-      }
+GameEvent? nearestTimelineEvent(
+  List<GameEvent> events,
+  Duration duration,
+  double width,
+  double localX, {
+  double hitRadius = 12,
+}) {
+  if (events.isEmpty || duration <= Duration.zero || width <= 0) return null;
+  GameEvent? nearest;
+  var nearestDistance = double.infinity;
+  for (final event in events) {
+    final fraction = event.timestamp.inMicroseconds / duration.inMicroseconds;
+    final x = width * fraction.clamp(0.0, 1.0);
+    final distance = (x - localX).abs();
+    if (distance < nearestDistance) {
+      nearest = event;
+      nearestDistance = distance;
     }
+  }
+  return nearestDistance <= hitRadius ? nearest : null;
+}
 
-    // Map grade to color
-    final color = event.color; // Uses the getter from GameEvent
+class EventTimelinePainter extends CustomPainter {
+  final List<GameEvent> events;
+  final Duration totalDuration;
+  final SportTaxonomy? taxonomy;
 
-    return Container(
-      width: 16,
-      height: 16,
-      decoration: BoxDecoration(
-        color: Colors.white, // Background for contrast
-        shape: BoxShape.circle,
-        border: Border.all(color: color, width: 2),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.5),
-            blurRadius: 2,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Center(child: Icon(iconData, size: 10, color: color)),
-    );
+  const EventTimelinePainter({
+    required this.events,
+    required this.totalDuration,
+    this.taxonomy,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final centerY = size.height / 2;
+    for (final event in events) {
+      final fraction =
+          event.timestamp.inMicroseconds / totalDuration.inMicroseconds;
+      final center = Offset(size.width * fraction.clamp(0.0, 1.0), centerY);
+      canvas.drawCircle(center, 7, Paint()..color = Colors.white);
+      canvas.drawCircle(
+        center,
+        6,
+        Paint()
+          ..color = event.color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2,
+      );
+      canvas.drawCircle(center, 2, Paint()..color = event.color);
+    }
   }
 
-  String _formatDuration(Duration duration) {
-    String twoDigits(int n) => n.toString().padLeft(2, '0');
-    final minutes = twoDigits(duration.inMinutes.remainder(60));
-    final seconds = twoDigits(duration.inSeconds.remainder(60));
-    return '$minutes:$seconds';
-  }
+  @override
+  bool shouldRepaint(EventTimelinePainter oldDelegate) =>
+      !identical(events, oldDelegate.events) ||
+      totalDuration != oldDelegate.totalDuration ||
+      taxonomy != oldDelegate.taxonomy;
 }

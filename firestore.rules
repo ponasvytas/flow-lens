@@ -1,0 +1,162 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function hasPremium(userId) {
+      let entitlementPath = /databases/$(database)/documents/users/$(userId)/entitlements/current;
+      let entitlement = get(entitlementPath).data;
+      return exists(entitlementPath)
+        && entitlement.status == 'active'
+        && entitlement.tier in ['premium', 'premium_plus', 'premiumPlus']
+        && (!('expiresAt' in entitlement) || entitlement.expiresAt > request.time);
+    }
+
+    function validSettings() {
+      let data = request.resource.data;
+      return data.keys().hasOnly([
+          'schemaVersion',
+          'fastPlaySpeed',
+          'slowPlaybackSpeed',
+          'defaultPlaybackSpeed',
+          'leadInSeconds',
+          'leadOutSeconds',
+          'updatedAt'
+        ])
+        && data.schemaVersion == 1
+        && data.fastPlaySpeed is number
+        && data.fastPlaySpeed >= 1.5
+        && data.fastPlaySpeed <= 10.0
+        && data.slowPlaybackSpeed is number
+        && data.slowPlaybackSpeed >= 0.25
+        && data.slowPlaybackSpeed <= 2.0
+        && data.defaultPlaybackSpeed is number
+        && data.defaultPlaybackSpeed >= 0.5
+        && data.defaultPlaybackSpeed <= 3.0
+        && data.leadInSeconds is int
+        && data.leadInSeconds >= 0
+        && data.leadInSeconds <= 30
+        && data.leadOutSeconds is int
+        && data.leadOutSeconds >= 0
+        && data.leadOutSeconds <= 30
+        && data.updatedAt == request.time;
+    }
+
+    function validSessionOwnerOnCreate(userId) {
+      let data = request.resource.data;
+      return data.ownerType == 'user'
+        && data.ownerId == userId
+        && data.createdByUserId == request.auth.uid
+        && data.updatedByUserId == request.auth.uid
+        && data.createdAt == request.time
+        && data.updatedAt == request.time
+        && data.archivedAt == null;
+    }
+
+    function validSessionOwnerOnUpdate(userId) {
+      let data = request.resource.data;
+      let existing = resource.data;
+      return data.ownerType == existing.ownerType
+        && data.ownerId == existing.ownerId
+        && data.ownerId == userId
+        && data.createdByUserId == existing.createdByUserId
+        && data.createdAt == existing.createdAt
+        && data.sessionId == existing.sessionId
+        && data.updatedByUserId == request.auth.uid
+        && data.updatedAt == request.time;
+    }
+
+    function validEventSession() {
+      let data = request.resource.data;
+      return data.keys().hasOnly([
+          'sessionId', 'schemaVersion', 'title', 'sportId', 'taxonomyId',
+          'taxonomyRevision', 'taxonomySnapshot', 'sourceVideo', 'events',
+          'ownerType', 'ownerId', 'createdByUserId', 'updatedByUserId',
+          'createdAt', 'updatedAt', 'archivedAt'
+        ])
+        && data.sessionId is string
+        && data.schemaVersion == 1
+        && data.title is string
+        && data.title.size() > 0
+        && data.title.size() <= 120
+        && data.sportId is string
+        && data.taxonomyId is string
+        && data.taxonomyRevision is int
+        && data.taxonomySnapshot is map
+        && data.sourceVideo is map
+        && data.events is list
+        && data.events.size() <= 5000;
+    }
+
+    function validTrackingSession() {
+      let data = request.resource.data;
+      return data.keys().hasOnly([
+          'sessionId', 'schemaVersion', 'title', 'sportId', 'sourceVideo',
+          'trackingSession', 'ownerType', 'ownerId', 'createdByUserId',
+          'updatedByUserId', 'createdAt', 'updatedAt', 'archivedAt'
+        ])
+        && data.sessionId is string
+        && data.schemaVersion == 1
+        && data.title is string
+        && data.title.size() > 0
+        && data.title.size() <= 120
+        && data.sportId is string
+        && data.sourceVideo is map
+        && data.trackingSession is map
+        && data.trackingSession.subjects is list
+        && data.trackingSession.subjects.size() <= 500
+        && data.trackingSession.trackers is list
+        && data.trackingSession.trackers.size() <= 200
+        && data.trackingSession.events is list
+        && data.trackingSession.events.size() <= 10000;
+    }
+
+    match /users/{userId}/entitlements/current {
+      allow read: if isOwner(userId);
+      allow write: if false;
+    }
+
+    match /users/{userId}/preferences/default {
+      allow read: if isOwner(userId) && hasPremium(userId);
+      allow create, update: if isOwner(userId)
+        && hasPremium(userId)
+        && validSettings();
+      allow delete: if false;
+    }
+
+    match /users/{userId}/eventSessions/{sessionId} {
+      allow read: if isOwner(userId) && hasPremium(userId);
+      allow create: if isOwner(userId)
+        && hasPremium(userId)
+        && request.resource.data.sessionId == sessionId
+        && validSessionOwnerOnCreate(userId)
+        && validEventSession();
+      allow update: if isOwner(userId)
+        && hasPremium(userId)
+        && validSessionOwnerOnUpdate(userId)
+        && validEventSession();
+      allow delete: if isOwner(userId);
+    }
+
+    match /users/{userId}/trackingSessions/{sessionId} {
+      allow read: if isOwner(userId) && hasPremium(userId);
+      allow create: if isOwner(userId)
+        && hasPremium(userId)
+        && request.resource.data.sessionId == sessionId
+        && validSessionOwnerOnCreate(userId)
+        && validTrackingSession();
+      allow update: if isOwner(userId)
+        && hasPremium(userId)
+        && validSessionOwnerOnUpdate(userId)
+        && validTrackingSession();
+      allow delete: if isOwner(userId);
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import '../models/game_event.dart';
+import '../controllers/scrub_seek_coordinator.dart';
 import '../utils/perf.dart';
 import 'event_timeline.dart';
 
@@ -9,11 +10,13 @@ class VideoProgressBar extends StatelessWidget {
   final Player player;
   final List<GameEvent> events;
   final Function(GameEvent) onEventTap;
+  final VoidCallback? onScrubStart;
 
   const VideoProgressBar({
     required this.player,
     required this.events,
     required this.onEventTap,
+    this.onScrubStart,
     super.key,
   });
 
@@ -27,7 +30,7 @@ class VideoProgressBar extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.5),
+          color: Colors.black.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Column(
@@ -54,7 +57,7 @@ class VideoProgressBar extends StatelessWidget {
               },
             ),
             // Seekbar — single StreamBuilder combining position + duration
-            _SeekBar(player: player),
+            _SeekBar(player: player, onScrubStart: onScrubStart),
           ],
         ),
       ),
@@ -64,26 +67,63 @@ class VideoProgressBar extends StatelessWidget {
 
 /// Extracted seekbar that owns its own stream subscriptions so rebuilds
 /// are confined here and don't propagate to [EventTimeline].
-class _SeekBar extends StatelessWidget {
+///
+/// Uses local drag state so the slider thumb follows the finger/mouse
+/// immediately, and only seeks on release (onChangeEnd).
+class _SeekBar extends StatefulWidget {
   final Player player;
+  final VoidCallback? onScrubStart;
 
-  const _SeekBar({required this.player});
+  const _SeekBar({required this.player, this.onScrubStart});
+
+  @override
+  State<_SeekBar> createState() => _SeekBarState();
+}
+
+class _SeekBarState extends State<_SeekBar> {
+  bool _isDragging = false;
+  double _dragValue = 0.0;
+  late ScrubSeekCoordinator _scrub;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrub = _createCoordinator();
+  }
+
+  @override
+  void didUpdateWidget(_SeekBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.player != widget.player) _scrub = _createCoordinator();
+  }
+
+  ScrubSeekCoordinator _createCoordinator() => ScrubSeekCoordinator(
+    seek: widget.player.seek,
+    pause: widget.player.pause,
+    play: widget.player.play,
+    isPlaying: () => widget.player.state.playing,
+  );
 
   @override
   Widget build(BuildContext context) {
     Perf.rebuildCount('_SeekBar');
     return StreamBuilder<Duration>(
-      stream: player.stream.position,
+      stream: widget.player.stream.position,
       builder: (context, positionSnapshot) {
         Perf.rebuildCount('_SeekBar.stream');
         final position = positionSnapshot.data ?? Duration.zero;
-        // player.state.duration is synchronously available and updated
-        // by media_kit whenever the duration stream fires, so we avoid
-        // a second nested StreamBuilder subscription.
-        final duration = player.state.duration;
-        final value = duration.inMilliseconds > 0
+        final duration = widget.player.state.duration;
+        final streamValue = duration.inMilliseconds > 0
             ? position.inMilliseconds / duration.inMilliseconds
             : 0.0;
+
+        // Use drag value while dragging, stream value otherwise
+        final displayValue = _isDragging ? _dragValue : streamValue;
+        final displayPosition = _isDragging
+            ? Duration(
+                milliseconds: (_dragValue * duration.inMilliseconds).round(),
+              )
+            : position;
 
         return Row(
           children: [
@@ -91,11 +131,8 @@ class _SeekBar extends StatelessWidget {
             SizedBox(
               width: 45,
               child: Text(
-                _formatDuration(position),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                ),
+                _formatDuration(displayPosition),
+                style: const TextStyle(color: Colors.white, fontSize: 11),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -112,17 +149,34 @@ class _SeekBar extends StatelessWidget {
                   ),
                 ),
                 child: Slider(
-                  value: value.clamp(0.0, 1.0),
+                  value: displayValue.clamp(0.0, 1.0),
                   min: 0.0,
                   max: 1.0,
                   activeColor: Colors.blue,
                   inactiveColor: Colors.grey.shade700,
+                  onChangeStart: (value) {
+                    _scrub.begin();
+                    widget.onScrubStart?.call();
+                    setState(() {
+                      _isDragging = true;
+                      _dragValue = value;
+                    });
+                  },
                   onChanged: (newValue) {
+                    setState(() {
+                      _dragValue = newValue;
+                    });
+                  },
+                  onChangeEnd: (newValue) async {
                     final newPosition = Duration(
-                      milliseconds:
-                          (newValue * duration.inMilliseconds).round(),
+                      milliseconds: (newValue * duration.inMilliseconds)
+                          .round(),
                     );
-                    player.seek(newPosition);
+                    final current = await _scrub.complete(newPosition);
+                    if (!mounted || !current) return;
+                    setState(() {
+                      _isDragging = false;
+                    });
                   },
                 ),
               ),
@@ -132,10 +186,7 @@ class _SeekBar extends StatelessWidget {
               width: 45,
               child: Text(
                 _formatDuration(duration),
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 11,
-                ),
+                style: const TextStyle(color: Colors.white70, fontSize: 11),
                 textAlign: TextAlign.center,
               ),
             ),

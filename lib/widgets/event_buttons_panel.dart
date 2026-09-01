@@ -45,7 +45,9 @@ class EventButtonsPanel extends StatelessWidget {
             final index = entry.key;
             final category = entry.value;
             return Padding(
-              padding: EdgeInsets.only(right: index < categories.length - 1 ? 8 : 0),
+              padding: EdgeInsets.only(
+                right: index < categories.length - 1 ? 8 : 0,
+              ),
               child: _buildButton(
                 context,
                 category.categoryId,
@@ -82,9 +84,11 @@ class EventButtonsPanel extends StatelessWidget {
             child: ElevatedButton(
               onPressed: () => onEventTriggered(categoryId),
               style: ElevatedButton.styleFrom(
-                backgroundColor: color.withOpacity(0.8),
+                backgroundColor: color.withValues(alpha: 0.8),
                 padding: EdgeInsets.zero,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -117,7 +121,7 @@ class EventButtonsPanel extends StatelessWidget {
                   border: Border.all(color: Colors.white, width: 2),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.5),
+                      color: Colors.black.withValues(alpha: 0.5),
                       blurRadius: 6,
                       offset: const Offset(0, 2),
                     ),

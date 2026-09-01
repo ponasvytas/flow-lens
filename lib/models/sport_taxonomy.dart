@@ -6,13 +6,27 @@ class SportTaxonomy {
   final String sportId;
   final String name;
   final List<CategoryTaxonomy> categories;
+  final Map<String, CategoryTaxonomy> _categoriesById;
+  final Map<String, EventTypeTaxonomy> _eventTypesById;
 
   SportTaxonomy({
     required this.schemaVersion,
     required this.sportId,
     required this.name,
-    required this.categories,
-  });
+    required List<CategoryTaxonomy> categories,
+  }) : categories = List<CategoryTaxonomy>.unmodifiable(categories),
+       _categoriesById = Map<String, CategoryTaxonomy>.unmodifiable(
+         <String, CategoryTaxonomy>{
+           for (final category in categories) category.categoryId: category,
+         },
+       ),
+       _eventTypesById = Map<String, EventTypeTaxonomy>.unmodifiable(
+         <String, EventTypeTaxonomy>{
+           for (final category in categories)
+             for (final eventType in category.eventTypes)
+               eventType.eventTypeId: eventType,
+         },
+       );
 
   factory SportTaxonomy.fromJson(Map<String, dynamic> json) {
     return SportTaxonomy(
@@ -35,19 +49,11 @@ class SportTaxonomy {
   }
 
   CategoryTaxonomy? getCategoryById(String categoryId) {
-    try {
-      return categories.firstWhere((c) => c.categoryId == categoryId);
-    } catch (e) {
-      return null;
-    }
+    return _categoriesById[categoryId];
   }
 
   EventTypeTaxonomy? getEventTypeById(String eventTypeId) {
-    for (final category in categories) {
-      final eventType = category.getEventTypeById(eventTypeId);
-      if (eventType != null) return eventType;
-    }
-    return null;
+    return _eventTypesById[eventTypeId];
   }
 
   void validate() {
@@ -80,6 +86,7 @@ class CategoryTaxonomy {
   final String iconKey;
   final String colorKey;
   final List<EventTypeTaxonomy> eventTypes;
+  final Map<String, EventTypeTaxonomy> _eventTypesById;
 
   // Static map of available icons - add any Material Icons here
   static const Map<String, IconData> _iconMap = {
@@ -135,8 +142,13 @@ class CategoryTaxonomy {
     required this.name,
     required this.iconKey,
     required this.colorKey,
-    required this.eventTypes,
-  });
+    required List<EventTypeTaxonomy> eventTypes,
+  }) : eventTypes = List<EventTypeTaxonomy>.unmodifiable(eventTypes),
+       _eventTypesById = Map<String, EventTypeTaxonomy>.unmodifiable(
+         <String, EventTypeTaxonomy>{
+           for (final eventType in eventTypes) eventType.eventTypeId: eventType,
+         },
+       );
 
   factory CategoryTaxonomy.fromJson(Map<String, dynamic> json) {
     return CategoryTaxonomy(
@@ -161,11 +173,7 @@ class CategoryTaxonomy {
   }
 
   EventTypeTaxonomy? getEventTypeById(String eventTypeId) {
-    try {
-      return eventTypes.firstWhere((e) => e.eventTypeId == eventTypeId);
-    } catch (e) {
-      return null;
-    }
+    return _eventTypesById[eventTypeId];
   }
 
   IconData getIcon() {

@@ -64,7 +64,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '587706243824',
     projectId: 'flow-lens-3f987',
     storageBucket: 'flow-lens-3f987.firebasestorage.app',
-    iosBundleId: 'com.example.flutterVideoAnalyzer',
+    iosBundleId: 'com.coachflow.flowlens',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
@@ -73,7 +73,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '587706243824',
     projectId: 'flow-lens-3f987',
     storageBucket: 'flow-lens-3f987.firebasestorage.app',
-    iosBundleId: 'com.example.flutterVideoAnalyzer',
+    iosBundleId: 'com.coachflow.flowlens',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(

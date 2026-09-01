@@ -5,13 +5,11 @@ import 'sport_profile_selector.dart';
 /// Initial video loading screen with sport selection and file picker
 class VideoPicker extends StatefulWidget {
   final VoidCallback onPickVideo;
-  final VoidCallback onLoadTestVideo;
   final ValueChanged<String> onLoadUrl;
   final ValueChanged<SportProfile> onSportSelected;
 
   const VideoPicker({
     required this.onPickVideo,
-    required this.onLoadTestVideo,
     required this.onLoadUrl,
     required this.onSportSelected,
     super.key,
@@ -47,9 +45,7 @@ class _VideoPickerState extends State<VideoPicker> {
   @override
   Widget build(BuildContext context) {
     if (_selectedSport == null) {
-      return SportProfileSelector(
-        onProfileSelected: _onSportSelected,
-      );
+      return SportProfileSelector(onProfileSelected: _onSportSelected);
     }
 
     return _buildVideoSelector(context);
@@ -97,26 +93,13 @@ class _VideoPickerState extends State<VideoPicker> {
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
             ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: widget.onLoadTestVideo,
-              icon: const Icon(Icons.play_circle_outline),
-              label: const Text("Load Demo Video"),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-            ),
             const SizedBox(height: 32),
             const Row(
               children: [
                 Expanded(child: Divider(color: Colors.white24)),
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(
-                    "OR",
-                    style: TextStyle(color: Colors.white54),
-                  ),
+                  child: Text("OR", style: TextStyle(color: Colors.white54)),
                 ),
                 Expanded(child: Divider(color: Colors.white24)),
               ],

@@ -40,11 +40,20 @@ class AppSettings {
   factory AppSettings.fromMap(Map<String, dynamic> map) {
     return AppSettings(
       schemaVersion: map['schemaVersion'] as int? ?? currentSchemaVersion,
-      fastPlaySpeed: map['fastPlaySpeed'] as double? ?? defaultFastPlaySpeed,
-      slowPlaybackSpeed: map['slowPlaybackSpeed'] as double? ?? defaultSlowPlaybackSpeed,
-      defaultPlaybackSpeed: map['defaultPlaybackSpeed'] as double? ?? defaultDefaultPlaybackSpeed,
-      leadIn: Duration(seconds: map['leadInSeconds'] as int? ?? defaultLeadIn.inSeconds),
-      leadOut: Duration(seconds: map['leadOutSeconds'] as int? ?? defaultLeadOut.inSeconds),
+      fastPlaySpeed:
+          (map['fastPlaySpeed'] as num?)?.toDouble() ?? defaultFastPlaySpeed,
+      slowPlaybackSpeed:
+          (map['slowPlaybackSpeed'] as num?)?.toDouble() ??
+          defaultSlowPlaybackSpeed,
+      defaultPlaybackSpeed:
+          (map['defaultPlaybackSpeed'] as num?)?.toDouble() ??
+          defaultDefaultPlaybackSpeed,
+      leadIn: Duration(
+        seconds: map['leadInSeconds'] as int? ?? defaultLeadIn.inSeconds,
+      ),
+      leadOut: Duration(
+        seconds: map['leadOutSeconds'] as int? ?? defaultLeadOut.inSeconds,
+      ),
     );
   }
 
@@ -80,6 +89,13 @@ class AppSettings {
 
   @override
   int get hashCode {
-    return Object.hash(schemaVersion, fastPlaySpeed, slowPlaybackSpeed, defaultPlaybackSpeed, leadIn, leadOut);
+    return Object.hash(
+      schemaVersion,
+      fastPlaySpeed,
+      slowPlaybackSpeed,
+      defaultPlaybackSpeed,
+      leadIn,
+      leadOut,
+    );
   }
 }

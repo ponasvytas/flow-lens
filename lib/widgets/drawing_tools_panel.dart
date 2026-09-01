@@ -36,7 +36,8 @@ class DrawingToolsPanel extends StatefulWidget {
 class _DrawingToolsPanelState extends State<DrawingToolsPanel> {
   @override
   Widget build(BuildContext context) {
-    final isHorizontal = widget.dockEdge == PanelDockEdge.top ||
+    final isHorizontal =
+        widget.dockEdge == PanelDockEdge.top ||
         widget.dockEdge == PanelDockEdge.bottom;
 
     // Content only — DockLayout handles positioning
@@ -223,9 +224,7 @@ class _IconButtonWrap extends StatelessWidget {
               child: InkWell(
                 onTap: onPressed,
                 borderRadius: BorderRadius.circular(8),
-                child: Center(
-                  child: Icon(icon, color: Colors.white, size: 20),
-                ),
+                child: Center(child: Icon(icon, color: Colors.white, size: 20)),
               ),
             ),
           ),

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:typed_data';
+
 import 'package:web/web.dart' as web;
 
 Future<void> saveTextFile(String content, String fileName) async {
@@ -10,9 +11,9 @@ Future<void> saveTextFile(String content, String fileName) async {
     web.BlobPropertyBag(type: 'application/json'),
   );
   final url = web.URL.createObjectURL(blob);
-  final anchor = web.document.createElement('a') as web.HTMLAnchorElement;
-  anchor.href = url;
-  anchor.download = fileName;
-  anchor.click();
+  web.HTMLAnchorElement()
+    ..href = url
+    ..download = fileName
+    ..click();
   web.URL.revokeObjectURL(url);
 }

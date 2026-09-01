@@ -43,8 +43,8 @@ class _DraggableControlBarState extends State<DraggableControlBar> {
       child: _isVertical
           ? _buildVertical()
           : _isFloating
-              ? _buildFloating()
-              : _buildHorizontal(),
+          ? _buildFloating()
+          : _buildHorizontal(),
     );
   }
 
@@ -137,7 +137,10 @@ class _DraggableControlBarState extends State<DraggableControlBar> {
 
     return [
       if (axis == Axis.horizontal)
-        const Text('Speed', style: TextStyle(color: Colors.white70, fontSize: 11)),
+        const Text(
+          'Speed',
+          style: TextStyle(color: Colors.white70, fontSize: 11),
+        ),
       if (axis == Axis.horizontal) const SizedBox(width: 6),
       for (int i = 0; i < speeds.length; i++) ...[
         if (i > 0) spacing,
@@ -156,11 +159,25 @@ class _DraggableControlBarState extends State<DraggableControlBar> {
         : const SizedBox(height: 2);
 
     return [
-      _JumpBtn(icon: Icons.fast_rewind, label: '30', onTap: () => widget.onJumpBackward(const Duration(seconds: 30)), axis: axis),
+      _JumpBtn(
+        icon: Icons.fast_rewind,
+        label: '30',
+        onTap: () => widget.onJumpBackward(const Duration(seconds: 30)),
+        axis: axis,
+      ),
       spacing,
-      _JumpBtn(icon: Icons.replay_10, onTap: () => widget.onJumpBackward(const Duration(seconds: 10)), axis: axis),
+      _JumpBtn(
+        icon: Icons.replay_10,
+        onTap: () => widget.onJumpBackward(const Duration(seconds: 10)),
+        axis: axis,
+      ),
       spacing,
-      _JumpBtn(icon: Icons.fast_rewind, label: '3', onTap: () => widget.onJumpBackward(const Duration(seconds: 3)), axis: axis),
+      _JumpBtn(
+        icon: Icons.fast_rewind,
+        label: '3',
+        onTap: () => widget.onJumpBackward(const Duration(seconds: 3)),
+        axis: axis,
+      ),
       spacing,
       // Play / Pause
       StreamBuilder<bool>(
@@ -181,11 +198,27 @@ class _DraggableControlBarState extends State<DraggableControlBar> {
         },
       ),
       spacing,
-      _JumpBtn(icon: Icons.fast_forward, label: '3', labelFirst: true, onTap: () => widget.onJumpForward(const Duration(seconds: 3)), axis: axis),
+      _JumpBtn(
+        icon: Icons.fast_forward,
+        label: '3',
+        labelFirst: true,
+        onTap: () => widget.onJumpForward(const Duration(seconds: 3)),
+        axis: axis,
+      ),
       spacing,
-      _JumpBtn(icon: Icons.forward_10, onTap: () => widget.onJumpForward(const Duration(seconds: 10)), axis: axis),
+      _JumpBtn(
+        icon: Icons.forward_10,
+        onTap: () => widget.onJumpForward(const Duration(seconds: 10)),
+        axis: axis,
+      ),
       spacing,
-      _JumpBtn(icon: Icons.fast_forward, label: '30', labelFirst: true, onTap: () => widget.onJumpForward(const Duration(seconds: 30)), axis: axis),
+      _JumpBtn(
+        icon: Icons.fast_forward,
+        label: '30',
+        labelFirst: true,
+        onTap: () => widget.onJumpForward(const Duration(seconds: 30)),
+        axis: axis,
+      ),
     ];
   }
 }
@@ -208,10 +241,13 @@ class _SpeedChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: Colors.blue.withOpacity(0.7),
+          color: Colors.blue.withValues(alpha: 0.7),
           borderRadius: BorderRadius.circular(6),
         ),
-        child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 12)),
+        child: Text(
+          label,
+          style: const TextStyle(color: Colors.white, fontSize: 12),
+        ),
       ),
     );
   }
@@ -236,7 +272,10 @@ class _JumpBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     final iconW = Icon(icon, color: Colors.white, size: 18);
     final labelW = label != null
-        ? Text(label!, style: const TextStyle(color: Colors.white, fontSize: 11))
+        ? Text(
+            label!,
+            style: const TextStyle(color: Colors.white, fontSize: 11),
+          )
         : null;
 
     final children = <Widget>[

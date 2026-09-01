@@ -1,5 +1,5 @@
 #!/bin/bash
-# Quick development restart script
-pkill -f "flutter_tools.snapshot run"
-sleep 1
+set -euo pipefail
+
+# Start Flow Lens without terminating unrelated Flutter processes.
 flutter run -d web-server --web-hostname=localhost --web-port=43888

@@ -1,7 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
 import '../models/drawing_models.dart';
 
-// Custom painter for laser pointer trails and cursor
 class LaserPainter extends CustomPainter {
   final List<LaserTrail> trails;
   final List<DrawingPoint> currentStroke;
@@ -9,6 +10,8 @@ class LaserPainter extends CustomPainter {
   final Color cursorColor;
   final double strokeWidth;
   final bool showCursor;
+  final DrawingCaptureBuffer? activeCapture;
+  final Map<LaserTrail, Animation<double>> trailAnimations;
 
   LaserPainter(
     this.trails,
@@ -16,98 +19,111 @@ class LaserPainter extends CustomPainter {
     this.cursorPosition,
     this.cursorColor,
     this.strokeWidth,
-    this.showCursor,
-  );
+    this.showCursor, {
+    this.activeCapture,
+    this.trailAnimations = const <LaserTrail, Animation<double>>{},
+  }) : super(
+         repaint: Listenable.merge(<Listenable>[
+           ?activeCapture,
+           ...trailAnimations.values,
+         ]),
+       );
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Draw completed laser trails with animation
-    for (var trail in trails) {
+    for (final trail in trails) {
       if (trail.points.isEmpty) continue;
-
       final paint = Paint()
         ..color = trail.color
         ..strokeWidth = trail.strokeWidth
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round
         ..style = PaintingStyle.stroke;
-
-      // Calculate how many points to show based on animation progress
-      final totalPoints = trail.points.length;
-      final erasedPoints = (totalPoints * trail.animationProgress).floor();
-      final visiblePoints = totalPoints - erasedPoints;
-
-      if (visiblePoints > 1) {
-        final path = Path();
-        path.moveTo(
-          trail.points[erasedPoints].offset.dx,
-          trail.points[erasedPoints].offset.dy,
+      final progress = trailAnimations[trail]?.value ?? 0.0;
+      final firstVisible = (trail.points.length * progress).floor();
+      if (firstVisible >= trail.points.length - 1) continue;
+      final path = Path()
+        ..moveTo(
+          trail.points[firstVisible].offset.dx,
+          trail.points[firstVisible].offset.dy,
         );
-
-        for (var i = erasedPoints + 1; i < totalPoints; i++) {
-          path.lineTo(trail.points[i].offset.dx, trail.points[i].offset.dy);
-        }
-
-        canvas.drawPath(path, paint);
-      }
-    }
-
-    // Draw current stroke being drawn
-    if (currentStroke.isNotEmpty) {
-      final paint = Paint()
-        ..color = currentStroke.first.color
-        ..strokeWidth = currentStroke.first.strokeWidth
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..style = PaintingStyle.stroke;
-
-      final path = Path();
-      path.moveTo(currentStroke.first.offset.dx, currentStroke.first.offset.dy);
-      for (var i = 1; i < currentStroke.length; i++) {
-        path.lineTo(currentStroke[i].offset.dx, currentStroke[i].offset.dy);
+      for (var index = firstVisible + 1; index < trail.points.length; index++) {
+        path.lineTo(
+          trail.points[index].offset.dx,
+          trail.points[index].offset.dy,
+        );
       }
       canvas.drawPath(path, paint);
     }
 
-    // Draw laser cursor dot
+    final activePoints = activeCapture?.points ?? currentStroke;
+    if (activePoints.isNotEmpty) {
+      final paint = Paint()
+        ..color = activePoints.first.color
+        ..strokeWidth = activePoints.first.strokeWidth
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..style = PaintingStyle.stroke;
+      canvas.drawPath(
+        activeCapture?.path ?? buildDrawingPath(activePoints),
+        paint,
+      );
+    }
+
     if (showCursor && cursorPosition != null) {
-      final cursorPaint = Paint()
-        ..color = cursorColor
-        ..style = PaintingStyle.fill;
-
-      // Draw a glowing effect with multiple circles
-      final glowPaint = Paint()
-        ..color = cursorColor.withOpacity(0.3)
-        ..style = PaintingStyle.fill;
-
-      canvas.drawCircle(cursorPosition!, 12, glowPaint);
-      canvas.drawCircle(cursorPosition!, 8, cursorPaint);
-
-      // Draw a white center for visibility
-      final centerPaint = Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.fill;
-      canvas.drawCircle(cursorPosition!, 3, centerPaint);
+      canvas.drawCircle(
+        cursorPosition!,
+        12,
+        Paint()..color = cursorColor.withValues(alpha: 0.3),
+      );
+      canvas.drawCircle(cursorPosition!, 8, Paint()..color = cursorColor);
+      canvas.drawCircle(cursorPosition!, 3, Paint()..color = Colors.white);
     }
   }
 
   @override
   bool shouldRepaint(LaserPainter oldDelegate) {
-    // Only repaint for trails that are actively being erased (animating).
-    if (trails.any((t) => t.animationProgress > 0 && t.animationProgress < 1) ||
-        oldDelegate.trails.any((t) => t.animationProgress > 0 && t.animationProgress < 1)) {
-      return true;
-    }
-
-    // Trail count changed (added or removed).
-    if (trails.length != oldDelegate.trails.length) {
-      return true;
-    }
-
-    return currentStroke.length != oldDelegate.currentStroke.length ||
+    return trails.length != oldDelegate.trails.length ||
+        activeCapture != oldDelegate.activeCapture ||
+        currentStroke.length != oldDelegate.currentStroke.length ||
         cursorPosition != oldDelegate.cursorPosition ||
         cursorColor != oldDelegate.cursorColor ||
         strokeWidth != oldDelegate.strokeWidth ||
         showCursor != oldDelegate.showCursor;
   }
+}
+
+/// Lightweight cursor-only layer. Pointer movement schedules paint directly
+/// without rebuilding widgets or repainting fading trails.
+class LaserCursorPainter extends CustomPainter {
+  LaserCursorPainter({
+    required this.position,
+    required this.color,
+    required this.visible,
+  }) : _glowPaint = Paint()..color = color.withValues(alpha: 0.3),
+       _cursorPaint = Paint()..color = color,
+       _centerPaint = Paint()..color = Colors.white,
+       super(repaint: position);
+
+  final ValueListenable<Offset?> position;
+  final Color color;
+  final bool visible;
+  final Paint _glowPaint;
+  final Paint _cursorPaint;
+  final Paint _centerPaint;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final point = position.value;
+    if (!visible || point == null) return;
+    canvas.drawCircle(point, 12, _glowPaint);
+    canvas.drawCircle(point, 8, _cursorPaint);
+    canvas.drawCircle(point, 3, _centerPaint);
+  }
+
+  @override
+  bool shouldRepaint(LaserCursorPainter oldDelegate) =>
+      position != oldDelegate.position ||
+      color != oldDelegate.color ||
+      visible != oldDelegate.visible;
 }

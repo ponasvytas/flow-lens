@@ -1,35 +1,23 @@
+import 'dart:async';
 import 'dart:ui';
+
 import 'package:flutter/foundation.dart';
+
 import '../models/app_mode.dart';
-import '../widgets/dockable_panel.dart';
+import '../models/dock_layout_state.dart';
+import '../services/dock_layout_repository.dart';
 
-/// Drives which mode is active and which panels are visible / collapsed.
-///
-/// Each [AppMode] has a default visibility for each [PanelId]. Users can
-/// temporarily override visibility for the current mode; overrides reset when
-/// the mode changes.
-///
-/// Also owns dock-edge and floating-position state for every panel so that
-/// the [DockLayout] widget can arrange panels without each panel managing its
-/// own position.
+/// Owns workflow selection and the persisted layout of every dockable panel.
 class UIController extends ChangeNotifier {
+  final DockLayoutRepository? _repository;
   AppMode _currentMode = AppMode.record;
+  DockLayoutState _layoutState = const DockLayoutState();
+  Future<void> _saveChain = Future.value();
 
-  // user overrides: null = use mode default, true/false = explicit override
-  final Map<PanelId, bool?> _visibilityOverrides = {};
-  final Map<PanelId, bool> _collapsed = {};
-
-  // Dock edge per panel (persists across rebuilds, resets on mode change)
-  final Map<PanelId, PanelDockEdge> _dockEdges = {};
-
-  // Floating-mode position per panel (persists until mode change)
-  final Map<PanelId, Offset> _floatingPositions = {};
+  UIController([this._repository]);
 
   AppMode get currentMode => _currentMode;
-
-  // ---------------------------------------------------------------------------
-  // Default visibility table
-  // ---------------------------------------------------------------------------
+  DockLayoutState get layoutState => _layoutState;
 
   static const Map<AppMode, Map<PanelId, bool>> _modeDefaults = {
     AppMode.record: {
@@ -58,104 +46,105 @@ class UIController extends ChangeNotifier {
     },
   };
 
-  // ---------------------------------------------------------------------------
-  // Queries
-  // ---------------------------------------------------------------------------
+  WorkflowDockState get _workflow => _layoutState.workflow(_currentMode);
+  DockPanelState _panel(PanelId id) => _workflow.panel(id);
 
-  /// Whether the panel should be rendered (visible + not hidden by mode)
-  bool panelVisible(PanelId id) {
-    final override = _visibilityOverrides[id];
-    if (override != null) return override;
-    return _modeDefaults[_currentMode]![id] ?? false;
+  Future<void> loadDockLayouts() async {
+    final repository = _repository;
+    if (repository == null) return;
+    _layoutState = await repository.load();
+    notifyListeners();
   }
 
-  /// Whether the panel is collapsed to its title strip
-  bool panelCollapsed(PanelId id) => _collapsed[id] ?? false;
+  bool panelVisible(PanelId id) =>
+      _panel(id).visible ?? _modeDefaults[_currentMode]?[id] ?? false;
 
-  /// Current dock edge for a panel (defaults to floating)
-  PanelDockEdge dockEdge(PanelId id) =>
-      _dockEdges[id] ?? PanelDockEdge.floating;
+  bool panelCollapsed(PanelId id) => _panel(id).collapsed;
 
-  /// Current floating position for a panel (falls back to [fallback])
+  PanelDockEdge dockEdge(PanelId id) => _panel(id).edge;
+
   Offset floatingPosition(PanelId id, Offset fallback) =>
-      _floatingPositions[id] ?? fallback;
+      _panel(id).floatingPosition ?? fallback;
 
-  // ---------------------------------------------------------------------------
-  // Mutations
-  // ---------------------------------------------------------------------------
+  Size floatingSize(PanelId id, Size fallback) =>
+      _panel(id).floatingSize ?? fallback;
+
+  DockPresentationMode get dockPresentationMode => _workflow.presentationMode;
+
+  DockEdgeExtents get dockExtents => _workflow.extents;
+
+  double dockExtent(PanelDockEdge edge) => _workflow.extents.forEdge(edge);
 
   void setMode(AppMode mode) {
     if (_currentMode == mode) return;
     _currentMode = mode;
-    _visibilityOverrides.clear(); // reset user overrides on mode change
-    _collapsed.clear();
-    _dockEdges.clear();
-    _floatingPositions.clear();
     notifyListeners();
   }
 
   void cycleMode() {
     final modes = AppMode.values;
-    final nextIndex = (modes.indexOf(_currentMode) + 1) % modes.length;
-    setMode(modes[nextIndex]);
+    setMode(modes[(modes.indexOf(_currentMode) + 1) % modes.length]);
   }
 
-  /// Show a panel (overrides the mode default for this session)
-  void showPanel(PanelId id) {
-    _visibilityOverrides[id] = true;
+  void showPanel(PanelId id) =>
+      _updatePanel(id, (panel) => panel.copyWith(visible: true));
+
+  void hidePanel(PanelId id) =>
+      _updatePanel(id, (panel) => panel.copyWith(visible: false));
+
+  void togglePanel(PanelId id) =>
+      panelVisible(id) ? hidePanel(id) : showPanel(id);
+
+  void collapsePanel(PanelId id) =>
+      _updatePanel(id, (panel) => panel.copyWith(collapsed: true));
+
+  void expandPanel(PanelId id) =>
+      _updatePanel(id, (panel) => panel.copyWith(collapsed: false));
+
+  void toggleCollapsed(PanelId id) =>
+      _updatePanel(id, (panel) => panel.copyWith(collapsed: !panel.collapsed));
+
+  void setDockEdge(PanelId id, PanelDockEdge edge) =>
+      _updatePanel(id, (panel) => panel.copyWith(edge: edge));
+
+  void setFloatingPosition(PanelId id, Offset position) =>
+      _updatePanel(id, (panel) => panel.copyWith(floatingPosition: position));
+
+  void setFloatingSize(PanelId id, Size size) =>
+      _updatePanel(id, (panel) => panel.copyWith(floatingSize: size));
+
+  void setDockExtent(PanelDockEdge edge, double extent) {
+    if (edge == PanelDockEdge.floating || dockExtent(edge) == extent) return;
+    _updateWorkflow(
+      _workflow.copyWith(extents: _workflow.extents.withEdge(edge, extent)),
+    );
+  }
+
+  void setDockPresentationMode(DockPresentationMode mode) {
+    if (_workflow.presentationMode == mode) return;
+    _updateWorkflow(_workflow.copyWith(presentationMode: mode));
+  }
+
+  void _updatePanel(
+    PanelId id,
+    DockPanelState Function(DockPanelState panel) update,
+  ) {
+    final current = _panel(id);
+    final next = update(current);
+    if (identical(current, next)) return;
+    _updateWorkflow(_workflow.withPanel(id, next));
+  }
+
+  void _updateWorkflow(WorkflowDockState workflow) {
+    _layoutState = _layoutState.withWorkflow(_currentMode, workflow);
+    _queueSave();
     notifyListeners();
   }
 
-  /// Hide a panel (overrides the mode default for this session)
-  void hidePanel(PanelId id) {
-    _visibilityOverrides[id] = false;
-    notifyListeners();
-  }
-
-  /// Toggle visibility, respecting overrides and mode defaults
-  void togglePanel(PanelId id) {
-    if (panelVisible(id)) {
-      _visibilityOverrides[id] = false;
-    } else {
-      _visibilityOverrides[id] = true;
-    }
-    notifyListeners();
-  }
-
-  void collapsePanel(PanelId id) {
-    _collapsed[id] = true;
-    notifyListeners();
-  }
-
-  void expandPanel(PanelId id) {
-    _collapsed[id] = false;
-    notifyListeners();
-  }
-
-  void toggleCollapsed(PanelId id) {
-    _collapsed[id] = !(_collapsed[id] ?? false);
-    notifyListeners();
-  }
-
-  // ---------------------------------------------------------------------------
-  // Dock edge & floating position
-  // ---------------------------------------------------------------------------
-
-  void setDockEdge(PanelId id, PanelDockEdge edge) {
-    if (_dockEdges[id] != edge) {
-      _dockEdges[id] = edge;
-      notifyListeners();
-    }
-  }
-
-  /// Update floating position silently (called during drag, no rebuild needed).
-  void setFloatingPositionSilent(PanelId id, Offset pos) {
-    _floatingPositions[id] = pos;
-  }
-
-  /// Update floating position and notify listeners (e.g. after drag end).
-  void setFloatingPosition(PanelId id, Offset pos) {
-    _floatingPositions[id] = pos;
-    notifyListeners();
+  void _queueSave() {
+    final repository = _repository;
+    if (repository == null) return;
+    final snapshot = _layoutState;
+    _saveChain = _saveChain.then((_) => repository.save(snapshot));
   }
 }

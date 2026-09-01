@@ -10,7 +10,7 @@ void main() {
     late TaxonomyRepository repository;
 
     setUp(() {
-      repository = TaxonomyRepository();
+      repository = BundledTaxonomyRepository();
     });
 
     test('loads hockey taxonomy successfully', () async {
@@ -46,18 +46,21 @@ void main() {
 
     test('validates unique category IDs', () async {
       final taxonomy = await repository.loadSportTaxonomy('hockey');
-      
+
       expect(() => taxonomy.validate(), returnsNormally);
     });
 
     test('validates unique event type IDs across categories', () async {
       final taxonomy = await repository.loadSportTaxonomy('hockey');
-      
+
       final allEventTypeIds = <String>{};
       for (final category in taxonomy.categories) {
         for (final eventType in category.eventTypes) {
-          expect(allEventTypeIds.contains(eventType.eventTypeId), false,
-              reason: 'Duplicate eventTypeId: ${eventType.eventTypeId}');
+          expect(
+            allEventTypeIds.contains(eventType.eventTypeId),
+            false,
+            reason: 'Duplicate eventTypeId: ${eventType.eventTypeId}',
+          );
           allEventTypeIds.add(eventType.eventTypeId);
         }
       }
@@ -66,7 +69,7 @@ void main() {
     test('caches loaded taxonomy', () async {
       final taxonomy1 = await repository.loadSportTaxonomy('hockey');
       final taxonomy2 = await repository.loadSportTaxonomy('hockey');
-      
+
       expect(identical(taxonomy1, taxonomy2), true);
     });
   });

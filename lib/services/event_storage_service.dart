@@ -1,11 +1,12 @@
 import 'dart:convert';
+import '../utils/app_log.dart';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import '../models/game_event.dart';
 import '../utils/file_saver.dart';
 
-class EventStorageService {
+class EventImportExportService {
   /// Prompts user to save events to a JSON file
   Future<void> saveEvents(List<GameEvent> events) async {
     if (events.isEmpty) return;
@@ -32,16 +33,16 @@ class EventStorageService {
 
           final file = File(outputFile);
           await file.writeAsString(jsonString);
-          print('Events saved to $outputFile');
+          AppLog.debug('Events saved to $outputFile');
         }
       } else {
         // Web implementation: Trigger download
         final fileName = 'events_${DateTime.now().millisecondsSinceEpoch}.json';
         await saveTextFile(jsonString, fileName);
-        print('Events download triggered for $fileName');
+        AppLog.debug('Events download triggered for $fileName');
       }
     } catch (e) {
-      print('Error saving events: $e');
+      AppLog.debug('Error saving events: $e');
       rethrow;
     }
   }
@@ -74,9 +75,14 @@ class EventStorageService {
             .toList();
       }
     } catch (e) {
-      print('Error loading events: $e');
+      AppLog.debug('Error loading events: $e');
       rethrow;
     }
     return [];
   }
 }
+
+@Deprecated(
+  'Use EventImportExportService; this service is not durable storage.',
+)
+typedef EventStorageService = EventImportExportService;

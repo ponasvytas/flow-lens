@@ -1,117 +1,163 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 
-/// Lightweight performance tracker, active only in debug mode.
+/// Compile-time gated performance instrumentation.
 ///
-/// Usage:
-///   Perf.rebuildCount('VideoProgressBar');   // call in build()
-///   Perf.time('filterEvents', () => ...);    // wrap expensive work
-///   Perf.dump();                             // print summary to console
-///   Perf.reset();                            // clear counters
-///
-/// All methods are no-ops when [kDebugMode] is false, so there is zero
-/// overhead in profile/release builds.
+/// Enable in debug or profile mode with
+/// `--dart-define=FLOW_LENS_PERF=true`. When disabled, calls return directly
+/// without allocating stopwatches or metric entries.
 class Perf {
   Perf._();
 
-  /// Master switch — set to `false` to silence output even in debug mode.
-  static bool enabled = true;
+  static const bool enabled = bool.fromEnvironment(
+    'FLOW_LENS_PERF',
+    defaultValue: false,
+  );
 
-  /// How often [rebuildCount] prints (every N rebuilds per tag).
-  static int rebuildLogInterval = 50;
+  static final Map<String, int> _counters = <String, int>{};
+  static final Map<String, List<int>> _operations = <String, List<int>>{};
+  static final List<int> _frameMicros = <int>[];
+  static bool _installed = false;
 
-  // ── Rebuild tracking ────────────────────────────────────────────────
+  static void install() {
+    if (!enabled || _installed) return;
+    SchedulerBinding.instance.addTimingsCallback(_recordFrames);
+    _installed = true;
+  }
 
-  static final Map<String, int> _rebuilds = {};
+  static void uninstall() {
+    if (!_installed) return;
+    SchedulerBinding.instance.removeTimingsCallback(_recordFrames);
+    _installed = false;
+  }
 
-  /// Call at the top of a widget's `build()` method.
-  /// Increments the counter for [tag] and logs every [rebuildLogInterval].
-  static void rebuildCount(String tag) {
-    if (!kDebugMode || !enabled) return;
-    final count = (_rebuilds[tag] ?? 0) + 1;
-    _rebuilds[tag] = count;
-    if (count % rebuildLogInterval == 0) {
-      debugPrint('[Perf] $tag rebuilt $count times');
+  static void _recordFrames(List<FrameTiming> timings) {
+    for (final timing in timings) {
+      _frameMicros.add(timing.totalSpan.inMicroseconds);
     }
   }
 
-  // ── Timing ──────────────────────────────────────────────────────────
+  static void rebuildCount(String tag) => count('rebuild:$tag');
 
-  static final Map<String, _TimingStat> _timings = {};
+  static void count(String tag, [int amount = 1]) {
+    if (!enabled) return;
+    _counters[tag] = (_counters[tag] ?? 0) + amount;
+  }
 
-  /// Runs [action] and records how long it took under [label].
   static T time<T>(String label, T Function() action) {
-    if (!kDebugMode || !enabled) return action();
-    final sw = Stopwatch()..start();
-    final result = action();
-    sw.stop();
-    final stat = _timings.putIfAbsent(label, _TimingStat.new);
-    stat.record(sw.elapsedMicroseconds);
-    return result;
+    if (!enabled) return action();
+    final stopwatch = Stopwatch()..start();
+    try {
+      return action();
+    } finally {
+      stopwatch.stop();
+      _operations
+          .putIfAbsent(label, () => <int>[])
+          .add(stopwatch.elapsedMicroseconds);
+    }
   }
 
-  /// Async variant of [time].
-  static Future<T> timeAsync<T>(String label, Future<T> Function() action) async {
-    if (!kDebugMode || !enabled) return action();
-    final sw = Stopwatch()..start();
-    final result = await action();
-    sw.stop();
-    final stat = _timings.putIfAbsent(label, _TimingStat.new);
-    stat.record(sw.elapsedMicroseconds);
-    return result;
+  static Future<T> timeAsync<T>(
+    String label,
+    Future<T> Function() action,
+  ) async {
+    if (!enabled) return action();
+    final stopwatch = Stopwatch()..start();
+    try {
+      return await action();
+    } finally {
+      stopwatch.stop();
+      _operations
+          .putIfAbsent(label, () => <int>[])
+          .add(stopwatch.elapsedMicroseconds);
+    }
   }
 
-  // ── Reporting ───────────────────────────────────────────────────────
+  @visibleForTesting
+  static MetricSummary summarize(Iterable<int> samples) {
+    final sorted = samples.toList()..sort();
+    if (sorted.isEmpty) return const MetricSummary.empty();
+    int percentile(double value) {
+      final index = ((sorted.length - 1) * value).ceil();
+      return sorted[index.clamp(0, sorted.length - 1)];
+    }
 
-  /// Prints a summary of all tracked metrics to the debug console.
+    return MetricSummary(
+      count: sorted.length,
+      p50Micros: percentile(0.50),
+      p95Micros: percentile(0.95),
+      maxMicros: sorted.last,
+    );
+  }
+
+  static PerfSnapshot snapshot() {
+    final operations = <String, MetricSummary>{
+      for (final entry in _operations.entries)
+        entry.key: summarize(entry.value),
+    };
+    final slowFrames = _frameMicros.where((value) => value > 33300).length;
+    return PerfSnapshot(
+      counters: Map<String, int>.unmodifiable(_counters),
+      operations: Map<String, MetricSummary>.unmodifiable(operations),
+      frames: summarize(_frameMicros),
+      droppedFrameCount: slowFrames,
+    );
+  }
+
   static void dump() {
-    if (!kDebugMode || !enabled) return;
-    debugPrint('╔══════════════════════════════════════════════');
-    debugPrint('║  Perf Summary');
-    debugPrint('╠══════════════════════════════════════════════');
-
-    if (_rebuilds.isNotEmpty) {
-      debugPrint('║  Rebuilds:');
-      final sorted = _rebuilds.entries.toList()
-        ..sort((a, b) => b.value.compareTo(a.value));
-      for (final e in sorted) {
-        debugPrint('║    ${e.key}: ${e.value}');
-      }
-    }
-
-    if (_timings.isNotEmpty) {
-      debugPrint('║  Timings:');
-      for (final e in _timings.entries) {
-        final s = e.value;
-        debugPrint(
-          '║    ${e.key}: calls=${s.count}  '
-          'avg=${(s.totalMicros / s.count).toStringAsFixed(0)}µs  '
-          'max=${s.maxMicros}µs',
-        );
-      }
-    }
-
-    if (_rebuilds.isEmpty && _timings.isEmpty) {
-      debugPrint('║  (no data recorded)');
-    }
-
-    debugPrint('╚══════════════════════════════════════════════');
+    if (!enabled) return;
+    debugPrint('[flow-lens-perf] ${snapshot()}');
   }
 
-  /// Resets all counters and timings.
   static void reset() {
-    _rebuilds.clear();
-    _timings.clear();
+    if (!enabled) return;
+    _counters.clear();
+    _operations.clear();
+    _frameMicros.clear();
   }
 }
 
-class _TimingStat {
-  int count = 0;
-  int totalMicros = 0;
-  int maxMicros = 0;
+@immutable
+class MetricSummary {
+  final int count;
+  final int p50Micros;
+  final int p95Micros;
+  final int maxMicros;
 
-  void record(int micros) {
-    count++;
-    totalMicros += micros;
-    if (micros > maxMicros) maxMicros = micros;
-  }
+  const MetricSummary({
+    required this.count,
+    required this.p50Micros,
+    required this.p95Micros,
+    required this.maxMicros,
+  });
+
+  const MetricSummary.empty()
+    : count = 0,
+      p50Micros = 0,
+      p95Micros = 0,
+      maxMicros = 0;
+
+  @override
+  String toString() =>
+      'count=$count p50=${p50Micros}us p95=${p95Micros}us max=${maxMicros}us';
+}
+
+@immutable
+class PerfSnapshot {
+  final Map<String, int> counters;
+  final Map<String, MetricSummary> operations;
+  final MetricSummary frames;
+  final int droppedFrameCount;
+
+  const PerfSnapshot({
+    required this.counters,
+    required this.operations,
+    required this.frames,
+    required this.droppedFrameCount,
+  });
+
+  @override
+  String toString() =>
+      'frames=($frames) over33ms=$droppedFrameCount counters=$counters '
+      'operations=$operations';
 }
