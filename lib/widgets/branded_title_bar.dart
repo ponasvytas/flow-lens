@@ -10,6 +10,10 @@ class BrandedTitleBar extends StatelessWidget {
   final VoidCallback? onLoadEvents;
   final VoidCallback? onShowEventsTable;
   final VoidCallback? onShowSettings;
+  final VoidCallback? onShowAccount;
+  final VoidCallback? onShowCloudSessions;
+  final bool isSignedIn;
+  final bool hasPremium;
   final VoidCallback? onToggleDockedEvents;
   final bool showDockedEvents;
 
@@ -26,6 +30,10 @@ class BrandedTitleBar extends StatelessWidget {
     this.onLoadEvents,
     this.onShowEventsTable,
     this.onShowSettings,
+    this.onShowAccount,
+    this.onShowCloudSessions,
+    this.isSignedIn = false,
+    this.hasPremium = false,
     this.onToggleDockedEvents,
     this.showDockedEvents = false,
     super.key,
@@ -155,6 +163,26 @@ class BrandedTitleBar extends StatelessWidget {
               onPressed: onShowSettings,
               tooltip: 'Settings',
               icon: const Icon(Icons.settings, color: Colors.white70),
+            ),
+          if (onShowAccount != null)
+            IconButton(
+              onPressed: onShowAccount,
+              tooltip: isSignedIn
+                  ? (hasPremium ? 'Premium account' : 'Account')
+                  : 'Sign in',
+              icon: Icon(
+                isSignedIn ? Icons.account_circle : Icons.person_outline,
+                color: hasPremium ? Colors.amber.shade300 : Colors.white70,
+              ),
+            ),
+          if (onShowCloudSessions != null)
+            IconButton(
+              onPressed: onShowCloudSessions,
+              tooltip: hasPremium ? 'Cloud sessions' : 'Premium cloud sessions',
+              icon: Icon(
+                hasPremium ? Icons.cloud_done : Icons.cloud_outlined,
+                color: hasPremium ? Colors.amber.shade300 : Colors.white70,
+              ),
             ),
 
           const SizedBox(width: 8),

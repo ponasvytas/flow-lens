@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../models/game_event.dart';
 import '../utils/file_saver.dart';
 
-class EventStorageService {
+class EventImportExportService {
   /// Prompts user to save events to a JSON file
   Future<void> saveEvents(List<GameEvent> events) async {
     if (events.isEmpty) return;
@@ -81,3 +81,8 @@ class EventStorageService {
     return [];
   }
 }
+
+@Deprecated(
+  'Use EventImportExportService; this service is not durable storage.',
+)
+typedef EventStorageService = EventImportExportService;

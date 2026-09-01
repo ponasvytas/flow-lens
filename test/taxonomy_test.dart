@@ -10,7 +10,7 @@ void main() {
     late TaxonomyRepository repository;
 
     setUp(() {
-      repository = TaxonomyRepository();
+      repository = BundledTaxonomyRepository();
     });
 
     test('loads hockey taxonomy successfully', () async {

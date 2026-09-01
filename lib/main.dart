@@ -7,12 +7,15 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:file_picker/file_picker.dart';
 
+import 'app/app_bootstrap.dart';
+import 'app/app_composition.dart';
 import 'utils/video_loader.dart';
 import 'utils/player_config.dart';
 import 'utils/native_player_helpers.dart';
 import 'utils/perf.dart';
 import 'utils/app_log.dart';
 import 'models/drawing_models.dart';
+import 'models/cloud_sessions.dart';
 import 'models/game_event.dart';
 import 'widgets/video_canvas.dart';
 import 'widgets/drawing_tools_panel.dart';
@@ -27,17 +30,18 @@ import 'widgets/docked_events_panel.dart';
 import 'models/sport_profile.dart';
 import 'widgets/video_progress_bar.dart';
 import 'widgets/events_table_view.dart';
-import 'services/event_storage_service.dart';
-import 'services/tracking_storage_service.dart';
 import 'services/taxonomy_repository.dart';
-import 'services/settings_repository.dart';
-import 'services/dock_layout_repository.dart';
+import 'services/event_import_export_service.dart';
+import 'services/tracking_import_export_service.dart';
+import 'services/event_session_repository.dart';
+import 'services/tracking_session_repository.dart';
 import 'models/sport_taxonomy.dart';
 import 'controllers/events_controller.dart';
 import 'controllers/settings_controller.dart';
 import 'controllers/ui_controller.dart';
 import 'controllers/tracking_controller.dart';
 import 'controllers/event_preview_coordinator.dart';
+import 'controllers/account_controller.dart';
 import 'models/app_mode.dart';
 import 'models/dock_layout_state.dart';
 import 'widgets/dock_layout.dart';
@@ -45,14 +49,17 @@ import 'widgets/dockable_panel.dart' show kAppTitleBarHeight;
 import 'widgets/settings_view.dart';
 import 'widgets/event_navigation_panel.dart';
 import 'widgets/player_tracking_panel.dart';
+import 'widgets/account_view.dart';
+import 'widgets/cloud_sessions_view.dart';
 
-void main() {
+Future<void> main() async {
   // 1. Initialize MediaKit (Crucial for the native video engine)
   WidgetsFlutterBinding.ensureInitialized();
   Perf.install();
   MediaKit.ensureInitialized();
 
-  runApp(const MaterialApp(home: HockeyAnalyzerScreen()));
+  final composition = await AppBootstrap.create();
+  runApp(MaterialApp(home: HockeyAnalyzerScreen(composition: composition)));
 }
 
 enum _AltEntryStage { none, categories, labels, grades }
@@ -181,7 +188,9 @@ class _AltKeyState extends ChangeNotifier {
 }
 
 class HockeyAnalyzerScreen extends StatefulWidget {
-  const HockeyAnalyzerScreen({super.key});
+  const HockeyAnalyzerScreen({super.key, this.composition});
+
+  final AppComposition? composition;
 
   @override
   State<HockeyAnalyzerScreen> createState() => _HockeyAnalyzerScreenState();
@@ -189,6 +198,8 @@ class HockeyAnalyzerScreen extends StatefulWidget {
 
 class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     with TickerProviderStateMixin {
+  late final AppRuntime _runtime;
+
   // Create the Player and Controller
   late final Player player;
   late final VideoController controller;
@@ -217,25 +228,31 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   int _taxonomyRequestGeneration = 0;
 
   // Event Tracking State
-  final EventsController _eventsController = EventsController();
-  final TaxonomyRepository _taxonomyRepository = TaxonomyRepository();
+  EventsController get _eventsController => _runtime.eventsController;
+  AccountController get _accountController => _runtime.accountController;
+  TaxonomyRepository get _taxonomyRepository => _runtime.taxonomyRepository;
   SportTaxonomy? _taxonomy;
   SportProfile? _selectedSportProfile;
 
   // Settings
-  final SettingsController _settingsController = SettingsController(
-    SharedPreferencesSettingsRepository(),
-  );
+  SettingsController get _settingsController => _runtime.settingsController;
 
   // UI mode & panel management
-  final UIController _uiController = UIController(
-    SharedPreferencesDockLayoutRepository(),
-  );
+  UIController get _uiController => _runtime.uiController;
 
   // Player tracking
-  final TrackingController _trackingController = TrackingController();
-  final TrackingStorageService _trackingStorageService =
-      TrackingStorageService();
+  TrackingController get _trackingController => _runtime.trackingController;
+  TrackingImportExportService get _trackingImportExportService =>
+      _runtime.trackingImportExportService;
+  EventSessionRepository? get _eventSessionRepository =>
+      _runtime.eventSessionRepository;
+  TrackingSessionRepository? get _trackingSessionRepository =>
+      _runtime.trackingSessionRepository;
+
+  String? _activeEventCloudSessionId;
+  String? _activeEventCloudSessionTitle;
+  String? _activeTrackingCloudSessionId;
+  String? _activeTrackingCloudSessionTitle;
 
   // Docked events panel
   bool _showDockedEvents = false;
@@ -256,11 +273,13 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   double _previousVolume = 100.0;
   bool _isSpeedShortcutActive = false;
 
-  final EventStorageService _storageService = EventStorageService();
+  EventImportExportService get _eventImportExportService =>
+      _runtime.eventImportExportService;
 
   @override
   void initState() {
     super.initState();
+    _runtime = (widget.composition ?? AppComposition.local()).createRuntime();
 
     // Initialize shortcuts panel position (right side after first frame)
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -407,10 +426,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     _videoParamsSub?.cancel();
     releaseVideoUrl(_videoSourcePath);
     player.dispose(); // Always clean up video memory!
-    _eventsController.dispose();
-    _settingsController.dispose();
-    _trackingController.dispose();
-    _uiController.dispose();
+    _runtime.dispose();
     _transformationController.dispose();
     _drawing.dispose();
     _altKey.dispose();
@@ -444,7 +460,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
   Future<void> _saveEvents() async {
     try {
-      await _storageService.saveEvents(_eventsController.allEvents);
+      await _eventImportExportService.saveEvents(_eventsController.allEvents);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Events saved successfully')),
@@ -461,7 +477,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
   Future<void> _loadEvents() async {
     try {
-      final events = await _storageService.loadEvents();
+      final events = await _eventImportExportService.loadEvents();
       if (events.isNotEmpty) {
         _eventsController.setEvents(events);
         _eventsController.selectEvent(null);
@@ -486,7 +502,9 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
   Future<void> _saveTrackingSession() async {
     try {
-      await _trackingStorageService.saveSession(_trackingController.session);
+      await _trackingImportExportService.saveSession(
+        _trackingController.session,
+      );
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -503,7 +521,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
   Future<void> _loadTrackingSession() async {
     try {
-      final session = await _trackingStorageService.loadSession();
+      final session = await _trackingImportExportService.loadSession();
       if (session != null) {
         _trackingController.loadSession(session);
         if (mounted) {
@@ -528,7 +546,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
   Future<void> _exportTrackingCsv() async {
     try {
-      await _trackingStorageService.exportCsv(_trackingController.session);
+      await _trackingImportExportService.exportCsv(_trackingController.session);
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -857,6 +875,158 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
         ),
       );
     }
+  }
+
+  void _showAccount() {
+    final isDesktop = MediaQuery.of(context).size.width > 600;
+    if (isDesktop) {
+      showDialog(
+        context: context,
+        builder: (context) => AccountView(controller: _accountController),
+      );
+    } else {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => AccountView(controller: _accountController),
+        ),
+      );
+    }
+  }
+
+  void _showCloudSessions() {
+    if (!_accountController.capabilities.canSaveCloudSessions) {
+      _showAccount();
+      return;
+    }
+    final eventRepository = _eventSessionRepository;
+    final trackingRepository = _trackingSessionRepository;
+    if (eventRepository == null || trackingRepository == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cloud sessions are unavailable.')),
+      );
+      return;
+    }
+
+    final view = CloudSessionsView(
+      eventRepository: eventRepository,
+      trackingRepository: trackingRepository,
+      onSaveEvents: _taxonomy == null ? null : _saveCloudEventSession,
+      onSaveTracking: _saveCloudTrackingSession,
+      onLoadEvents: _loadCloudEventSession,
+      onLoadTracking: _loadCloudTrackingSession,
+      activeEventSessionId: _activeEventCloudSessionId,
+      activeEventTitle: _activeEventCloudSessionTitle,
+      activeTrackingSessionId: _activeTrackingCloudSessionId,
+      activeTrackingTitle: _activeTrackingCloudSessionTitle,
+      onEventArchived: (id) {
+        if (_activeEventCloudSessionId == id) {
+          setState(() {
+            _activeEventCloudSessionId = null;
+            _activeEventCloudSessionTitle = null;
+          });
+        }
+      },
+      onTrackingArchived: (id) {
+        if (_activeTrackingCloudSessionId == id) {
+          setState(() {
+            _activeTrackingCloudSessionId = null;
+            _activeTrackingCloudSessionTitle = null;
+          });
+        }
+      },
+    );
+    if (MediaQuery.sizeOf(context).width > 700) {
+      showDialog(context: context, builder: (_) => view);
+    } else {
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => view));
+    }
+  }
+
+  Future<void> _saveCloudEventSession(String title, bool asNew) async {
+    final repository = _eventSessionRepository;
+    final taxonomy = _taxonomy;
+    if (repository == null || taxonomy == null) return;
+    final draft = EventSessionDraft(
+      title: title,
+      sportId: taxonomy.sportId,
+      taxonomyId: 'built-in:${taxonomy.sportId}',
+      taxonomyRevision: taxonomy.schemaVersion,
+      taxonomySnapshot: taxonomy.toJson(),
+      events: _eventsController.allEvents,
+      sourceVideo: VideoSourceMetadata.fromSource(
+        _videoSourcePath,
+        duration: player.state.duration,
+      ),
+    );
+    final activeId = _activeEventCloudSessionId;
+    final session = asNew || activeId == null
+        ? await repository.create(draft)
+        : await repository.update(activeId, draft);
+    if (!mounted) return;
+    setState(() {
+      _activeEventCloudSessionId = session.id;
+      _activeEventCloudSessionTitle = session.title;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Event timeline saved to cloud.')),
+    );
+  }
+
+  Future<void> _saveCloudTrackingSession(String title, bool asNew) async {
+    final repository = _trackingSessionRepository;
+    if (repository == null) return;
+    final draft = TrackingSessionDraft(
+      title: title,
+      sportId: _selectedSportProfile?.id ?? 'hockey',
+      session: _trackingController.session,
+      sourceVideo: VideoSourceMetadata.fromSource(
+        _videoSourcePath,
+        duration: player.state.duration,
+      ),
+    );
+    final activeId = _activeTrackingCloudSessionId;
+    final session = asNew || activeId == null
+        ? await repository.create(draft)
+        : await repository.update(activeId, draft);
+    if (!mounted) return;
+    setState(() {
+      _activeTrackingCloudSessionId = session.id;
+      _activeTrackingCloudSessionTitle = session.title;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Tracking session saved to cloud.')),
+    );
+  }
+
+  void _loadCloudEventSession(CloudEventSession session) {
+    final taxonomy = SportTaxonomy.fromJson(session.taxonomySnapshot);
+    taxonomy.validate();
+    final profile = SportProfile.availableProfiles.firstWhere(
+      (profile) => profile.id == session.sportId,
+      orElse: () => SportProfile.availableProfiles.first,
+    );
+    setState(() {
+      _selectedSportProfile = profile;
+      _taxonomy = taxonomy;
+      _activeEventCloudSessionId = session.id;
+      _activeEventCloudSessionTitle = session.title;
+    });
+    _eventsController.setEvents(session.events);
+    _eventsController.selectEvent(null);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Loaded “${session.title}” from cloud.')),
+    );
+  }
+
+  void _loadCloudTrackingSession(CloudTrackingSession session) {
+    _trackingController.loadSession(session.session);
+    setState(() {
+      _activeTrackingCloudSessionId = session.id;
+      _activeTrackingCloudSessionTitle = session.title;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Loaded “${session.title}” from cloud.')),
+    );
   }
 
   void _toggleDockedEvents() {
@@ -1608,7 +1778,10 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                 children: [
                   // LAYER 0: Branded Title Bar (Top)
                   ListenableBuilder(
-                    listenable: _uiController,
+                    listenable: Listenable.merge([
+                      _uiController,
+                      _accountController,
+                    ]),
                     builder: (context, _) => Positioned(
                       top: 0,
                       left: 0,
@@ -1624,6 +1797,11 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                             ? _showEventsTable
                             : null,
                         onShowSettings: hasVideoLoaded ? _showSettings : null,
+                        onShowAccount: _showAccount,
+                        onShowCloudSessions: _showCloudSessions,
+                        isSignedIn: _accountController.isSignedIn,
+                        hasPremium:
+                            _accountController.capabilities.canSyncSettings,
                         onToggleDockedEvents: hasVideoLoaded
                             ? _toggleDockedEvents
                             : null,

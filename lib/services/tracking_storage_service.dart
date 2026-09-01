@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../models/tracking_models.dart';
 import '../utils/file_saver.dart';
 
-class TrackingStorageService {
+class TrackingImportExportService {
   /// Prompts user to save a tracking session to a JSON file.
   Future<void> saveSession(TrackingSession session) async {
     if (session.events.isEmpty && session.subjects.isEmpty) return;
@@ -166,3 +166,8 @@ class TrackingStorageService {
     }
   }
 }
+
+@Deprecated(
+  'Use TrackingImportExportService; this service is not durable storage.',
+)
+typedef TrackingStorageService = TrackingImportExportService;

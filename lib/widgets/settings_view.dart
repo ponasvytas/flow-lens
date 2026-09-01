@@ -20,11 +20,27 @@ class _SettingsViewState extends State<SettingsView> {
   @override
   void initState() {
     super.initState();
+    _copyControllerSettings();
+    widget.controller.addListener(_onControllerChanged);
+  }
+
+  void _copyControllerSettings() {
     _fastPlaySpeed = widget.controller.settings.fastPlaySpeed;
     _slowPlaybackSpeed = widget.controller.settings.slowPlaybackSpeed;
     _defaultPlaybackSpeed = widget.controller.settings.defaultPlaybackSpeed;
     _leadInSeconds = widget.controller.settings.leadIn.inSeconds;
     _leadOutSeconds = widget.controller.settings.leadOut.inSeconds;
+  }
+
+  void _onControllerChanged() {
+    if (!mounted) return;
+    setState(_copyControllerSettings);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onControllerChanged);
+    super.dispose();
   }
 
   @override
@@ -43,6 +59,18 @@ class _SettingsViewState extends State<SettingsView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (widget.controller.syncError case final error?) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(error),
+                  ),
+                  const SizedBox(height: 20),
+                ],
                 _buildPlaybackSection(),
                 const SizedBox(height: 32),
                 _buildActionButtons(context),
@@ -440,14 +468,7 @@ class _SettingsViewState extends State<SettingsView> {
         TextButton(
           onPressed: () async {
             await widget.controller.resetToDefaults();
-            setState(() {
-              _fastPlaySpeed = widget.controller.settings.fastPlaySpeed;
-              _slowPlaybackSpeed = widget.controller.settings.slowPlaybackSpeed;
-              _defaultPlaybackSpeed =
-                  widget.controller.settings.defaultPlaybackSpeed;
-              _leadInSeconds = widget.controller.settings.leadIn.inSeconds;
-              _leadOutSeconds = widget.controller.settings.leadOut.inSeconds;
-            });
+            if (mounted) setState(_copyControllerSettings);
           },
           child: const Text('Reset to Defaults'),
         ),
