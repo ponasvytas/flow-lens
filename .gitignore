@@ -90,3 +90,6 @@ ui-debug.log
 /dev_docs/
 
 .local/
+
+# Visual audit captures may contain private video footage.
+/specs/visual-design-system/audit-screenshots/

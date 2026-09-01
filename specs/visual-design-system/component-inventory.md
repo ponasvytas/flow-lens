@@ -1,7 +1,7 @@
 # Component Inventory
 
 This inventory turns the current UI into design-system targets. It should be
-completed with screenshots before implementation.
+validated against local, privacy-reviewed screenshots before implementation.
 
 ## App shell
 

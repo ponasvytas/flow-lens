@@ -32,7 +32,7 @@ their own games on iPads and phones.
 - [x] Initial UI evidence gathered
 - [x] Framework options researched
 - [x] Design principles drafted
-- [x] Visual audit completed with screenshots
+- [x] Visual audit completed; written findings retained without private footage
 - [ ] Design tokens selected
 - [ ] Component inventory completed
 - [ ] Shell redesign prototype completed

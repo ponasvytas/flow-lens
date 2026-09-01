@@ -17,8 +17,8 @@ specs/visual-design-system/audit-screenshots/
 specs/visual-design-system/visual-audit-results.md
 ```
 
-The screenshot folder should be ignored or reviewed before committing if it
-contains large binary files.
+The screenshot folder is ignored. Keep captures local unless every image uses
+publication-approved or synthetic footage and has been explicitly reviewed.
 
 ## Viewports
 

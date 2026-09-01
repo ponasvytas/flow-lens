@@ -14,7 +14,8 @@ Automation scope:
 - Navigate through reachable app states without requiring user input.
 - Exercise mode switches, panels, dialogs, and simple tagging flows where
 	automation can identify stable controls.
-- Save screenshots under `specs/visual-design-system/audit-screenshots/`.
+- Save screenshots locally under `specs/visual-design-system/audit-screenshots/`;
+  commit only privacy-reviewed captures using approved or synthetic footage.
 - Save the written audit report as
 	`specs/visual-design-system/visual-audit-results.md`.
 

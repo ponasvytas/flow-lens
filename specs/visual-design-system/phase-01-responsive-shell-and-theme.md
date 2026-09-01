@@ -292,8 +292,8 @@ Capture screenshots for comparison:
 - Smart HUD active state.
 - Drawing in progress.
 
-Compare against [visual-audit-results.md](visual-audit-results.md) and the
-existing screenshots in `audit-screenshots/`.
+Compare against [visual-audit-results.md](visual-audit-results.md) and any
+privacy-reviewed screenshots retained locally.
 
 ## Acceptance checklist
 

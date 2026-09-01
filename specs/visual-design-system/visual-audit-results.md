@@ -8,33 +8,10 @@ Method: Playwright-driven browser audit against the running Flutter web app.
 
 ## Captured screenshots
 
-Screenshots were saved under `specs/visual-design-system/audit-screenshots/`.
-
-- `desktop-01-sport-selection.png`
-- `desktop-02-hockey-picker.png`
-- `desktop-03-demo-video-attempt.png`
-- `wide-desktop-01-sport-selection.png`
-- `wide-desktop-02-hockey-picker.png`
-- `tablet-01-sport-selection.png`
-- `tablet-02-hockey-picker.png`
-- `phone-01-sport-selection.png`
-- `phone-02-hockey-picker.png`
-- `desktop-04-loaded-video-record.png`
-- `desktop-05-loaded-video-review.png`
-- `desktop-06-loaded-video-track.png`
-- `desktop-07-settings-attempt.png`
-- `desktop-08-export-attempt.png`
-- `tablet-03-loaded-video-current.png`
-- `phone-03-loaded-video-current.png`
-- `desktop-09-record-after-shot-event.png`
-- `desktop-10-alt-smart-hud-attempt.png`
-- `desktop-11-review-after-shot-event.png`
-- `desktop-12-sign-in-screen.png`
-- `desktop-13-settings-view.png`
-- `desktop-14-export-dialog.png`
-- `desktop-15-event-created-state.png`
-- `desktop-16-smart-hud-active.png`
-- `desktop-17-drawing-in-progress.png`
+The screenshots used for this audit were removed from the repository because
+some included private game footage. The written observations are retained.
+Future captures should stay local unless they use publication-approved or
+synthetic footage and are explicitly reviewed before commit.
 
 ## Automation summary
 
