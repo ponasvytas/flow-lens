@@ -1,5 +1,5 @@
 import 'video_loader_stub.dart'
-    if (dart.library.html) 'video_loader_web.dart'
+    if (dart.library.js_interop) 'video_loader_web.dart'
     as impl;
 
 /// Pick a video file using native HTML file input (web only).
