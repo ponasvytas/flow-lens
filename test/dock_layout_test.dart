@@ -59,24 +59,19 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Test Panel'), findsNothing);
       final dock = find.byTooltip('Test Panel — Dock position');
-      final collapse = find.byTooltip('Collapse panel');
+      final collapse = find.text('Collapse panel');
       final content = find.text('Panel content');
-      expect(tester.getCenter(dock).dy, tester.getCenter(collapse).dy);
       expect(
         tester.getRect(dock).right,
         lessThanOrEqualTo(tester.getRect(content).left),
       );
       expect(
         tester.getRect(content).right,
-        lessThanOrEqualTo(tester.getRect(collapse).left),
-      );
-      expect(tester.getSize(find.byType(DockPanel)).height, 104);
-      expect(
-        tester.getTopLeft(content).dy -
-            tester.getTopLeft(find.byType(DockPanel)).dy,
-        lessThan(kPanelTitleStripHeight),
+        lessThanOrEqualTo(tester.getRect(find.byType(DockPanel)).right),
       );
       final expandedWidth = tester.getSize(find.byType(DockPanel)).width;
+      await tester.tap(dock);
+      await tester.pumpAndSettle();
       await tester.tap(collapse);
       await tester.pumpAndSettle();
       expect(

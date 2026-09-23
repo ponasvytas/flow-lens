@@ -38,6 +38,7 @@ class DrawingPainter extends CustomPainter {
     // Draw completed freehand strokes
     for (var stroke in strokes) {
       if (stroke.points.isEmpty) continue;
+      _saveScaled(canvas, size, stroke.canvasSize);
 
       final paint = Paint()
         ..color = stroke.color
@@ -47,10 +48,12 @@ class DrawingPainter extends CustomPainter {
         ..style = PaintingStyle.stroke;
 
       canvas.drawPath(stroke.path, paint);
+      canvas.restore();
     }
 
     // Draw completed lines
     for (var line in lines) {
+      _saveScaled(canvas, size, line.canvasSize);
       final paint = Paint()
         ..color = line.color
         ..strokeWidth = line.strokeWidth
@@ -58,10 +61,12 @@ class DrawingPainter extends CustomPainter {
         ..style = PaintingStyle.stroke;
 
       canvas.drawLine(line.start, line.end, paint);
+      canvas.restore();
     }
 
     // Draw completed arrows
     for (var arrow in arrows) {
+      _saveScaled(canvas, size, arrow.canvasSize);
       final paint = Paint()
         ..color = arrow.color
         ..strokeWidth = arrow.strokeWidth
@@ -73,6 +78,7 @@ class DrawingPainter extends CustomPainter {
 
       // Draw arrowhead
       _drawArrowhead(canvas, arrow.start, arrow.end, paint);
+      canvas.restore();
     }
 
     // Draw current freehand stroke being drawn
@@ -103,6 +109,16 @@ class DrawingPainter extends CustomPainter {
       if (currentTool == DrawingTool.arrow) {
         _drawArrowhead(canvas, lineStart!, lineEnd!, paint);
       }
+    }
+  }
+
+  void _saveScaled(Canvas canvas, Size size, Size? reference) {
+    canvas.save();
+    if (reference != null && reference.width > 0 && reference.height > 0) {
+      canvas.scale(
+        size.width / reference.width,
+        size.height / reference.height,
+      );
     }
   }
 

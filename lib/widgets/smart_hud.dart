@@ -151,7 +151,7 @@ class _SmartHUDState extends State<SmartHUD>
                     ),
                   ),
                   IconButton(
-                    tooltip: 'Close event popup',
+                    tooltip: 'Cancel event entry',
                     onPressed: () {
                       _dismissTimer?.cancel();
                       widget.onDismiss();

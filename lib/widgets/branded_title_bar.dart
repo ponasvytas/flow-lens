@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../models/app_mode.dart';
+import 'dockable_panel.dart' show kAppTitleBarHeight;
 
 /// Branded title bar for Flow Lens
 class BrandedTitleBar extends StatelessWidget {
+  final VoidCallback? onGoHome;
   final VoidCallback onShowShortcuts;
   final bool showShortcuts;
   final VoidCallback? onSaveEvents;
@@ -16,6 +18,8 @@ class BrandedTitleBar extends StatelessWidget {
   final bool hasPremium;
   final VoidCallback? onToggleDockedEvents;
   final bool showDockedEvents;
+  final VoidCallback? onShowTools;
+  final VoidCallback? onExitPresentation;
 
   // Mode switching
   final AppMode currentMode;
@@ -26,6 +30,7 @@ class BrandedTitleBar extends StatelessWidget {
     required this.showShortcuts,
     required this.currentMode,
     required this.onModeChanged,
+    this.onGoHome,
     this.onSaveEvents,
     this.onLoadEvents,
     this.onShowEventsTable,
@@ -37,14 +42,21 @@ class BrandedTitleBar extends StatelessWidget {
     this.hasPremium = false,
     this.onToggleDockedEvents,
     this.showDockedEvents = false,
+    this.onShowTools,
+    this.onExitPresentation,
     super.key,
   });
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final compact = constraints.maxWidth < 720;
+      final compact =
+          constraints.maxWidth <
+          (onExitPresentation == null ? 800 : 1000) *
+              MediaQuery.textScalerOf(context).scale(14) /
+              14;
       final actions = <(String, IconData, VoidCallback?)>[
+        if (compact) ('Tools', Icons.tune, onShowTools),
         (
           'Reset workspace layout',
           Icons.dashboard_customize_outlined,
@@ -68,18 +80,26 @@ class BrandedTitleBar extends StatelessWidget {
         ('Keyboard shortcuts', Icons.keyboard_outlined, onShowShortcuts),
       ];
       return Container(
-        height: 64,
+        height: kAppTitleBarHeight,
         decoration: const BoxDecoration(
           color: Color(0xFF251B35),
           border: Border(bottom: BorderSide(color: Color(0xFF58416D))),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
         child: Row(
           children: [
-            const Icon(
-              Icons.blur_on_rounded,
-              color: Color(0xFFC4A5FA),
-              size: 28,
+            SizedBox(
+              width: 48,
+              height: 48,
+              child: IconButton(
+                tooltip: 'Go to start page',
+                onPressed: onGoHome,
+                icon: const Icon(
+                  Icons.blur_on_rounded,
+                  color: Color(0xFFC4A5FA),
+                  size: 26,
+                ),
+              ),
             ),
             if (!compact) ...[
               const SizedBox(width: 10),
@@ -92,26 +112,33 @@ class BrandedTitleBar extends StatelessWidget {
                 ),
               ),
             ],
-            const Spacer(),
+            if (!compact) const Spacer(),
             if (compact)
-              PopupMenuButton<AppMode>(
-                tooltip: 'Change workflow',
-                initialValue: currentMode,
-                onSelected: onModeChanged,
-                itemBuilder: (_) => [
-                  for (final mode in AppMode.values)
-                    PopupMenuItem(value: mode, child: Text(_label(mode))),
-                ],
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 14,
-                  ),
-                  child: Row(
-                    children: [
-                      Text(_label(currentMode)),
-                      const Icon(Icons.expand_more),
-                    ],
+              Expanded(
+                child: PopupMenuButton<AppMode>(
+                  tooltip: 'Change workflow',
+                  initialValue: currentMode,
+                  onSelected: onModeChanged,
+                  itemBuilder: (_) => [
+                    for (final mode in AppMode.values)
+                      PopupMenuItem(value: mode, child: Text(_label(mode))),
+                  ],
+                  child: Container(
+                    constraints: const BoxConstraints(minHeight: 48),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            _label(currentMode),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const Icon(Icons.expand_more),
+                      ],
+                    ),
                   ),
                 ),
               )
@@ -134,7 +161,26 @@ class BrandedTitleBar extends StatelessWidget {
                   ),
                 ),
             ],
-            const Spacer(),
+            if (!compact) const Spacer(),
+            if (onExitPresentation != null)
+              if (compact)
+                IconButton(
+                  tooltip: 'Exit presentation',
+                  onPressed: onExitPresentation,
+                  icon: const Icon(Icons.close_fullscreen),
+                )
+              else
+                TextButton.icon(
+                  onPressed: onExitPresentation,
+                  icon: const Icon(Icons.close_fullscreen),
+                  label: const Text('Exit presentation'),
+                ),
+            if (!compact)
+              TextButton.icon(
+                onPressed: onShowTools,
+                icon: const Icon(Icons.tune),
+                label: const Text('Tools'),
+              ),
             PopupMenuButton<int>(
               tooltip: 'App menu',
               icon: const Icon(Icons.more_horiz),

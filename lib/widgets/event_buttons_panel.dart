@@ -2,15 +2,16 @@ import 'package:flutter/material.dart';
 import '../models/sport_taxonomy.dart';
 import '../models/dock_layout_state.dart';
 import '../controllers/event_entry_controller.dart';
-import 'event_entry_pager.dart';
+import 'tool_action_grid.dart';
 
-class EventButtonsPanel extends StatefulWidget {
+class EventButtonsPanel extends StatelessWidget {
   final Function(String categoryId) onEventTriggered;
   final SportTaxonomy? taxonomy;
   final bool showNumbers;
   final int entryPage;
   final ValueChanged<int>? onEntryPageChanged;
   final PanelDockEdge dockEdge;
+  final TextEditingController? searchController;
 
   const EventButtonsPanel({
     required this.onEventTriggered,
@@ -19,99 +20,142 @@ class EventButtonsPanel extends StatefulWidget {
     this.entryPage = 0,
     this.onEntryPageChanged,
     this.dockEdge = PanelDockEdge.floating,
+    this.searchController,
     super.key,
   });
 
-  @override
-  State<EventButtonsPanel> createState() => _EventButtonsPanelState();
-}
+  static String _label(
+    CategoryTaxonomy category,
+    int index,
+    bool numbered,
+    int page,
+  ) {
+    final number = index - page * EventEntryController.pageSize;
+    return '${numbered && number >= 0 && number < EventEntryController.pageSize ? '${number + 1}. ' : ''}${category.name}';
+  }
 
-class _EventButtonsPanelState extends State<EventButtonsPanel> {
-  String _query = '';
-  @override
-  Widget build(BuildContext context) {
-    final taxonomy = widget.taxonomy;
-    final dockEdge = widget.dockEdge;
-    final showNumbers = widget.showNumbers;
-    final onEventTriggered = widget.onEventTriggered;
-    if (taxonomy == null) {
-      return Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: Colors.black54,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: const Text(
-          'Loading categories...',
-          style: TextStyle(color: Colors.white70),
-        ),
-      );
-    }
+  static ToolsetLayout layoutFor(
+    SportTaxonomy? taxonomy, {
+    bool showNumbers = false,
+    int page = 0,
+  }) => ToolsetLayout.actions(
+    [
+      for (final entry
+          in (taxonomy?.captureCategories ?? <CategoryTaxonomy>[])
+              .asMap()
+              .entries)
+        _label(entry.value, entry.key, showNumbers, page),
+      showNumbers ? 'Shortcuts' : 'Find',
+    ],
+    tileWidth: 72,
+    minimumTileWidth: 64,
+  );
 
-    final vertical =
-        dockEdge == PanelDockEdge.left || dockEdge == PanelDockEdge.right;
-    return Padding(
-      padding: const EdgeInsets.all(8),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final all = taxonomy.captureCategories;
-          final choices = showNumbers
-              ? all
-                    .skip(widget.entryPage * EventEntryController.pageSize)
-                    .take(EventEntryController.pageSize)
-                    .toList()
-              : all.where((c) => c.matches(_query)).toList();
-          return Column(
+  void _search(BuildContext context) {
+    final controller = searchController ?? TextEditingController();
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Find event category'),
+        content: SizedBox(
+          width: 440,
+          child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (!showNumbers)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: TextField(
-                    decoration: const InputDecoration(
-                      labelText: 'Find event category',
-                      prefixIcon: Icon(Icons.search),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Find event category',
+                  prefixIcon: Icon(Icons.search),
+                ),
+              ),
+              Flexible(
+                child: ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: controller,
+                  builder: (context, value, _) => SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (final category in taxonomy!.captureCategories)
+                          if (category.matches(value.text.trim()))
+                            ListTile(
+                              leading: Icon(
+                                category.getIcon(),
+                                color: category.getColor(),
+                              ),
+                              title: Text(category.name),
+                              onTap: () {
+                                Navigator.pop(context);
+                                onEventTriggered(category.categoryId);
+                              },
+                            ),
+                      ],
                     ),
-                    onChanged: (value) => setState(() => _query = value.trim()),
                   ),
                 ),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final entry in choices.asMap().entries)
-                    SizedBox(
-                      width: vertical ? constraints.maxWidth : 132,
-                      child: OutlinedButton.icon(
-                        onPressed: () =>
-                            onEventTriggered(entry.value.categoryId),
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size(48, 56),
-                          alignment: Alignment.centerLeft,
-                          padding: const EdgeInsets.all(12),
-                        ),
-                        icon: Icon(
-                          entry.value.getIcon(),
-                          size: 22,
-                          color: entry.value.getColor(),
-                        ),
-                        label: Text(
-                          '${showNumbers ? '${entry.key + 1}. ' : ''}${entry.value.name}',
-                        ),
-                      ),
-                    ),
-                ],
               ),
-              if (showNumbers)
-                EventEntryPager(
-                  page: widget.entryPage,
-                  count: all.length,
-                  onChanged: widget.onEntryPageChanged,
-                ),
             ],
-          );
-        },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
       ),
+    ).whenComplete(() {
+      if (searchController == null) controller.dispose();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (taxonomy == null) {
+      return const Center(child: Text('Loading categories...'));
+    }
+    final all = taxonomy!.captureCategories;
+    final layout = layoutFor(
+      taxonomy,
+      showNumbers: showNumbers,
+      page: entryPage,
+    );
+    return ToolActionGrid(
+      title: 'Categories',
+      layout: layout,
+      children: [
+        for (final entry in all.asMap().entries)
+          ToolActionButton(
+            key: ValueKey('category-${entry.value.categoryId}'),
+            dismissPalette: true,
+            label: layout.labels![entry.key],
+            icon: entry.value.getIcon(),
+            color: entry.value.getColor(),
+            onPressed: () => onEventTriggered(entry.value.categoryId),
+          ),
+        if (showNumbers)
+          ToolActionButton(
+            label: 'Shortcuts',
+            icon: Icons.keyboard,
+            tooltip:
+                'Next shortcut page (${entryPage + 1}/${(all.length / EventEntryController.pageSize).ceil()})',
+            onPressed: onEntryPageChanged == null
+                ? null
+                : () => onEntryPageChanged!(
+                    (entryPage + 1) %
+                        (all.length / EventEntryController.pageSize).ceil(),
+                  ),
+          )
+        else
+          ToolActionButton(
+            label: 'Find',
+            dismissPalette: true,
+            tooltip: 'Find event category',
+            icon: Icons.search,
+            onPressed: () => _search(context),
+          ),
+      ],
     );
   }
 }

@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show kIsWeb, mapEquals;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
@@ -15,6 +15,7 @@ import 'services/quick_events_repository.dart';
 import 'widgets/quick_events_panel.dart';
 import 'app/app_composition.dart';
 import 'utils/video_loader.dart';
+import 'utils/video_viewport.dart';
 import 'utils/player_config.dart';
 import 'utils/native_player_helpers.dart';
 import 'utils/perf.dart';
@@ -24,8 +25,13 @@ import 'models/cloud_sessions.dart';
 import 'models/game_event.dart';
 import 'widgets/video_canvas.dart';
 import 'widgets/drawing_tools_panel.dart';
+import 'widgets/event_entry_surface.dart';
+import 'widgets/workspace_tools_menu.dart';
+import 'widgets/capture_status_bar.dart';
+import 'widgets/tool_action_grid.dart';
 import 'widgets/event_buttons_panel.dart';
-import 'widgets/smart_hud.dart';
+import 'models/workspace_tool.dart';
+import 'controllers/drawing_controller.dart';
 import 'widgets/control_bar.dart';
 import 'widgets/laser_pointer_overlay.dart';
 import 'widgets/shortcuts_panel.dart';
@@ -51,7 +57,8 @@ import 'controllers/account_controller.dart';
 import 'models/app_mode.dart';
 import 'models/dock_layout_state.dart';
 import 'widgets/dock_layout.dart';
-import 'widgets/dockable_panel.dart' show kAppTitleBarHeight;
+import 'widgets/dockable_panel.dart'
+    show kAppTitleBarHeight, kProgressBarReserve;
 import 'widgets/settings_view.dart';
 import 'widgets/event_navigation_panel.dart';
 import 'widgets/player_tracking_panel.dart';
@@ -77,84 +84,6 @@ Future<void> main() async {
 // Scoped ChangeNotifiers — mutations here do NOT trigger a parent setState.
 // ---------------------------------------------------------------------------
 
-/// All drawing / annotation state in one notifier.
-class _DrawingState extends ChangeNotifier {
-  bool isDrawingMode = false;
-  DrawingTool currentTool = DrawingTool.freehand;
-  Color drawingColor = const Color(0xFF753b8f);
-  double strokeWidth = 5.0;
-  final List<DrawingStroke> strokes = [];
-  final List<LineShape> lines = [];
-  final List<ArrowShape> arrows = [];
-  final List<LaserTrail> laserTrails = [];
-
-  /// Monotonic counter for completed-strokes content changes.
-  int revision = 0;
-  void toggleDrawingMode() {
-    isDrawingMode = !isDrawingMode;
-    notifyListeners();
-  }
-
-  void setTool(DrawingTool tool) {
-    if (tool == currentTool) return;
-    currentTool = tool;
-    notifyListeners();
-  }
-
-  void setColor(Color color) {
-    if (color == drawingColor) return;
-    drawingColor = color;
-    notifyListeners();
-  }
-
-  void toggleLaser() {
-    if (currentTool == DrawingTool.laser) {
-      currentTool = DrawingTool.freehand;
-    } else {
-      currentTool = DrawingTool.laser;
-      if (!isDrawingMode) isDrawingMode = true;
-    }
-    notifyListeners();
-  }
-
-  void addStroke(DrawingStroke stroke) {
-    strokes.add(stroke);
-    revision++;
-    notifyListeners();
-  }
-
-  void addLine(LineShape line) {
-    lines.add(line);
-    revision++;
-    notifyListeners();
-  }
-
-  void addArrow(ArrowShape arrow) {
-    arrows.add(arrow);
-    revision++;
-    notifyListeners();
-  }
-
-  void addLaserTrail(LaserTrail trail) {
-    laserTrails.add(trail);
-    notifyListeners();
-  }
-
-  void removeTrail(LaserTrail trail) {
-    laserTrails.remove(trail);
-    notifyListeners();
-  }
-
-  void clearAll() {
-    strokes.clear();
-    lines.clear();
-    arrows.clear();
-    laserTrails.clear();
-    revision++;
-    notifyListeners();
-  }
-}
-
 class HockeyAnalyzerScreen extends StatefulWidget {
   const HockeyAnalyzerScreen({super.key, this.composition});
 
@@ -173,7 +102,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   late final VideoController controller;
 
   // Drawing state
-  final _drawing = _DrawingState();
+  final _drawing = DrawingController();
 
   // Zoom/Pan state
   final TransformationController _transformationController =
@@ -183,6 +112,10 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
   // Video loading state
   bool hasVideoLoaded = false;
+  bool _showStartPage = false;
+  int _startPageRevision = 0;
+  SportProfile? _pendingSportProfile;
+  bool get _workspaceVisible => hasVideoLoaded && !_showStartPage;
   String? _videoSourcePath;
 
   // Actual video aspect ratio (width / height). Defaults to 16:9 until the
@@ -223,7 +156,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   String? _activeTrackingCloudSessionTitle;
 
   // Docked events panel
-  bool _showDockedEvents = false;
+  bool get _showDockedEvents => _uiController.panelVisible(PanelId.eventsList);
 
   // Shortcuts panel visibility and position
   bool _showShortcuts = false;
@@ -234,6 +167,10 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   final _altKey = EventEntryController();
   final _quickEvents = QuickEventsController(LocalQuickEventsRepository());
   final _lastQuickEvent = ValueNotifier<GameEvent?>(null);
+  final _eventMenuOpen = ValueNotifier<bool>(false);
+  final _entryMinimized = ValueNotifier<bool>(false);
+  bool _categoriesWereVisible = false;
+  bool _drawingWasVisible = false;
   String? _videoIdentity;
 
   // Root focus node — lets us reclaim keyboard focus after dialogs / HUD.
@@ -252,6 +189,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _runtime = (widget.composition ?? AppComposition.local()).createRuntime();
+
+    _uiController.addListener(_workspaceChanged);
 
     // Initialize shortcuts panel position (right side after first frame)
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -387,6 +326,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   }
 
   void _onSportSelected(SportProfile profile) {
+    _altKey.cancelDraft();
+    _altKey.categorySearch.clear();
     setState(() {
       _selectedSportProfile = profile;
     });
@@ -404,12 +345,15 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     _videoParamsSub?.cancel();
     releaseVideoUrl(_videoSourcePath);
     player.dispose(); // Always clean up video memory!
+    _uiController.removeListener(_workspaceChanged);
     _runtime.dispose();
     _transformationController.dispose();
     _drawing.dispose();
     _altKey.dispose();
     _quickEvents.dispose();
     _lastQuickEvent.dispose();
+    _eventMenuOpen.dispose();
+    _entryMinimized.dispose();
     super.dispose();
   }
 
@@ -462,6 +406,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     try {
       final events = await _eventImportExportService.loadEvents();
       if (events.isNotEmpty) {
+        _altKey.cancelDraft();
+        _lastQuickEvent.value = null;
         _eventsController.setEvents(events);
         _eventsController.selectEvent(null);
         if (mounted) {
@@ -567,6 +513,39 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     await _replaceVideoSource(url, initialPosition: initialPosition);
   }
 
+  Future<void> _goHome() async {
+    _eventPreview.cancel();
+    _restoreFastPlayback();
+    _trackingController.stopAllTimers(timestamp: player.state.position);
+    _drawing.usePointer();
+    _altKey.exit();
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _showStartPage = true;
+      _showShortcuts = false;
+      _pendingSportProfile = null;
+      _startPageRevision++;
+    });
+    if (hasVideoLoaded) await player.pause();
+  }
+
+  void _resumeAnalysis() {
+    setState(() {
+      _showStartPage = false;
+      _pendingSportProfile = null;
+    });
+    _rootFocus.requestFocus();
+  }
+
+  void _selectStartPageSport(SportProfile profile) {
+    if (hasVideoLoaded) {
+      // Browsing the start page must not change the resumable session.
+      _pendingSportProfile = profile;
+    } else {
+      _onSportSelected(profile);
+    }
+  }
+
   Future<bool> _replaceVideoSource(
     String source, {
     Duration? initialPosition,
@@ -574,6 +553,11 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   }) async {
     _eventPreview.cancel();
     final previousSource = _videoSourcePath;
+    _drawing.resetForVideo();
+    _altKey.cancelDraft();
+    _eventsController.selectEvent(null);
+    _lastQuickEvent.value = null;
+    _altKey.exit();
     if (mounted) setState(() => hasVideoLoaded = false);
     try {
       try {
@@ -595,11 +579,21 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
           (uri == null
               ? source
               : uri.replace(query: '', fragment: '').toString());
+      if (_pendingSportProfile case final profile?) {
+        _pendingSportProfile = null;
+        _selectedSportProfile = profile;
+        await _loadTaxonomy();
+      }
       if (_taxonomy != null) {
         _quickEvents.selectGame(_videoIdentity!, _taxonomy!);
       }
       _lastQuickEvent.value = null;
-      if (mounted) setState(() => hasVideoLoaded = true);
+      if (mounted) {
+        setState(() {
+          hasVideoLoaded = true;
+          _showStartPage = false;
+        });
+      }
       return true;
     } catch (e) {
       releaseVideoUrl(source);
@@ -652,15 +646,38 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   }
 
   void _onStrokeCompleted(DrawingStroke stroke) {
-    _drawing.addStroke(stroke);
+    _drawing.addStroke(
+      DrawingStroke(
+        stroke.points,
+        stroke.color,
+        stroke.strokeWidth,
+        canvasSize: Size(_videoWidth, _videoWidth / _videoAspectRatio),
+      ),
+    );
   }
 
   void _onLineCompleted(LineShape line) {
-    _drawing.addLine(line);
+    _drawing.addLine(
+      LineShape(
+        line.start,
+        line.end,
+        line.color,
+        line.strokeWidth,
+        canvasSize: Size(_videoWidth, _videoWidth / _videoAspectRatio),
+      ),
+    );
   }
 
   void _onArrowCompleted(ArrowShape arrow) {
-    _drawing.addArrow(arrow);
+    _drawing.addArrow(
+      ArrowShape(
+        arrow.start,
+        arrow.end,
+        arrow.color,
+        arrow.strokeWidth,
+        canvasSize: Size(_videoWidth, _videoWidth / _videoAspectRatio),
+      ),
+    );
   }
 
   void _completeLaserDrawing(List<DrawingPoint> strokePoints) {
@@ -671,6 +688,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
         _drawing.drawingColor,
         _drawing.strokeWidth,
         DateTime.now(),
+        canvasSize: Size(_videoWidth, _videoWidth / _videoAspectRatio),
       ),
     );
   }
@@ -757,6 +775,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
   void _animateZoomTo(Matrix4 target, {VoidCallback? onMidpoint}) {
     _zoomAnimationController?.dispose();
+    final animationWidth = _videoWidth;
 
     _zoomAnimationController = AnimationController(
       duration: const Duration(milliseconds: 400),
@@ -776,7 +795,11 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
     bool seekFired = false;
     _zoomAnimationController!.addListener(() {
-      _transformationController.value = _zoomAnimation!.value;
+      _transformationController.value = resizeVideoTransform(
+        _zoomAnimation!.value,
+        animationWidth,
+        _videoWidth,
+      );
       // Fire seek at ~40% through the animation
       if (!seekFired && _zoomAnimationController!.value >= 0.4) {
         seekFired = true;
@@ -1015,17 +1038,28 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     );
   }
 
-  void _toggleDockedEvents() {
-    if (MediaQuery.sizeOf(context).width < 1100) {
-      _showEventsTable();
-      return;
+  void _toggleDockedEvents() => _uiController.togglePanel(PanelId.eventsList);
+
+  void _workspaceChanged() {
+    final categories =
+        _uiController.panelVisible(PanelId.categories) &&
+        !_uiController.panelCollapsed(PanelId.categories);
+    if (_categoriesWereVisible && !categories && _altKey.draft != null) {
+      _entryMinimized.value = true;
+    } else if (categories && !_categoriesWereVisible) {
+      _entryMinimized.value = false;
     }
-    // Reset zoom — the transform is pixel-relative and invalid at new width
-    _transformationController.value = Matrix4.identity();
-    setState(() {
-      _showDockedEvents = !_showDockedEvents;
-    });
+    _categoriesWereVisible = categories;
+    final drawing = _uiController.panelVisible(PanelId.drawingTools);
+    if (_drawingWasVisible && !drawing) _drawing.usePointer();
+    _drawingWasVisible = drawing;
   }
+
+  void _showTools() => showWorkspaceTools(
+    context,
+    _uiController,
+    onShortcuts: _toggleShortcutsPanel,
+  );
 
   void _toggleShortcutsPanel() {
     setState(() {
@@ -1086,7 +1120,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   }
 
   void _handleSmartHudNumber(int number) {
-    final activeEvent = _eventsController.activeEvent;
+    final activeEvent = _altKey.draft;
     if (activeEvent == null) return;
 
     if (!_altKey.isEntryActive) return;
@@ -1101,15 +1135,12 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
     if (_altKey.stage == EventEntryStage.grades) {
       final didSelect = _selectGradeByNumber(number);
-      if (didSelect) {
-        _altKey.setStage(EventEntryStage.categories);
-        _dismissHUD();
-      }
+      if (didSelect) _saveAndCloseSmartHud();
     }
   }
 
   bool _selectTagByNumber(int number) {
-    final activeEvent = _eventsController.activeEvent;
+    final activeEvent = _altKey.draft;
     if (activeEvent == null) return false;
 
     final taxonomy = _taxonomy;
@@ -1140,7 +1171,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   }
 
   bool _selectGradeByNumber(int number) {
-    final activeEvent = _eventsController.activeEvent;
+    final activeEvent = _altKey.draft;
     if (activeEvent == null) return false;
 
     // Map number to grade (1=Positive, 2=Neutral, 3=Negative)
@@ -1169,13 +1200,9 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   }
 
   void _saveAndCloseSmartHud() {
-    final activeEvent = _eventsController.activeEvent;
-    if (activeEvent == null) return;
-
-    if (activeEvent.isComplete) {
-      if (_altKey.isEntryActive) {
-        _altKey.setStage(EventEntryStage.categories);
-      }
+    final saved = _altKey.commitDraft(_eventsController);
+    if (saved != null) {
+      _lastQuickEvent.value = saved;
       _dismissHUD();
     }
   }
@@ -1196,147 +1223,98 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     final captured = transform.getMaxScaleOnAxis() > 1.01
         ? event.copyWith(viewTransform: _normalizeTransform(transform))
         : event;
-    _altKey.exit();
-    _eventsController.selectEvent(null);
+    if (_altKey.draft == null) _altKey.exit();
     _eventsController.addEvent(captured);
     _lastQuickEvent.value = captured;
   }
 
+  Widget _eventEntry(
+    PanelDockEdge edge, {
+    bool categoriesOnly = false,
+    VoidCallback? onSave,
+  }) => EventEntrySurface(
+    events: _eventsController,
+    entry: _altKey,
+    quickEvents: _quickEvents,
+    taxonomy: _taxonomy!,
+    dockEdge: edge,
+    categoriesOnly: categoriesOnly,
+    onCategory: _onEventTriggered,
+    onUpdate: _updateEvent,
+    onDelete: _deleteEvent,
+    onSave: onSave ?? _saveAndCloseSmartHud,
+    onCancel: _dismissHUD,
+  );
+
   Future<void> _showFullEventMenu() async {
-    if (_taxonomy == null) return;
-    await showDialog<void>(
-      context: context,
-      builder: (context) => Dialog(
-        insetPadding: const EdgeInsets.all(16),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 440, maxHeight: 680),
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-                child: Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'All events',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
+    if (_taxonomy == null || _eventMenuOpen.value) return;
+    _eventMenuOpen.value = true;
+    _entryMinimized.value = false;
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => Dialog(
+          insetPadding: const EdgeInsets.all(16),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440, maxHeight: 680),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 8, 8),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Event entry',
+                          style: TextStyle(fontSize: 20),
                         ),
                       ),
-                    ),
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      tooltip: 'Close event menu',
-                      icon: const Icon(Icons.close),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: SingleChildScrollView(
-                  child: ListenableBuilder(
-                    listenable: Listenable.merge([
-                      _eventsController,
-                      _quickEvents,
-                    ]),
-                    builder: (context, _) {
-                      final event = _eventsController.activeEvent;
-                      if (event == null) {
-                        return EventButtonsPanel(
-                          taxonomy: _taxonomy,
-                          dockEdge: PanelDockEdge.right,
-                          onEventTriggered: _onEventTriggered,
-                        );
-                      }
-                      return Column(
-                        children: [
-                          TextButton.icon(
-                            onPressed: () =>
-                                _eventsController.selectEvent(null),
-                            icon: const Icon(Icons.arrow_back),
-                            label: const Text('Categories'),
-                          ),
-                          SmartHUD(
-                            event: event,
-                            taxonomy: _taxonomy,
-                            onUpdateEvent: _updateEvent,
-                            onDeleteEvent: _deleteEvent,
-                            onSave: () {
-                              _saveAndCloseSmartHud();
-                              Navigator.pop(context);
-                            },
-                            onDismiss: () =>
-                                _eventsController.selectEvent(null),
-                          ),
-                          if (event.eventTypeId != null)
-                            TextButton.icon(
-                              onPressed:
-                                  _quickEvents.items.any(
-                                    (item) =>
-                                        item.categoryId == event.categoryId &&
-                                        item.eventTypeId == event.eventTypeId &&
-                                        item.grade == event.grade &&
-                                        mapEquals(item.context, event.context),
-                                  )
-                                  ? null
-                                  : () => _quickEvents.add(
-                                      QuickEvent(
-                                        categoryId: event.categoryId,
-                                        eventTypeId: event.eventTypeId!,
-                                        grade: event.grade,
-                                        slotId:
-                                            'quick-${DateTime.now().microsecondsSinceEpoch}',
-                                        taxonomyRevision:
-                                            event.taxonomyRevision,
-                                        categoryLabel: event.label,
-                                        eventLabel: event.detail,
-                                        definition: event.definition,
-                                        context: event.context,
-                                      ),
-                                    ),
-                              icon: const Icon(Icons.add),
-                              label: Text(
-                                _quickEvents.items.any(
-                                      (item) =>
-                                          item.categoryId == event.categoryId &&
-                                          item.eventTypeId ==
-                                              event.eventTypeId &&
-                                          item.grade == event.grade &&
-                                          mapEquals(
-                                            item.context,
-                                            event.context,
-                                          ),
-                                    )
-                                    ? 'In quick menu'
-                                    : 'Add to quick menu',
-                              ),
-                            ),
-                        ],
-                      );
-                    },
+                      if (_uiController.currentMode == AppMode.record)
+                        IconButton(
+                          tooltip: 'Keep Categories open',
+                          icon: const Icon(Icons.push_pin_outlined),
+                          onPressed: () {
+                            _uiController.showPanel(PanelId.categories);
+                            Navigator.pop(dialogContext);
+                          },
+                        ),
+                      IconButton(
+                        tooltip: 'Close event menu',
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(dialogContext),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: FilledButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Done'),
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: _eventEntry(
+                      PanelDockEdge.right,
+                      onSave: () {
+                        _saveAndCloseSmartHud();
+                        Navigator.pop(dialogContext);
+                      },
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
-    );
-    if (mounted) {
-      _eventsController.selectEvent(null);
-      _rootFocus.requestFocus();
+      );
+    } finally {
+      if (mounted) {
+        _eventMenuOpen.value = false;
+        _entryMinimized.value = true;
+        _rootFocus.requestFocus();
+      }
     }
   }
 
   void _onEventTriggered(String categoryId) {
+    if (_altKey.draft != null) return;
+    _entryMinimized.value = false;
     final taxonomy = _taxonomy;
     if (taxonomy == null) return;
 
@@ -1357,7 +1335,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
       viewTransform: isZoomed ? _normalizeTransform(currentTransform) : null,
     );
 
-    _eventsController.selectEvent(newEvent);
+    _altKey.beginDraft(newEvent);
     if (_altKey.isEntryActive) {
       _altKey.setStage(EventEntryStage.labels);
     }
@@ -1366,38 +1344,17 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   }
 
   void _updateEvent(GameEvent updatedEvent) {
-    // A selected sub-event is complete; grading is optional.
-    final isComplete = updatedEvent.isComplete;
-
-    if (isComplete) {
-      final existingIndex = _eventsController.allEvents.indexWhere(
-        (e) => e.id == updatedEvent.id,
-      );
-      if (existingIndex != -1) {
-        // Update existing
-        _eventsController.updateEvent(updatedEvent);
-      } else {
-        // Add new confirmed event
-        _eventsController.addEvent(updatedEvent);
-        AppLog.debug("EVENT CONFIRMED: ${updatedEvent.label}");
-      }
-    }
-
-    // Always update active event state so HUD reflects changes
-    _eventsController.selectEvent(updatedEvent);
-    if (isComplete &&
+    _altKey.updateDraft(updatedEvent);
+    if (updatedEvent.isComplete &&
         _altKey.isEntryActive &&
         _altKey.stage == EventEntryStage.labels) {
       _altKey.setStage(EventEntryStage.grades);
-    }
-    if (_lastQuickEvent.value?.id == updatedEvent.id) {
-      _lastQuickEvent.value = updatedEvent;
     }
   }
 
   void _deleteEvent(GameEvent event) {
     _eventsController.deleteEvent(event);
-    _eventsController.selectEvent(null);
+    if (_altKey.draft?.id == event.id) _altKey.cancelDraft();
     if (_lastQuickEvent.value?.id == event.id) _lastQuickEvent.value = null;
     AppLog.debug("EVENT DELETED: ${event.label}");
     // Reclaim keyboard focus — removing the SmartHUD can leave focus orphaned.
@@ -1405,7 +1362,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   }
 
   void _dismissHUD() {
-    _eventsController.selectEvent(null);
+    _entryMinimized.value = false;
+    _altKey.cancelDraft();
     if (_altKey.isEntryActive) {
       _altKey.setStage(EventEntryStage.categories);
     }
@@ -1416,6 +1374,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   Widget _buildVideoSurface() {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final previousWidth = _videoSurfaceWidth;
         _videoSurfaceWidth = math.max(
           1,
           math.min(
@@ -1423,6 +1382,13 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
             constraints.maxHeight * _videoAspectRatio,
           ),
         );
+        if (previousWidth > 1 && previousWidth != _videoSurfaceWidth) {
+          _transformationController.value = resizeVideoTransform(
+            _transformationController.value,
+            previousWidth,
+            _videoSurfaceWidth,
+          );
+        }
         return Center(
           child: SizedBox(
             width: _videoSurfaceWidth,
@@ -1477,172 +1443,189 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     );
   }
 
-  List<DockPanelEntry> _buildDockPanels(BuildContext context) => [
-    DockPanelEntry(
-      id: PanelId.eventButtons,
-      title: 'Quick events',
-      fillSideDock: true,
-      icon: Icons.bolt_rounded,
-      defaultFloatingPosition: const Offset(360, 160),
-      defaultFloatingSize: const Size(300, 480),
-      horizontalDockWidth: 480,
-      contentRevision: _taxonomy,
-      builder: (dockEdge) => _taxonomy == null
-          ? const SizedBox.shrink()
-          : ListenableBuilder(
-              listenable: _altKey,
-              builder: (context, _) => _altKey.showCategoryNumbers
-                  ? SingleChildScrollView(
-                      child: EventButtonsPanel(
-                        taxonomy: _taxonomy,
-                        dockEdge: dockEdge,
-                        showNumbers: true,
-                        entryPage: _altKey.page,
-                        onEntryPageChanged: (page) => _altKey.setPage(
-                          page,
-                          _taxonomy!.captureCategories.length,
-                        ),
-                        onEventTriggered: _onEventTriggered,
-                      ),
-                    )
+  List<DockPanelEntry> _buildDockPanels(BuildContext context) =>
+      [
+            DockPanelEntry(
+              id: PanelId.quickEvents,
+              title: 'Quick events',
+              fillSideDock: true,
+              icon: Icons.bolt_rounded,
+              defaultFloatingPosition: const Offset(360, 160),
+              defaultFloatingSize: const Size(300, 480),
+              layout: _taxonomy == null
+                  ? const ToolsetLayout.widget()
+                  : QuickEventsPanel.layoutFor(_quickEvents, _taxonomy!),
+              contentRevision: _taxonomy,
+              builder: (edge) => _taxonomy == null
+                  ? const SizedBox.shrink()
                   : QuickEventsPanel(
                       controller: _quickEvents,
                       taxonomy: _taxonomy!,
                       onRecord: _recordQuickEvent,
                       onAllEvents: _showFullEventMenu,
                       vertical:
-                          dockEdge != PanelDockEdge.top &&
-                          dockEdge != PanelDockEdge.bottom,
-                      feedback: ValueListenableBuilder<GameEvent?>(
-                        valueListenable: _lastQuickEvent,
-                        builder: (context, event, _) => event == null
-                            ? const SizedBox.shrink()
-                            : Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  Semantics(
-                                    liveRegion: true,
-                                    child: Text(
-                                      'Recorded ${event.label} ${event.detail}',
-                                      style: const TextStyle(
-                                        color: FlowTheme.accent,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                  ),
-                                  Text(
-                                    '${event.timestamp.inMinutes}:${(event.timestamp.inSeconds % 60).toString().padLeft(2, '0')}',
-                                    style: const TextStyle(
-                                      color: FlowTheme.muted,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                  Wrap(
-                                    children: [
-                                      TextButton.icon(
-                                        onPressed: () {
-                                          _eventsController.deleteEvent(event);
-                                          _lastQuickEvent.value = null;
-                                        },
-                                        icon: const Icon(Icons.undo, size: 18),
-                                        label: const Text('Undo'),
-                                      ),
-                                      TextButton(
-                                        onPressed: () {
-                                          _eventsController.selectEvent(event);
-                                          _showFullEventMenu();
-                                        },
-                                        child: const Text('Edit'),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
+                          edge != PanelDockEdge.top &&
+                          edge != PanelDockEdge.bottom,
+                    ),
+            ),
+            DockPanelEntry(
+              id: PanelId.categories,
+              title: 'Categories',
+              icon: Icons.category_outlined,
+              defaultFloatingPosition: const Offset(300, 100),
+              defaultFloatingSize: const Size(400, 480),
+              layout:
+                  _altKey.draft != null &&
+                      _uiController.dockEdge(PanelId.categories) !=
+                          PanelDockEdge.top &&
+                      _uiController.dockEdge(PanelId.categories) !=
+                          PanelDockEdge.bottom
+                  ? const ToolsetLayout.widget(
+                      preferredWidth: 400,
+                      preferredHeight: 400,
+                    )
+                  : EventButtonsPanel.layoutFor(
+                      _taxonomy,
+                      showNumbers: _altKey.showCategoryNumbers,
+                      page: _altKey.page,
+                    ),
+              contentRevision: _taxonomy,
+              builder: (edge) => _taxonomy == null
+                  ? const SizedBox.shrink()
+                  : ListenableBuilder(
+                      listenable: _eventMenuOpen,
+                      builder: (context, _) => _eventEntry(
+                        edge,
+                        categoriesOnly:
+                            _eventMenuOpen.value ||
+                            edge == PanelDockEdge.top ||
+                            edge == PanelDockEdge.bottom,
                       ),
                     ),
             ),
-    ),
-    DockPanelEntry(
-      id: PanelId.playbackControls,
-      title: 'Playback',
-      icon: Icons.play_circle_outline,
-      defaultFloatingPosition: const Offset(20, 16),
-      defaultFloatingSize: const Size(320, 170),
-      horizontalDockWidth: 620,
-      builder: (dockEdge) => ListenableBuilder(
-        listenable: _settingsController,
-        builder: (context, _) => DraggableControlBar(
-          settings: _settingsController.settings,
-          player: player,
-          onSpeedChange: _changeSpeed,
-          onJumpForward: _jumpForward,
-          onJumpBackward: _jumpBackward,
-          onTogglePlayPause: _togglePlayPause,
-          dockEdge: dockEdge,
-        ),
-      ),
-    ),
-    DockPanelEntry(
-      id: PanelId.drawingTools,
-      title: 'Drawing',
-      icon: Icons.draw,
-      defaultFloatingPosition: Offset(
-        MediaQuery.sizeOf(context).width - 320,
-        136,
-      ),
-      defaultFloatingSize: const Size(300, 250),
-      horizontalDockWidth: 520,
-      builder: (dockEdge) => ListenableBuilder(
-        listenable: _drawing,
-        builder: (context, _) => DrawingToolsPanel(
-          isDrawingMode: _drawing.isDrawingMode,
-          currentTool: _drawing.currentTool,
-          drawingColor: _drawing.drawingColor,
-          onToggleDrawingMode: _toggleDrawingMode,
-          onResetZoom: _resetZoom,
-          onClearDrawing: _clearDrawing,
-          onToolChange: _drawing.setTool,
-          onColorChange: _drawing.setColor,
-          dockEdge: dockEdge,
-        ),
-      ),
-    ),
-    DockPanelEntry(
-      id: PanelId.eventNavigation,
-      title: 'Event Navigation',
-      icon: Icons.search,
-      defaultFloatingPosition: const Offset(20, 136),
-      defaultFloatingSize: const Size(300, 180),
-      horizontalDockWidth: 360,
-      builder: (dockEdge) => StreamBuilder<Duration>(
-        stream: player.stream.position,
-        builder: (context, snapshot) => EventNavigationPanel(
-          controller: _eventsController,
-          onOpenEventsTable: _showEventsTable,
-          onNavigateTo: _navigateToEvent,
-          currentPosition: snapshot.data ?? player.state.position,
-        ),
-      ),
-    ),
-    DockPanelEntry(
-      id: PanelId.playerTracking,
-      contentRevision: _taxonomy,
-      title: 'Player Tracking',
-      icon: Icons.people,
-      defaultFloatingPosition: const Offset(20, 136),
-      defaultFloatingSize: const Size(420, 520),
-      horizontalDockWidth: 760,
-      builder: (dockEdge) => PlayerTrackingPanel(
-        controller: _trackingController,
-        taxonomy: _taxonomy,
-        player: player,
-        dockEdge: dockEdge,
-        onSave: _saveTrackingSession,
-        onLoad: _loadTrackingSession,
-        onExportCsv: _exportTrackingCsv,
-      ),
-    ),
-  ];
+            DockPanelEntry(
+              id: PanelId.eventsList,
+              title: 'Events list',
+              fillSideDock: true,
+              icon: Icons.view_list_outlined,
+              defaultFloatingPosition: const Offset(500, 100),
+              defaultFloatingSize: const Size(360, 480),
+              layout: const ToolsetLayout.widget(
+                preferredWidth: 360,
+                preferredHeight: 240,
+              ),
+              contentRevision: _taxonomy,
+              builder: (_) => ListenableBuilder(
+                listenable: _eventsController,
+                builder: (context, _) => StreamBuilder<Duration>(
+                  stream: player.stream.position,
+                  builder: (context, snapshot) => DockedEventsPanel(
+                    controller: _eventsController,
+                    taxonomy: _taxonomy,
+                    onEventTap: _navigateToEvent,
+                    onClose: _toggleDockedEvents,
+                    showHeader: false,
+                    currentPosition: snapshot.data ?? player.state.position,
+                  ),
+                ),
+              ),
+            ),
+            DockPanelEntry(
+              id: PanelId.playbackControls,
+              title: 'Playback',
+              icon: Icons.play_circle_outline,
+              defaultFloatingPosition: const Offset(20, 16),
+              defaultFloatingSize: const Size(320, 170),
+              layout: PlaybackControls.layoutFor(_settingsController.settings),
+              builder: (dockEdge) => ListenableBuilder(
+                listenable: _settingsController,
+                builder: (context, _) => DraggableControlBar(
+                  settings: _settingsController.settings,
+                  player: player,
+                  onSpeedChange: _changeSpeed,
+                  onJumpForward: _jumpForward,
+                  onJumpBackward: _jumpBackward,
+                  onTogglePlayPause: _togglePlayPause,
+                  onResetZoom: _resetZoom,
+                  dockEdge: dockEdge,
+                ),
+              ),
+            ),
+            DockPanelEntry(
+              id: PanelId.drawingTools,
+              title: 'Drawing',
+              icon: Icons.draw,
+              defaultFloatingPosition: Offset(
+                MediaQuery.sizeOf(context).width - 320,
+                136,
+              ),
+              defaultFloatingSize: const Size(560, 128),
+              layout: DrawingToolsPanel.layout,
+              builder: (dockEdge) => ListenableBuilder(
+                listenable: _drawing,
+                builder: (context, _) => DrawingToolsPanel(
+                  isDrawingMode: _drawing.isDrawingMode,
+                  currentTool: _drawing.currentTool,
+                  drawingColor: _drawing.drawingColor,
+                  onToggleDrawingMode: _toggleDrawingMode,
+                  onClearDrawing: _clearDrawing,
+                  onToolChange: _drawing.setTool,
+                  onColorChange: _drawing.setColor,
+                  onUndo: _drawing.canUndo ? _drawing.undo : null,
+                  onRedo: _drawing.canRedo ? _drawing.redo : null,
+                  strokeWidth: _drawing.strokeWidth,
+                  onWidthChange: _drawing.setStrokeWidth,
+                  dockEdge: dockEdge,
+                ),
+              ),
+            ),
+            DockPanelEntry(
+              id: PanelId.eventNavigation,
+              title: 'Event Navigation',
+              icon: Icons.search,
+              defaultFloatingPosition: const Offset(20, 136),
+              defaultFloatingSize: const Size(300, 180),
+              layout: const ToolsetLayout.widget(
+                preferredWidth: 300,
+                preferredHeight: 180,
+              ),
+              builder: (dockEdge) => StreamBuilder<Duration>(
+                stream: player.stream.position,
+                builder: (context, snapshot) => EventNavigationPanel(
+                  controller: _eventsController,
+                  onOpenEventsTable: _showEventsTable,
+                  onNavigateTo: _navigateToEvent,
+                  currentPosition: snapshot.data ?? player.state.position,
+                ),
+              ),
+            ),
+            DockPanelEntry(
+              id: PanelId.playerTracking,
+              contentRevision: _taxonomy,
+              title: 'Player Tracking',
+              icon: Icons.people,
+              defaultFloatingPosition: const Offset(20, 136),
+              defaultFloatingSize: const Size(420, 520),
+              layout: const ToolsetLayout.widget(
+                preferredWidth: 420,
+                preferredHeight: 360,
+              ),
+              builder: (dockEdge) => PlayerTrackingPanel(
+                controller: _trackingController,
+                taxonomy: _taxonomy,
+                player: player,
+                dockEdge: dockEdge,
+                onSave: _saveTrackingSession,
+                onLoad: _loadTrackingSession,
+                onExportCsv: _exportTrackingCsv,
+              ),
+            ),
+          ]
+          .where(
+            (panel) =>
+                WorkspaceTool.available(panel.id, _uiController.currentMode),
+          )
+          .toList();
 
   @override
   Widget build(BuildContext context) {
@@ -1668,7 +1651,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                 ?.findAncestorWidgetOfExactType<EditableText>() !=
             null;
 
-        if (ModalRoute.of(context)?.isCurrent != true) {
+        if (!_workspaceVisible || ModalRoute.of(context)?.isCurrent != true) {
           return KeyEventResult.ignored;
         }
         final mode = _uiController.currentMode;
@@ -1684,6 +1667,19 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
           // -----------------------------------------------------------------
           // 1. Modifier-based shortcuts (always active, even in text fields)
           // -----------------------------------------------------------------
+
+          if (mode == AppMode.review && !isTextFieldFocused) {
+            if (event.logicalKey == LogicalKeyboardKey.escape &&
+                _drawing.isDrawingMode) {
+              _drawing.usePointer();
+              return KeyEventResult.handled;
+            }
+            if ((isCtrlPressed || HardwareKeyboard.instance.isMetaPressed) &&
+                event.logicalKey == LogicalKeyboardKey.keyZ) {
+              isShiftPressed ? _drawing.redo() : _drawing.undo();
+              return KeyEventResult.handled;
+            }
+          }
 
           // Ctrl+M: Cycle through app modes
           if (event.logicalKey == LogicalKeyboardKey.keyM && isCtrlPressed) {
@@ -1702,6 +1698,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                 !isCtrlPressed &&
                 !HardwareKeyboard.instance.isMetaPressed) {
               _altKey.toggle();
+              _entryMinimized.value = false;
               return KeyEventResult.handled;
             }
             return KeyEventResult.ignored;
@@ -1712,7 +1709,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
               _altKey.isEntryActive &&
               !isTextFieldFocused &&
               event.logicalKey == LogicalKeyboardKey.escape) {
-            if (_eventsController.activeEvent != null) {
+            if (_altKey.draft != null) {
               _dismissHUD();
             }
             _altKey.exit();
@@ -1729,9 +1726,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
             final optionsCount = _altKey.stage == EventEntryStage.categories
                 ? (_taxonomy?.captureCategories.length ?? 0)
                 : (_taxonomy
-                          ?.getCategoryById(
-                            _eventsController.activeEvent?.categoryId ?? '',
-                          )
+                          ?.getCategoryById(_altKey.draft?.categoryId ?? '')
                           ?.captureEventTypes
                           .length ??
                       0);
@@ -1772,7 +1767,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
           // -----------------------------------------------------------------
           // 2. SmartHUD Enter/Esc (HUD active, not text-field)
           // -----------------------------------------------------------------
-          if (_eventsController.activeEvent != null &&
+          if (_altKey.draft != null &&
               !_drawing.isDrawingMode &&
               !isTextFieldFocused) {
             if (event.logicalKey == LogicalKeyboardKey.enter ||
@@ -2009,221 +2004,301 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
       child: Scaffold(
         backgroundColor: Colors.black,
         body: SafeArea(
-          child: Row(
-            children: [
-              // Main content area (video + overlays)
-              Expanded(
-                child: Stack(
-                  children: [
-                    // LAYER 0: Branded Title Bar (Top)
-                    ListenableBuilder(
-                      listenable: Listenable.merge([
-                        _uiController,
-                        _accountController,
-                      ]),
-                      builder: (context, _) => Positioned(
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        child: BrandedTitleBar(
-                          onResetLayout: _uiController.resetLayout,
-                          onShowShortcuts: _toggleShortcutsPanel,
-                          showShortcuts: _showShortcuts,
-                          currentMode: _uiController.currentMode,
-                          onModeChanged: _changeMode,
-                          onSaveEvents: hasVideoLoaded ? _saveEvents : null,
-                          onLoadEvents: hasVideoLoaded ? _loadEvents : null,
-                          onShowEventsTable: hasVideoLoaded
-                              ? _showEventsTable
-                              : null,
-                          onShowSettings: hasVideoLoaded ? _showSettings : null,
-                          onShowAccount: _showAccount,
-                          onShowCloudSessions: _showCloudSessions,
-                          isSignedIn: _accountController.isSignedIn,
-                          hasPremium:
-                              _accountController.capabilities.canSyncSettings,
-                          onToggleDockedEvents: hasVideoLoaded
-                              ? _toggleDockedEvents
-                              : null,
-                          showDockedEvents: _showDockedEvents,
-                        ),
-                      ),
-                    ),
-
-                    // Video canvas is hosted by DockLayout after a video loads.
-                    if (!hasVideoLoaded)
-                      ListenableBuilder(
-                        listenable: _drawing,
-                        builder: (context, _) => Padding(
-                          padding: const EdgeInsets.only(top: 64),
-                          child: VideoCanvas(
-                            controller: controller,
-                            transformationController: _transformationController,
-                            isDrawingMode: _drawing.isDrawingMode,
-                            currentTool: _drawing.currentTool,
-                            drawingStrokes: _drawing.strokes,
-                            lineShapes: _drawing.lines,
-                            arrowShapes: _drawing.arrows,
-                            drawingColor: _drawing.drawingColor,
-                            strokeWidth: _drawing.strokeWidth,
-                            drawingRevision: _drawing.revision,
-                            videoAspectRatio: _videoAspectRatio,
-                            onStrokeCompleted: _onStrokeCompleted,
-                            onLineCompleted: _onLineCompleted,
-                            onArrowCompleted: _onArrowCompleted,
-                            onClearDrawing: _clearDrawing,
-                          ),
-                        ),
-                      ),
-
-                    // LAYER 2: Laser trails and cursor (No zoom scaling - overlay)
-                    // Only show when laser is active or there are trails to display
-                    if (!hasVideoLoaded)
-                      ListenableBuilder(
-                        listenable: _drawing,
-                        builder: (context, _) {
-                          if (_drawing.currentTool != DrawingTool.laser &&
-                              _drawing.laserTrails.isEmpty) {
-                            return const SizedBox.shrink();
-                          }
-                          return LaserPointerOverlay(
-                            isActive: _drawing.currentTool == DrawingTool.laser,
-                            isDrawingMode: _drawing.isDrawingMode,
-                            trails: _drawing.laserTrails,
-                            color: _drawing.drawingColor,
-                            strokeWidth: _drawing.strokeWidth,
-                            videoAspectRatio: _videoAspectRatio,
-                            onCompleteDrawing: _completeLaserDrawing,
-                            onRemoveTrail: _removeTrail,
-                          );
-                        },
-                      ),
-
-                    // LAYER 3–5c: All dockable panels via DockLayout
-                    if (hasVideoLoaded)
-                      ListenableBuilder(
-                        listenable: _uiController,
-                        builder: (context, _) => Padding(
-                          padding: const EdgeInsets.only(
-                            top: kAppTitleBarHeight,
-                            bottom: 70,
-                          ),
-                          child: DockLayout(
-                            adaptive: true,
-                            uiController: _uiController,
-                            panels: _buildDockPanels(context),
-                            child: _buildVideoSurface(),
-                          ),
-                        ),
-                      ),
-
-                    // SmartHUD stays over the video while event buttons use the dock.
-                    if (hasVideoLoaded)
+          child: LayoutBuilder(
+            builder: (context, screenConstraints) => Row(
+              children: [
+                // Main content area (video + overlays)
+                Expanded(
+                  child: Stack(
+                    children: [
+                      // LAYER 0: Branded Title Bar (Top)
                       ListenableBuilder(
                         listenable: Listenable.merge([
                           _uiController,
-                          _eventsController,
-                          _altKey,
+                          _accountController,
                         ]),
-                        builder: (context, _) {
-                          if (!_uiController.panelVisible(
-                                PanelId.eventButtons,
-                              ) ||
-                              _eventsController.activeEvent == null) {
-                            return const SizedBox.shrink();
-                          }
-                          return Positioned(
-                            top: kAppTitleBarHeight,
-                            bottom: 80,
-                            left: 0,
-                            right: 0,
-                            child: Align(
-                              alignment: Alignment.bottomCenter,
-                              child: SmartHUD(
-                                event: _eventsController.activeEvent!,
-                                onUpdateEvent: _updateEvent,
-                                onDeleteEvent: _deleteEvent,
-                                onDismiss: _dismissHUD,
-                                onSave: _saveAndCloseSmartHud,
-                                isAltPressed: _altKey.isEntryActive,
-                                showTagNumbers: _altKey.showLabelNumbers,
-                                entryPage: _altKey.page,
-                                onEntryPageChanged: (page) => _altKey.setPage(
-                                  page,
-                                  _taxonomy!
-                                      .getCategoryById(
-                                        _eventsController
-                                            .activeEvent!
-                                            .categoryId,
-                                      )!
-                                      .captureEventTypes
-                                      .length,
-                                ),
-                                showGradeNumbers: _altKey.showGradeNumbers,
-                                taxonomy: _taxonomy,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-
-                    // LAYER 6: Video Progress Bar
-                    if (hasVideoLoaded)
-                      ListenableBuilder(
-                        listenable: _eventsController.dataRevision,
-                        builder: (context, _) => VideoProgressBar(
-                          player: player,
-                          events: _eventsController.filteredEvents,
-                          onEventTap: _navigateToEvent,
-                          onScrubStart: _eventPreview.cancel,
-                        ),
-                      ),
-
-                    // LAYER 7: Shortcuts Panel (toggleable and draggable)
-                    if (hasVideoLoaded && _showShortcuts)
-                      ShortcutsPanel(
-                        isVisible: _showShortcuts,
-                        onToggle: _toggleShortcutsPanel,
-                        positionX: _shortcutsPanelX,
-                        positionY: _shortcutsPanelY,
-                        onPositionChanged: _onShortcutsPanelDragged,
-                        onResetPosition: _resetShortcutsPanelPosition,
-                      ),
-
-                    // Video Picker (shown when no video is loaded)
-                    if (!hasVideoLoaded)
-                      Positioned.fill(
-                        top: 64,
-                        child: SingleChildScrollView(
-                          child: VideoPicker(
-                            onPickVideo: _pickVideo,
-                            onLoadUrl: _loadUrl,
-                            onSportSelected: _onSportSelected,
+                        builder: (context, _) => Positioned(
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          child: BrandedTitleBar(
+                            onGoHome: _goHome,
+                            onShowTools: _workspaceVisible ? _showTools : null,
+                            onExitPresentation:
+                                _workspaceVisible && _uiController.isPresenting
+                                ? _uiController.togglePresentation
+                                : null,
+                            onResetLayout: _uiController.resetLayout,
+                            onShowShortcuts: _toggleShortcutsPanel,
+                            showShortcuts: _showShortcuts,
+                            currentMode: _uiController.currentMode,
+                            onModeChanged: _changeMode,
+                            onSaveEvents: hasVideoLoaded ? _saveEvents : null,
+                            onLoadEvents: hasVideoLoaded ? _loadEvents : null,
+                            onShowEventsTable: hasVideoLoaded
+                                ? _showEventsTable
+                                : null,
+                            onShowSettings: hasVideoLoaded
+                                ? _showSettings
+                                : null,
+                            onShowAccount: _showAccount,
+                            onShowCloudSessions: _showCloudSessions,
+                            isSignedIn: _accountController.isSignedIn,
+                            hasPremium:
+                                _accountController.capabilities.canSyncSettings,
+                            onToggleDockedEvents: hasVideoLoaded
+                                ? _toggleDockedEvents
+                                : null,
+                            showDockedEvents: _showDockedEvents,
                           ),
                         ),
                       ),
-                  ],
-                ),
-              ),
 
-              // Docked Events Panel (right side)
-              if (_showDockedEvents &&
-                  hasVideoLoaded &&
-                  MediaQuery.sizeOf(context).width >= 1100)
-                ListenableBuilder(
-                  listenable: _eventsController,
-                  builder: (context, _) => StreamBuilder<Duration>(
-                    stream: player.stream.position,
-                    builder: (context, snapshot) => DockedEventsPanel(
-                      controller: _eventsController,
-                      taxonomy: _taxonomy,
-                      onEventTap: _navigateToEvent,
-                      onClose: _toggleDockedEvents,
-                      currentPosition: snapshot.data ?? player.state.position,
-                    ),
+                      // Video canvas is hosted by DockLayout after a video loads.
+                      if (!hasVideoLoaded)
+                        ListenableBuilder(
+                          listenable: _drawing,
+                          builder: (context, _) => Padding(
+                            padding: const EdgeInsets.only(
+                              top: kAppTitleBarHeight,
+                            ),
+                            child: VideoCanvas(
+                              controller: controller,
+                              transformationController:
+                                  _transformationController,
+                              isDrawingMode: _drawing.isDrawingMode,
+                              currentTool: _drawing.currentTool,
+                              drawingStrokes: _drawing.strokes,
+                              lineShapes: _drawing.lines,
+                              arrowShapes: _drawing.arrows,
+                              drawingColor: _drawing.drawingColor,
+                              strokeWidth: _drawing.strokeWidth,
+                              drawingRevision: _drawing.revision,
+                              videoAspectRatio: _videoAspectRatio,
+                              onStrokeCompleted: _onStrokeCompleted,
+                              onLineCompleted: _onLineCompleted,
+                              onArrowCompleted: _onArrowCompleted,
+                              onClearDrawing: _clearDrawing,
+                            ),
+                          ),
+                        ),
+
+                      // LAYER 2: Laser trails and cursor (No zoom scaling - overlay)
+                      // Only show when laser is active or there are trails to display
+                      if (!hasVideoLoaded)
+                        ListenableBuilder(
+                          listenable: _drawing,
+                          builder: (context, _) {
+                            if (_drawing.currentTool != DrawingTool.laser &&
+                                _drawing.laserTrails.isEmpty) {
+                              return const SizedBox.shrink();
+                            }
+                            return LaserPointerOverlay(
+                              isActive:
+                                  _drawing.currentTool == DrawingTool.laser,
+                              isDrawingMode: _drawing.isDrawingMode,
+                              trails: _drawing.laserTrails,
+                              color: _drawing.drawingColor,
+                              strokeWidth: _drawing.strokeWidth,
+                              videoAspectRatio: _videoAspectRatio,
+                              onCompleteDrawing: _completeLaserDrawing,
+                              onRemoveTrail: _removeTrail,
+                            );
+                          },
+                        ),
+
+                      // LAYER 3–5c: All dockable panels via DockLayout
+                      if (_workspaceVisible)
+                        ListenableBuilder(
+                          listenable: Listenable.merge([
+                            _uiController,
+                            _quickEvents,
+                            _altKey,
+                            _settingsController,
+                          ]),
+                          builder: (context, _) => Padding(
+                            padding: const EdgeInsets.only(
+                              top: kAppTitleBarHeight,
+                              bottom: kProgressBarReserve,
+                            ),
+                            child: DockLayout(
+                              adaptive: true,
+                              uiController: _uiController,
+                              panels: _buildDockPanels(context),
+                              child: _buildVideoSurface(),
+                            ),
+                          ),
+                        ),
+
+                      if (_workspaceVisible)
+                        ListenableBuilder(
+                          listenable: Listenable.merge([
+                            _uiController,
+                            _eventsController,
+                            _altKey,
+                            _eventMenuOpen,
+                            _entryMinimized,
+                          ]),
+                          builder: (context, _) {
+                            final mode = _uiController.currentMode;
+                            final edge = _uiController.dockEdge(
+                              PanelId.categories,
+                            );
+                            final compact = usesCompactDockLayout(
+                              Size(
+                                screenConstraints.maxWidth,
+                                screenConstraints.maxHeight -
+                                    kAppTitleBarHeight -
+                                    kProgressBarReserve,
+                              ),
+                            );
+                            final inline =
+                                _uiController.panelVisible(
+                                  PanelId.categories,
+                                ) &&
+                                !_uiController.panelCollapsed(
+                                  PanelId.categories,
+                                ) &&
+                                !compact &&
+                                edge != PanelDockEdge.top &&
+                                edge != PanelDockEdge.bottom;
+                            final hasEntry =
+                                _altKey.draft != null || _altKey.isEntryActive;
+                            if (_taxonomy == null ||
+                                mode != AppMode.record ||
+                                !hasEntry ||
+                                inline ||
+                                _eventMenuOpen.value ||
+                                _entryMinimized.value) {
+                              return const SizedBox.shrink();
+                            }
+                            return Positioned(
+                              top: kAppTitleBarHeight + 8,
+                              bottom: kProgressBarReserve + 8,
+                              left: 8,
+                              right: 8,
+                              child: Align(
+                                alignment: Alignment.center,
+                                child: Material(
+                                  color: FlowTheme.panel,
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 420,
+                                    ),
+                                    child: SingleChildScrollView(
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              const SizedBox(width: 16),
+                                              const Expanded(
+                                                child: Text('Event entry'),
+                                              ),
+                                              IconButton(
+                                                tooltip: 'Minimize event entry',
+                                                icon: const Icon(
+                                                  Icons.expand_more,
+                                                ),
+                                                onPressed: () {
+                                                  _entryMinimized.value = true;
+                                                  _altKey.exit();
+                                                },
+                                              ),
+                                            ],
+                                          ),
+                                          _eventEntry(PanelDockEdge.right),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+
+                      if (_workspaceVisible)
+                        Positioned(
+                          bottom: 70,
+                          left: 8,
+                          right: 8,
+                          child: ListenableBuilder(
+                            listenable: Listenable.merge([
+                              _lastQuickEvent,
+                              _altKey,
+                              _eventsController,
+                              _drawing,
+                              _uiController,
+                            ]),
+                            builder: (context, _) => CaptureStatusBar(
+                              draft: _uiController.currentMode == AppMode.record
+                                  ? _altKey.draft
+                                  : null,
+                              lastEvent:
+                                  _uiController.currentMode == AppMode.record
+                                  ? _lastQuickEvent.value
+                                  : null,
+                              onResume: _showFullEventMenu,
+                              onCancel: _dismissHUD,
+                              onEdit: () {
+                                final event = _lastQuickEvent.value;
+                                if (event != null) _altKey.beginDraft(event);
+                                _showFullEventMenu();
+                              },
+                              onUndo: () {
+                                final event = _lastQuickEvent.value;
+                                if (event != null) _deleteEvent(event);
+                              },
+                            ),
+                          ),
+                        ),
+
+                      // LAYER 6: Video Progress Bar
+                      if (_workspaceVisible)
+                        ListenableBuilder(
+                          listenable: _eventsController.dataRevision,
+                          builder: (context, _) => VideoProgressBar(
+                            player: player,
+                            onPlayPause: _togglePlayPause,
+                            onSpeedChange: _changeSpeed,
+                            events: _eventsController.filteredEvents,
+                            onEventTap: _navigateToEvent,
+                            onScrubStart: _eventPreview.cancel,
+                          ),
+                        ),
+
+                      // LAYER 7: Shortcuts Panel (toggleable and draggable)
+                      if (_workspaceVisible && _showShortcuts)
+                        ShortcutsPanel(
+                          isVisible: _showShortcuts,
+                          onToggle: _toggleShortcutsPanel,
+                          positionX: _shortcutsPanelX,
+                          positionY: _shortcutsPanelY,
+                          onPositionChanged: _onShortcutsPanelDragged,
+                          onResetPosition: _resetShortcutsPanelPosition,
+                        ),
+
+                      // Video Picker (shown when no video is loaded)
+                      if (!_workspaceVisible)
+                        Positioned.fill(
+                          top: kAppTitleBarHeight,
+                          child: SingleChildScrollView(
+                            child: VideoPicker(
+                              key: ValueKey(_startPageRevision),
+                              onResume: hasVideoLoaded ? _resumeAnalysis : null,
+                              onPickVideo: _pickVideo,
+                              onLoadUrl: _loadUrl,
+                              onSportSelected: _selectStartPageSport,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

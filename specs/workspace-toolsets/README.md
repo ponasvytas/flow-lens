@@ -4,6 +4,8 @@ Status: proposed, 2026-09-22. Based on the current working tree, including the
 recent uncommitted layout, quick-event, taxonomy, and theme work. This is a source
 review and design proposal, not a new live visual or device audit.
 
+The first implementation is now available; see [delivered behavior and remaining work](implementation.md).
+
 ## Recommendation
 
 Build on the existing workspace with a single Tools menu, independently managed

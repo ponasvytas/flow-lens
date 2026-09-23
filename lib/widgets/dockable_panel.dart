@@ -7,7 +7,7 @@ export '../models/dock_layout_state.dart';
 // ---------------------------------------------------------------------------
 // Layout constants — single source of truth
 // ---------------------------------------------------------------------------
-const double kAppTitleBarHeight = 64.0;
+const double kAppTitleBarHeight = 56.0;
 const double kProgressBarReserve = 70.0;
 const double kPanelTitleStripHeight = 48.0;
 const double kPanelCollapsedInlineWidth = 50.0;
@@ -41,6 +41,8 @@ class DockPanel extends StatefulWidget {
   final BoxConstraints constraints;
   final Widget child;
   final bool scrollContent;
+  final VoidCallback? onHide;
+  final bool? inlineControls;
 
   const DockPanel({
     required this.panelId,
@@ -54,6 +56,8 @@ class DockPanel extends StatefulWidget {
     required this.onPresentationModeChanged,
     required this.child,
     this.scrollContent = true,
+    this.onHide,
+    this.inlineControls,
     this.onDragStart,
     this.onDragUpdate,
     this.onDragEnd,
@@ -72,8 +76,9 @@ class _DockPanelState extends State<DockPanel>
   double _inlineExpandedWidth = kPanelFallbackWidth;
 
   bool get _isHorizontal =>
-      widget.dockEdge == PanelDockEdge.top ||
-      widget.dockEdge == PanelDockEdge.bottom;
+      widget.inlineControls ??
+      (widget.dockEdge == PanelDockEdge.top ||
+          widget.dockEdge == PanelDockEdge.bottom);
 
   @override
   void initState() {
@@ -138,6 +143,23 @@ class _DockPanelState extends State<DockPanel>
           'Dock Bottom',
         ),
         _menuItem(PanelDockEdge.floating, Icons.open_with, 'Float'),
+        PopupMenuItem<Object>(
+          value: _DockMenuCommand.collapse,
+          child: Text(widget.isCollapsed ? 'Expand panel' : 'Collapse panel'),
+        ),
+        if (widget.onHide != null) ...[
+          const PopupMenuDivider(),
+          PopupMenuItem<Object>(
+            value: _DockMenuCommand.hide,
+            child: Row(
+              children: [
+                const Icon(Icons.visibility_off_outlined, size: 20),
+                const SizedBox(width: 10),
+                Text('Hide ${widget.title}'),
+              ],
+            ),
+          ),
+        ],
         const PopupMenuDivider(),
         PopupMenuItem<Object>(
           value: _DockMenuCommand.togglePresentation,
@@ -163,8 +185,13 @@ class _DockPanelState extends State<DockPanel>
         ),
       ],
     ).then((selection) {
+      if (!mounted) return;
       if (selection is PanelDockEdge) {
         widget.onDockEdgeChanged(selection);
+      } else if (selection == _DockMenuCommand.collapse) {
+        widget.onCollapsedChanged(!widget.isCollapsed);
+      } else if (selection == _DockMenuCommand.hide) {
+        widget.onHide?.call();
       } else if (selection == _DockMenuCommand.togglePresentation) {
         widget.onPresentationModeChanged(
           widget.presentationMode == DockPresentationMode.overlay
@@ -289,7 +316,6 @@ class _DockPanelState extends State<DockPanel>
                         ? SingleChildScrollView(child: widget.child)
                         : widget.child,
                   ),
-                  SizedBox(width: 48, child: _collapseButton()),
                 ],
               ),
             ),
@@ -364,11 +390,7 @@ class _DockPanelState extends State<DockPanel>
           : 'Dock position',
       onPressed: () => _showDockMenu(ctx),
       icon: Icon(
-        _isHorizontal
-            ? widget.icon
-            : widget.dockEdge == PanelDockEdge.floating
-            ? Icons.open_with
-            : Icons.push_pin_outlined,
+        _isHorizontal ? widget.icon : Icons.more_horiz,
         size: 20,
         color: const Color(0xFFC4A5FA),
       ),
@@ -398,4 +420,4 @@ class _DockPanelState extends State<DockPanel>
   );
 }
 
-enum _DockMenuCommand { togglePresentation }
+enum _DockMenuCommand { togglePresentation, hide, collapse }

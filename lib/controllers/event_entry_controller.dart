@@ -1,9 +1,49 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
+import '../models/game_event.dart';
+import 'events_controller.dart';
 
 enum EventEntryStage { none, categories, labels, grades }
 
 class EventEntryController extends ChangeNotifier {
+  final categorySearch = TextEditingController();
+  GameEvent? _draft;
+  GameEvent? get draft => _draft;
+
+  bool beginDraft(GameEvent event) {
+    if (_draft != null) return false;
+    _draft = event;
+    notifyListeners();
+    return true;
+  }
+
+  void updateDraft(GameEvent event) {
+    if (_draft?.id != event.id) return;
+    _draft = event;
+    notifyListeners();
+  }
+
+  void cancelDraft() {
+    if (_draft == null) return;
+    _draft = null;
+    notifyListeners();
+  }
+
+  GameEvent? commitDraft(EventsController events) {
+    final event = _draft;
+    if (event == null || !event.isComplete) return null;
+    events.upsertEvent(event);
+    cancelDraft();
+    if (isEntryActive) setStage(EventEntryStage.categories);
+    return event;
+  }
+
+  @override
+  void dispose() {
+    categorySearch.dispose();
+    super.dispose();
+  }
+
   static const pageSize = 9;
   bool isEntryActive = false;
   EventEntryStage stage = EventEntryStage.none;
@@ -18,7 +58,13 @@ class EventEntryController extends ChangeNotifier {
       exit();
     } else {
       isEntryActive = true;
-      setStage(EventEntryStage.categories);
+      setStage(
+        _draft == null
+            ? EventEntryStage.categories
+            : _draft!.isComplete
+            ? EventEntryStage.grades
+            : EventEntryStage.labels,
+      );
     }
   }
 

@@ -15,6 +15,7 @@ class DockedEventsPanel extends StatefulWidget {
   final Function(GameEvent) onEventTap;
   final VoidCallback onClose;
   final Duration currentPosition;
+  final bool showHeader;
 
   const DockedEventsPanel({
     required this.controller,
@@ -22,6 +23,7 @@ class DockedEventsPanel extends StatefulWidget {
     required this.onEventTap,
     required this.onClose,
     required this.currentPosition,
+    this.showHeader = true,
     super.key,
   });
 
@@ -120,42 +122,43 @@ class _DockedEventsPanelState extends State<DockedEventsPanel> {
       child: Column(
         children: [
           // Header
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: const BoxDecoration(
-              color: FlowTheme.panel,
-              border: Border(bottom: BorderSide(color: FlowTheme.border)),
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.view_sidebar_outlined,
-                  color: FlowTheme.accent,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                const Text(
-                  'Events',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
+          if (widget.showHeader)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: const BoxDecoration(
+                color: FlowTheme.panel,
+                border: Border(bottom: BorderSide(color: FlowTheme.border)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.view_sidebar_outlined,
+                    color: FlowTheme.accent,
+                    size: 20,
                   ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  '${events.length}',
-                  style: TextStyle(color: FlowTheme.muted, fontSize: 12),
-                ),
-                const Spacer(),
-                IconButton(
-                  onPressed: widget.onClose,
-                  tooltip: 'Close events list',
-                  icon: const Icon(Icons.close, size: 20),
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Events',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${events.length}',
+                    style: TextStyle(color: FlowTheme.muted, fontSize: 12),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: widget.onClose,
+                    tooltip: 'Close events list',
+                    icon: const Icon(Icons.close, size: 20),
+                  ),
+                ],
+              ),
             ),
-          ),
 
           // Events list
           Expanded(

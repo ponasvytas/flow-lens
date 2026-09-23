@@ -14,7 +14,9 @@ enum AppMode {
 enum PanelId {
   playbackControls,
   drawingTools,
-  eventButtons,
+  quickEvents,
+  categories,
+  eventsList,
   eventNavigation,
   playerTracking,
   shortcuts,

@@ -49,7 +49,8 @@ class SportProfileSelector extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       child: Container(
         width: 160,
-        height: 180,
+        constraints: const BoxConstraints(minHeight: 180),
+        padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
           color: isEnabled ? const Color(0xFF292237) : const Color(0xFF1C1827),
           borderRadius: BorderRadius.circular(16),
@@ -68,6 +69,7 @@ class SportProfileSelector extends StatelessWidget {
               : [],
         ),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(

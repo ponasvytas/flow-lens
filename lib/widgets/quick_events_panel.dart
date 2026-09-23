@@ -5,6 +5,7 @@ import '../models/game_event.dart';
 import '../models/sport_taxonomy.dart';
 import '../theme/flow_theme.dart';
 import 'event_context_editor.dart';
+import 'tool_action_grid.dart';
 import 'package:flutter/foundation.dart' show mapEquals;
 
 String quickEventLabel(QuickEvent item, SportTaxonomy taxonomy) {
@@ -40,204 +41,76 @@ class QuickEventsPanel extends StatelessWidget {
         QuickEventsEditor(controller: controller, taxonomy: taxonomy),
   );
 
-  Widget _button(QuickEvent item) {
-    final category = taxonomy.getCategoryById(item.categoryId);
-    final available = category?.getEventTypeById(item.eventTypeId) != null;
-    return OutlinedButton(
-      key: ValueKey('quick-${item.id}'),
-      onPressed: available ? () => onRecord(item) : null,
-      style: OutlinedButton.styleFrom(
-        minimumSize: const Size(48, 72),
-        backgroundColor: FlowTheme.raised,
-        padding: const EdgeInsets.all(12),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            category?.getIcon() ?? Icons.help_outline,
-            color: available ? category?.getColor() : FlowTheme.muted,
-            size: 24,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(quickEventLabel(item, taxonomy)),
-                const SizedBox(height: 4),
-                _GradeLabel(grade: item.grade),
-              ],
-            ),
-          ),
-          if (item.hotkey != null)
-            Padding(
-              padding: const EdgeInsets.only(left: 6),
-              child: Text(
-                item.hotkey!.toUpperCase(),
-                style: const TextStyle(color: FlowTheme.muted, fontSize: 12),
-              ),
-            ),
-        ],
-      ),
-    );
+  static String actionLabel(QuickEvent item, SportTaxonomy taxonomy) {
+    final grade = switch (item.grade) {
+      EventGrade.positive => '+ Positive',
+      EventGrade.negative => '− Negative',
+      EventGrade.neutral => '• Neutral',
+      null => 'Ungraded',
+    };
+    return '${quickEventLabel(item, taxonomy)}\n$grade${item.hotkey == null ? '' : ' · ${item.hotkey!.toUpperCase()}'}';
   }
+
+  static ToolsetLayout layoutFor(
+    QuickEventsController controller,
+    SportTaxonomy taxonomy,
+  ) => ToolsetLayout.actions(
+    [
+      for (final item in controller.items) actionLabel(item, taxonomy),
+      'Edit menu',
+      'All events',
+      if (controller.error != null) 'Retry save',
+    ],
+    tileWidth: 96,
+    minimumTileWidth: 80,
+  );
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: controller,
-    builder: (context, _) => Padding(
-      padding: const EdgeInsets.all(8),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final error = controller.error == null
-              ? null
-              : TextButton.icon(
-                  onPressed: controller.ready
-                      ? controller.retrySave
-                      : controller.load,
-                  icon: const Icon(Icons.refresh),
-                  label: Text(controller.error!),
-                );
-          const empty = Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Text(
-              'Choose the moments you want to track.',
-              style: TextStyle(color: FlowTheme.muted),
-            ),
-          );
-          if (!vertical) {
-            final content = Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                ?error,
-                Row(
-                  children: [
-                    Expanded(
-                      child: controller.items.isEmpty
-                          ? empty
-                          : _HorizontalQuickEvents(
-                              child: Row(
-                                children: [
-                                  for (final item in controller.items)
-                                    Padding(
-                                      padding: const EdgeInsets.only(right: 8),
-                                      child: SizedBox(
-                                        width:
-                                            200 *
-                                            MediaQuery.textScalerOf(
-                                              context,
-                                            ).scale(14) /
-                                            14,
-                                        child: _button(item),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      tooltip: 'Edit quick menu',
-                      onPressed: controller.ready
-                          ? () => _openEditor(context)
-                          : null,
-                      icon: const Icon(Icons.tune),
-                    ),
-                    IconButton.filledTonal(
-                      tooltip: 'All events',
-                      onPressed: onAllEvents,
-                      icon: const Icon(Icons.apps),
-                    ),
-                  ],
-                ),
-                ?feedback,
-              ],
-            );
-            return SingleChildScrollView(child: content);
-          }
-          final choices = Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              ?error,
-              if (controller.items.isEmpty) empty,
-              for (final item in controller.items)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: _button(item),
-                ),
-            ],
-          );
-          final footer = Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 8),
-              ?feedback,
-              OutlinedButton.icon(
-                onPressed: controller.ready ? () => _openEditor(context) : null,
-                icon: const Icon(Icons.tune, size: 20),
-                label: const Text('Edit quick menu'),
-              ),
-              const SizedBox(height: 8),
-              FilledButton.tonalIcon(
-                onPressed: onAllEvents,
-                icon: const Icon(Icons.apps, size: 20),
-                label: const Text('All events'),
-              ),
-            ],
-          );
-          if (constraints.hasBoundedHeight && constraints.maxHeight >= 200) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(child: SingleChildScrollView(child: choices)),
-                footer,
-              ],
-            );
-          }
-          final content = Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [choices, footer],
-          );
-          return constraints.hasBoundedHeight
-              ? SingleChildScrollView(child: content)
-              : content;
-        },
-      ),
-    ),
-  );
-}
-
-class _HorizontalQuickEvents extends StatefulWidget {
-  const _HorizontalQuickEvents({required this.child});
-  final Widget child;
-
-  @override
-  State<_HorizontalQuickEvents> createState() => _HorizontalQuickEventsState();
-}
-
-class _HorizontalQuickEventsState extends State<_HorizontalQuickEvents> {
-  final _scrollController = ScrollController();
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => Scrollbar(
-    controller: _scrollController,
-    thumbVisibility: true,
-    child: SingleChildScrollView(
-      controller: _scrollController,
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.only(bottom: 12),
-      child: widget.child,
+    builder: (context, _) => ToolActionGrid(
+      title: 'Quick events',
+      layout: layoutFor(controller, taxonomy),
+      children: [
+        for (final item in controller.items)
+          ToolActionButton(
+            key: ValueKey('quick-${item.id}'),
+            label: actionLabel(item, taxonomy),
+            icon:
+                taxonomy.getCategoryById(item.categoryId)?.getIcon() ??
+                Icons.help_outline,
+            color: taxonomy.getCategoryById(item.categoryId)?.getColor(),
+            onPressed:
+                taxonomy
+                        .getCategoryById(item.categoryId)
+                        ?.getEventTypeById(item.eventTypeId) ==
+                    null
+                ? null
+                : () => onRecord(item),
+          ),
+        ToolActionButton(
+          label: 'Edit menu',
+          dismissPalette: true,
+          tooltip: 'Edit quick menu',
+          icon: Icons.tune,
+          onPressed: controller.ready ? () => _openEditor(context) : null,
+        ),
+        ToolActionButton(
+          label: 'All events',
+          dismissPalette: true,
+          icon: Icons.apps,
+          onPressed: onAllEvents,
+        ),
+        if (controller.error != null)
+          ToolActionButton(
+            label: 'Retry save',
+            tooltip: controller.error,
+            icon: Icons.refresh,
+            onPressed: controller.ready
+                ? controller.retrySave
+                : controller.load,
+          ),
+      ],
     ),
   );
 }

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import '../models/app_settings.dart';
-import '../theme/flow_theme.dart';
+import 'tool_action_grid.dart';
 import 'dockable_panel.dart';
 
 class DraggableControlBar extends StatelessWidget {
@@ -11,6 +11,7 @@ class DraggableControlBar extends StatelessWidget {
     required this.onJumpForward,
     required this.onJumpBackward,
     required this.onTogglePlayPause,
+    this.onResetZoom,
     this.settings = const AppSettings(),
     this.dockEdge = PanelDockEdge.floating,
     super.key,
@@ -20,6 +21,7 @@ class DraggableControlBar extends StatelessWidget {
   final ValueChanged<Duration> onJumpForward;
   final ValueChanged<Duration> onJumpBackward;
   final VoidCallback onTogglePlayPause;
+  final VoidCallback? onResetZoom;
   final AppSettings settings;
   final PanelDockEdge dockEdge;
 
@@ -39,6 +41,7 @@ class DraggableControlBar extends StatelessWidget {
         onJumpForward: onJumpForward,
         onJumpBackward: onJumpBackward,
         onTogglePlayPause: onTogglePlayPause,
+        onResetZoom: onResetZoom,
         onToggleMute: () => player.setVolume(player.state.volume > 0 ? 0 : 100),
       ),
     ),
@@ -55,6 +58,7 @@ class PlaybackControls extends StatelessWidget {
     required this.onJumpBackward,
     required this.onTogglePlayPause,
     required this.onToggleMute,
+    this.onResetZoom,
     this.settings = const AppSettings(),
     this.dockEdge = PanelDockEdge.floating,
   });
@@ -65,13 +69,12 @@ class PlaybackControls extends StatelessWidget {
   final ValueChanged<Duration> onJumpBackward;
   final VoidCallback onTogglePlayPause;
   final VoidCallback onToggleMute;
+  final VoidCallback? onResetZoom;
   final AppSettings settings;
   final PanelDockEdge dockEdge;
 
   @override
   Widget build(BuildContext context) {
-    final vertical =
-        dockEdge == PanelDockEdge.left || dockEdge == PanelDockEdge.right;
     final controls = <Widget>[
       _Control(
         label: playing ? 'Pause' : 'Play',
@@ -117,6 +120,7 @@ class PlaybackControls extends StatelessWidget {
           if (value.startsWith('next:')) {
             onJumpForward(Duration(seconds: int.parse(value.substring(5))));
           }
+          if (value == 'zoom') onResetZoom?.call();
           if (value == 'mute') {
             onToggleMute();
           }
@@ -136,9 +140,11 @@ class PlaybackControls extends StatelessWidget {
           for (final speed in [0.25, 0.5, 1.0, 2.0, 3.0])
             PopupMenuItem(value: 'rate:$speed', child: Text('Speed $speed x')),
           const PopupMenuItem(value: 'mute', child: Text('Mute / unmute')),
+          if (onResetZoom != null)
+            const PopupMenuItem(value: 'zoom', child: Text('Reset zoom')),
         ],
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 64, minHeight: 64),
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           child: const Column(
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
@@ -150,41 +156,22 @@ class PlaybackControls extends StatelessWidget {
         ),
       ),
     ];
-    return Padding(
-      padding: const EdgeInsets.all(6),
-      child: vertical
-          ? Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (final control in controls)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: control,
-                  ),
-              ],
-            )
-          : SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (final control in controls)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: SizedBox(
-                        width:
-                            64 *
-                            MediaQuery.textScalerOf(context).scale(12) /
-                            12,
-                        child: control,
-                      ),
-                    ),
-                ],
-              ),
-            ),
+    return ToolActionGrid(
+      title: 'Playback',
+      layout: layoutFor(settings),
+      children: controls,
     );
   }
+
+  static ToolsetLayout layoutFor(AppSettings settings) =>
+      ToolsetLayout.actions([
+        'Pause',
+        'Back 5s',
+        'Slow\n${settings.slowPlaybackSpeed}x',
+        'Normal\n${settings.defaultPlaybackSpeed}x',
+        'Fast\n${settings.fastPlaySpeed}x',
+        'More',
+      ], tileWidth: 64);
 }
 
 class _Control extends StatelessWidget {
@@ -202,32 +189,11 @@ class _Control extends StatelessWidget {
   final bool selected;
 
   @override
-  Widget build(BuildContext context) => Semantics(
+  Widget build(BuildContext context) => ToolActionButton(
+    label: detail == null ? label : '$label\n$detail',
+    tooltip: detail == null ? label : '$label $detail',
+    icon: icon,
     selected: selected,
-    child: Tooltip(
-      message: detail == null ? label : '$label $detail',
-      child: TextButton(
-        onPressed: onPressed,
-        style: TextButton.styleFrom(
-          minimumSize: const Size(72, 64),
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-          backgroundColor: selected ? FlowTheme.accent : FlowTheme.raised,
-          foregroundColor: selected ? const Color(0xFF27123F) : Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 22),
-            const SizedBox(height: 4),
-            Text(label, style: const TextStyle(fontSize: 12)),
-            if (detail != null)
-              Text(detail!, style: const TextStyle(fontSize: 12)),
-          ],
-        ),
-      ),
-    ),
+    onPressed: onPressed,
   );
 }

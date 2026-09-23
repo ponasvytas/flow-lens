@@ -17,6 +17,7 @@ import 'package:flow_lens/theme/flow_theme.dart';
 import 'package:flow_lens/widgets/quick_events_panel.dart';
 import 'package:flow_lens/widgets/event_buttons_panel.dart';
 import 'package:flow_lens/widgets/dock_layout.dart';
+import 'package:flow_lens/widgets/dockable_panel.dart' show DockPanel;
 import 'package:flow_lens/widgets/branded_title_bar.dart';
 import 'package:flow_lens/widgets/smart_hud.dart';
 import 'package:flow_lens/widgets/control_bar.dart';
@@ -138,12 +139,17 @@ void main() {
       testWidgets('quick shortcuts follow $edge at text scale $scale', (
         tester,
       ) async {
+        await tester.binding.setSurfaceSize(const Size(800, 900));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
         final ctrl = QuickEventsController(MemoryQuickRepository());
         await ctrl.load();
         ctrl.selectGame('orientation', taxonomy);
         ctrl.add(onNet);
         ctrl.add(wide);
-        final layout = UIController()..setDockEdge(PanelId.eventButtons, edge);
+        final layout = UIController()
+          ..setDockEdge(PanelId.quickEvents, edge)
+          ..setDockExtent(PanelDockEdge.left, 240)
+          ..setDockExtent(PanelDockEdge.right, 240);
         var captures = 0;
         var opened = false;
         await tester.pumpWidget(
@@ -160,11 +166,11 @@ void main() {
                 uiController: layout,
                 panels: [
                   DockPanelEntry(
-                    id: PanelId.eventButtons,
+                    id: PanelId.quickEvents,
                     title: 'Quick events',
                     icon: Icons.bolt,
                     fillSideDock: true,
-                    horizontalDockWidth: 480,
+                    layout: QuickEventsPanel.layoutFor(ctrl, taxonomy),
                     defaultFloatingPosition: Offset.zero,
                     builder: (dockEdge) => QuickEventsPanel(
                       controller: ctrl,
@@ -190,19 +196,21 @@ void main() {
         final b = tester.getRect(second);
         final horizontal =
             edge == PanelDockEdge.top || edge == PanelDockEdge.bottom;
-        if (horizontal) {
-          expect(a.center.dy, b.center.dy);
-          expect(a.right, lessThan(b.left));
-        } else {
-          expect(a.left, b.left);
-          expect(a.bottom, lessThan(b.top));
+        expect(a.center.dy, b.center.dy);
+        expect(a.right, lessThan(b.left));
+        final bounds = tester.getRect(find.byType(DockPanel));
+        for (final target in [first, second]) {
+          final rect = tester.getRect(target);
+          expect(rect.width, greaterThanOrEqualTo(48));
+          expect(rect.height, greaterThanOrEqualTo(48));
+          expect(bounds.contains(rect.topLeft), isTrue);
+          expect(bounds.contains(rect.bottomRight), isTrue);
+          expect(target.hitTestable(), findsOneWidget);
         }
-        await tester.ensureVisible(second);
-        await tester.pumpAndSettle();
         await tester.tap(second);
         expect(captures, 1);
         expect(find.byIcon(Icons.sports_hockey), findsNWidgets(2));
-        expect(find.text('Negative'), findsOneWidget);
+        expect(find.textContaining('Negative'), findsOneWidget);
         await tester.tap(
           horizontal ? find.byTooltip('All events') : find.text('All events'),
         );
@@ -221,6 +229,8 @@ void main() {
     (tester) async {
       double? rate;
       Duration? back;
+      await tester.binding.setSurfaceSize(const Size(800, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
         MaterialApp(
           theme: FlowTheme.dark,
@@ -246,15 +256,15 @@ void main() {
           ),
         ),
       );
-      await tester.tap(find.text('Slow'));
+      await tester.tap(find.text('Slow\n0.25x'));
       expect(rate, 0.25);
-      await tester.tap(find.text('Fast'));
+      await tester.tap(find.text('Fast\n4.0x'));
       expect(rate, 4);
       await tester.tap(find.text('Back 5s'));
       expect(back, const Duration(seconds: 5));
       expect(
-        tester.getTopLeft(find.text('Slow')).dy,
-        lessThan(tester.getTopLeft(find.text('Fast')).dy),
+        tester.getTopLeft(find.text('Slow\n0.25x')).dy,
+        lessThan(tester.getTopLeft(find.text('Fast\n4.0x')).dy),
       );
       expect(tester.takeException(), isNull);
     },
@@ -330,7 +340,7 @@ void main() {
                               ),
                             ),
                             DockPanelEntry(
-                              id: PanelId.eventButtons,
+                              id: PanelId.quickEvents,
                               title: 'Quick events',
                               icon: Icons.bolt,
                               fillSideDock: true,
@@ -370,15 +380,18 @@ void main() {
           );
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
-          if (size.width >= 900) {
-            await tester.tap(find.text('All events'));
-            expect(
-              opened,
-              isTrue,
-              reason:
-                  'Footer remains reachable without scrolling through the long menu',
-            );
-          }
+          final expand = find.byKey(
+            const ValueKey('expand-actions-Quick events'),
+          );
+          expect(expand, findsOneWidget);
+          await tester.tap(expand);
+          await tester.pumpAndSettle();
+          expect(find.byType(QuickEventsPanel), findsOneWidget);
+          await tester.ensureVisible(find.text('All events'));
+          await tester.tap(find.text('All events'));
+          expect(opened, isTrue);
+          await tester.pumpAndSettle();
+          expect(find.byType(AlertDialog), findsNothing);
           if (const bool.fromEnvironment('CAPTURE_TOUCH_PREVIEWS')) {
             await tester.runAsync(() async {
               final boundary =
@@ -526,10 +539,10 @@ void main() {
           ),
         ),
       );
-      await tester.tap(find.text('Shot On Net'));
-      await tester.tap(find.text('Shot Wide'));
+      await tester.tap(find.byKey(ValueKey('quick-${onNet.id}')));
+      await tester.tap(find.byKey(ValueKey('quick-${wide.id}')));
       expect(captures, 2);
-      await tester.tap(find.text('Edit quick menu'));
+      await tester.tap(find.byTooltip('Edit quick menu'));
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Move down').first);
       await tester.pumpAndSettle();
@@ -575,7 +588,7 @@ void main() {
                     uiController: ui,
                     panels: [
                       DockPanelEntry(
-                        id: PanelId.eventButtons,
+                        id: PanelId.quickEvents,
                         title: 'Events',
                         icon: Icons.bolt,
                         defaultFloatingPosition: Offset.zero,
@@ -604,12 +617,12 @@ void main() {
       expect(video.height, greaterThan(150));
       if (size.width >= 900) {
         expect(
-          tester.getTopLeft(find.text('Shot')).dx,
-          tester.getTopLeft(find.text('Pass')).dx,
+          tester.getTopLeft(find.text('Shot')).dy,
+          tester.getTopLeft(find.text('Pass')).dy,
         );
         expect(
-          tester.getTopLeft(find.text('Shot')).dy,
-          lessThan(tester.getTopLeft(find.text('Pass')).dy),
+          tester.getTopLeft(find.text('Shot')).dx,
+          lessThan(tester.getTopLeft(find.text('Pass')).dx),
         );
       }
       await tester.pumpWidget(const SizedBox());
@@ -746,7 +759,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      final close = find.byTooltip('Close event popup');
+      final close = find.byTooltip('Cancel event entry');
       expect(tester.getSize(close).height, greaterThanOrEqualTo(48));
       await tester.tap(close);
       await tester.pumpAndSettle();
