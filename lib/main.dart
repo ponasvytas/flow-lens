@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, mapEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
@@ -8,6 +8,11 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:file_picker/file_picker.dart';
 
 import 'app/app_bootstrap.dart';
+import 'theme/flow_theme.dart';
+import 'models/quick_event.dart';
+import 'controllers/quick_events_controller.dart';
+import 'services/quick_events_repository.dart';
+import 'widgets/quick_events_panel.dart';
 import 'app/app_composition.dart';
 import 'utils/video_loader.dart';
 import 'utils/player_config.dart';
@@ -37,6 +42,7 @@ import 'services/event_session_repository.dart';
 import 'services/tracking_session_repository.dart';
 import 'models/sport_taxonomy.dart';
 import 'controllers/events_controller.dart';
+import 'controllers/event_entry_controller.dart';
 import 'controllers/settings_controller.dart';
 import 'controllers/ui_controller.dart';
 import 'controllers/tracking_controller.dart';
@@ -59,10 +65,13 @@ Future<void> main() async {
   MediaKit.ensureInitialized();
 
   final composition = await AppBootstrap.create();
-  runApp(MaterialApp(home: HockeyAnalyzerScreen(composition: composition)));
+  runApp(
+    MaterialApp(
+      theme: FlowTheme.dark,
+      home: HockeyAnalyzerScreen(composition: composition),
+    ),
+  );
 }
-
-enum _AltEntryStage { none, categories, labels, grades }
 
 // ---------------------------------------------------------------------------
 // Scoped ChangeNotifiers — mutations here do NOT trigger a parent setState.
@@ -146,47 +155,6 @@ class _DrawingState extends ChangeNotifier {
   }
 }
 
-/// Alt+number workflow state (LATCHED) — consumed by event buttons / SmartHUD.
-///
-/// Tap Alt once to toggle "entry mode" on; number badges stay visible and the
-/// user presses digits WITHOUT holding Alt. Tap Alt again (or Esc, or finish a
-/// grade) to exit. This deliberately avoids holding Alt while pressing numbers,
-/// which on Flutter web causes the browser to swallow digit key-up events and
-/// corrupt HardwareKeyboard state (assertion at hardware_keyboard.dart:516).
-class _AltKeyState extends ChangeNotifier {
-  bool isEntryActive = false;
-  _AltEntryStage stage = _AltEntryStage.none;
-
-  bool get showCategoryNumbers =>
-      isEntryActive && stage == _AltEntryStage.categories;
-  bool get showLabelNumbers => isEntryActive && stage == _AltEntryStage.labels;
-  bool get showGradeNumbers => isEntryActive && stage == _AltEntryStage.grades;
-
-  /// Toggle entry mode on an Alt tap.
-  void toggle() {
-    if (isEntryActive) {
-      exit();
-    } else {
-      isEntryActive = true;
-      stage = _AltEntryStage.categories;
-      notifyListeners();
-    }
-  }
-
-  /// Exit entry mode (Esc / Alt tap / completion).
-  void exit() {
-    if (!isEntryActive && stage == _AltEntryStage.none) return;
-    isEntryActive = false;
-    stage = _AltEntryStage.none;
-    notifyListeners();
-  }
-
-  void setStage(_AltEntryStage newStage) {
-    stage = newStage;
-    notifyListeners();
-  }
-}
-
 class HockeyAnalyzerScreen extends StatefulWidget {
   const HockeyAnalyzerScreen({super.key, this.composition});
 
@@ -197,7 +165,7 @@ class HockeyAnalyzerScreen extends StatefulWidget {
 }
 
 class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   late final AppRuntime _runtime;
 
   // Create the Player and Controller
@@ -263,7 +231,10 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   double _shortcutsPanelY = 100.0;
 
   // Alt+number workflow state
-  final _altKey = _AltKeyState();
+  final _altKey = EventEntryController();
+  final _quickEvents = QuickEventsController(LocalQuickEventsRepository());
+  final _lastQuickEvent = ValueNotifier<GameEvent?>(null);
+  String? _videoIdentity;
 
   // Root focus node — lets us reclaim keyboard focus after dialogs / HUD.
   final FocusNode _rootFocus = FocusNode(debugLabel: 'rootShortcuts');
@@ -279,6 +250,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _runtime = (widget.composition ?? AppComposition.local()).createRuntime();
 
     // Initialize shortcuts panel position (right side after first frame)
@@ -345,8 +317,10 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     await Future.wait([
       _settingsController.loadSettings(),
       _uiController.loadDockLayouts(),
+      _quickEvents.load(),
     ]);
     if (!mounted) return;
+    _uiController.initializeRecommendedLayouts();
     await player.setRate(_settingsController.settings.defaultPlaybackSpeed);
     WidgetsBinding.instance.addPostFrameCallback((_) => _handleDeepLink());
   }
@@ -404,6 +378,9 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
       setState(() {
         _taxonomy = taxonomy;
       });
+      if (_videoIdentity != null) {
+        _quickEvents.selectGame(_videoIdentity!, taxonomy);
+      }
     } catch (e) {
       AppLog.debug('Error loading taxonomy: $e');
     }
@@ -418,6 +395,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _taxonomyRequestGeneration++;
     _eventPreview.dispose();
     _previewPositionSub?.cancel();
@@ -430,6 +408,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     _transformationController.dispose();
     _drawing.dispose();
     _altKey.dispose();
+    _quickEvents.dispose();
+    _lastQuickEvent.dispose();
     super.dispose();
   }
 
@@ -450,7 +430,10 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
       if (result != null) {
         final String? path = result.files.single.path;
         if (path != null) {
-          await _replaceVideoSource(path);
+          await _replaceVideoSource(
+            path,
+            identity: '${result.files.single.name}:${result.files.single.size}',
+          );
         } else {
           AppLog.debug("Error: No file path available");
         }
@@ -566,7 +549,13 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   // ---------------------------------------------------------------------------
 
   void _changeMode(AppMode mode) {
+    _restoreFastPlayback();
     _eventPreview.cancel();
+    _altKey.exit();
+    _eventsController.selectEvent(null);
+    if (mode != AppMode.review && _drawing.isDrawingMode) {
+      _drawing.toggleDrawingMode();
+    }
     if (_uiController.currentMode == AppMode.tracking &&
         mode != AppMode.tracking) {
       _trackingController.stopAllTimers(timestamp: player.state.position);
@@ -581,6 +570,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   Future<bool> _replaceVideoSource(
     String source, {
     Duration? initialPosition,
+    String? identity,
   }) async {
     _eventPreview.cancel();
     final previousSource = _videoSourcePath;
@@ -598,6 +588,17 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
         await player.seek(initialPosition);
       }
       _videoSourcePath = source;
+      final uri = Uri.tryParse(source);
+      _videoIdentity =
+          identity ??
+          videoFileIdentity(source) ??
+          (uri == null
+              ? source
+              : uri.replace(query: '', fragment: '').toString());
+      if (_taxonomy != null) {
+        _quickEvents.selectGame(_videoIdentity!, _taxonomy!);
+      }
+      _lastQuickEvent.value = null;
       if (mounted) setState(() => hasVideoLoaded = true);
       return true;
     } catch (e) {
@@ -681,31 +682,25 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   void _clearDrawing() => _drawing.clearAll();
 
   void _toggleDrawingMode() {
+    if (_uiController.currentMode != AppMode.review) return;
     _drawing.toggleDrawingMode();
   }
 
-  /// Current video container width (accounts for docked panel).
-  double get _videoWidth {
-    final screenSize = MediaQuery.sizeOf(context);
-    final workspaceWidth = math.max(
-      0.0,
-      screenSize.width - (_showDockedEvents ? 340 : 0),
-    );
-    if (_uiController.dockPresentationMode == DockPresentationMode.overlay) {
-      return workspaceWidth;
-    }
-    final activeEdges = <PanelDockEdge>{};
-    for (final id in PanelId.values) {
-      if (!_uiController.panelVisible(id)) continue;
-      final edge = _uiController.dockEdge(id);
-      if (edge != PanelDockEdge.floating) activeEdges.add(edge);
-    }
-    return resolveDockGeometry(
-      size: Size(workspaceWidth, math.max(0, screenSize.height - 64)),
-      activeEdges: activeEdges,
-      extents: _uiController.dockExtents,
-      presentationMode: DockPresentationMode.squeeze,
-    ).contentRect.width;
+  double _videoSurfaceWidth = 1;
+  double get _videoWidth => _videoSurfaceWidth;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) _restoreFastPlayback();
+  }
+
+  void _restoreFastPlayback() {
+    if (!_isSpeedShortcutActive) return;
+    _isSpeedShortcutActive = false;
+    player.setRate(_previousPlaybackSpeed);
+    nativeResyncAfterFF(player, () => _isSpeedShortcutActive).then((_) {
+      if (mounted && !_isSpeedShortcutActive) player.setVolume(_previousVolume);
+    });
   }
 
   /// Normalize a pixel-based transform to be resolution-independent.
@@ -939,7 +934,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
       title: title,
       sportId: taxonomy.sportId,
       taxonomyId: 'built-in:${taxonomy.sportId}',
-      taxonomyRevision: taxonomy.schemaVersion,
+      taxonomyRevision: taxonomy.contentVersion,
       taxonomySnapshot: taxonomy.toJson(),
       events: _eventsController.allEvents,
       sourceVideo: VideoSourceMetadata.fromSource(
@@ -1002,6 +997,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     });
     _eventsController.setEvents(session.events);
     _eventsController.selectEvent(null);
+    _lastQuickEvent.value = null;
+    _quickEvents.selectGame('cloud:${session.id}', taxonomy);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Loaded “${session.title}” from cloud.')),
     );
@@ -1019,6 +1016,10 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   }
 
   void _toggleDockedEvents() {
+    if (MediaQuery.sizeOf(context).width < 1100) {
+      _showEventsTable();
+      return;
+    }
     // Reset zoom — the transform is pixel-relative and invalid at new width
     _transformationController.value = Matrix4.identity();
     setState(() {
@@ -1068,7 +1069,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     final taxonomy = _taxonomy;
     if (taxonomy == null) return false;
 
-    final categories = taxonomy.categories;
+    final categories = taxonomy.captureCategories;
 
     // Check if number is valid (1-based index)
     if (number < 1 || number > categories.length) {
@@ -1090,18 +1091,18 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
     if (!_altKey.isEntryActive) return;
 
-    if (_altKey.stage == _AltEntryStage.labels) {
+    if (_altKey.stage == EventEntryStage.labels) {
       final didSelect = _selectTagByNumber(number);
       if (didSelect) {
-        _altKey.setStage(_AltEntryStage.grades);
+        _altKey.setStage(EventEntryStage.grades);
       }
       return;
     }
 
-    if (_altKey.stage == _AltEntryStage.grades) {
+    if (_altKey.stage == EventEntryStage.grades) {
       final didSelect = _selectGradeByNumber(number);
       if (didSelect) {
-        _altKey.setStage(_AltEntryStage.categories);
+        _altKey.setStage(EventEntryStage.categories);
         _dismissHUD();
       }
     }
@@ -1115,7 +1116,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     if (taxonomy == null) return false;
 
     final category = taxonomy.getCategoryById(activeEvent.categoryId);
-    final eventTypes = category?.eventTypes ?? const <EventTypeTaxonomy>[];
+    final eventTypes =
+        category?.captureEventTypes ?? const <EventTypeTaxonomy>[];
 
     if (number < 1 || number > eventTypes.length) {
       return false;
@@ -1126,7 +1128,11 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
       activeEvent.copyWith(
         detail: eventType.name,
         eventTypeId: eventType.eventTypeId,
-        grade: eventType.defaultImpact ?? activeEvent.grade,
+        grade: eventType.defaultImpact,
+        clearGrade: eventType.defaultImpact == null,
+        definition: eventType.definition,
+        taxonomyRevision: taxonomy.revision,
+        context: {...activeEvent.context, ...eventType.contextDefaults},
       ),
     );
 
@@ -1140,6 +1146,9 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     // Map number to grade (1=Positive, 2=Neutral, 3=Negative)
     EventGrade? grade;
     switch (number) {
+      case 0:
+        grade = null;
+        break;
       case 1:
         grade = EventGrade.positive;
         break;
@@ -1154,7 +1163,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     }
 
     // Update event with selected grade
-    _updateEvent(activeEvent.copyWith(grade: grade));
+    _updateEvent(activeEvent.copyWith(grade: grade, clearGrade: number == 0));
 
     return true;
   }
@@ -1163,18 +1172,168 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     final activeEvent = _eventsController.activeEvent;
     if (activeEvent == null) return;
 
-    // If event has a grade, it's complete - just dismiss
-    if (activeEvent.grade != null) {
+    if (activeEvent.isComplete) {
+      if (_altKey.isEntryActive) {
+        _altKey.setStage(EventEntryStage.categories);
+      }
       _dismissHUD();
     }
   }
 
-  void _cancelAndCloseSmartHud() {
-    final activeEvent = _eventsController.activeEvent;
-    if (activeEvent == null) return;
+  void _recordQuickEvent(QuickEvent item) {
+    if (!hasVideoLoaded ||
+        _taxonomy == null ||
+        _uiController.currentMode != AppMode.record) {
+      return;
+    }
+    final event = _quickEvents.createEvent(
+      item,
+      _taxonomy!,
+      player.state.position,
+    );
+    if (event == null) return;
+    final transform = _transformationController.value;
+    final captured = transform.getMaxScaleOnAxis() > 1.01
+        ? event.copyWith(viewTransform: _normalizeTransform(transform))
+        : event;
+    _altKey.exit();
+    _eventsController.selectEvent(null);
+    _eventsController.addEvent(captured);
+    _lastQuickEvent.value = captured;
+  }
 
-    // Delete the event and close HUD
-    _deleteEvent(activeEvent);
+  Future<void> _showFullEventMenu() async {
+    if (_taxonomy == null) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440, maxHeight: 680),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+                child: Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'All events',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      tooltip: 'Close event menu',
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: ListenableBuilder(
+                    listenable: Listenable.merge([
+                      _eventsController,
+                      _quickEvents,
+                    ]),
+                    builder: (context, _) {
+                      final event = _eventsController.activeEvent;
+                      if (event == null) {
+                        return EventButtonsPanel(
+                          taxonomy: _taxonomy,
+                          dockEdge: PanelDockEdge.right,
+                          onEventTriggered: _onEventTriggered,
+                        );
+                      }
+                      return Column(
+                        children: [
+                          TextButton.icon(
+                            onPressed: () =>
+                                _eventsController.selectEvent(null),
+                            icon: const Icon(Icons.arrow_back),
+                            label: const Text('Categories'),
+                          ),
+                          SmartHUD(
+                            event: event,
+                            taxonomy: _taxonomy,
+                            onUpdateEvent: _updateEvent,
+                            onDeleteEvent: _deleteEvent,
+                            onSave: () {
+                              _saveAndCloseSmartHud();
+                              Navigator.pop(context);
+                            },
+                            onDismiss: () =>
+                                _eventsController.selectEvent(null),
+                          ),
+                          if (event.eventTypeId != null)
+                            TextButton.icon(
+                              onPressed:
+                                  _quickEvents.items.any(
+                                    (item) =>
+                                        item.categoryId == event.categoryId &&
+                                        item.eventTypeId == event.eventTypeId &&
+                                        item.grade == event.grade &&
+                                        mapEquals(item.context, event.context),
+                                  )
+                                  ? null
+                                  : () => _quickEvents.add(
+                                      QuickEvent(
+                                        categoryId: event.categoryId,
+                                        eventTypeId: event.eventTypeId!,
+                                        grade: event.grade,
+                                        slotId:
+                                            'quick-${DateTime.now().microsecondsSinceEpoch}',
+                                        taxonomyRevision:
+                                            event.taxonomyRevision,
+                                        categoryLabel: event.label,
+                                        eventLabel: event.detail,
+                                        definition: event.definition,
+                                        context: event.context,
+                                      ),
+                                    ),
+                              icon: const Icon(Icons.add),
+                              label: Text(
+                                _quickEvents.items.any(
+                                      (item) =>
+                                          item.categoryId == event.categoryId &&
+                                          item.eventTypeId ==
+                                              event.eventTypeId &&
+                                          item.grade == event.grade &&
+                                          mapEquals(
+                                            item.context,
+                                            event.context,
+                                          ),
+                                    )
+                                    ? 'In quick menu'
+                                    : 'Add to quick menu',
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: FilledButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Done'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (mounted) {
+      _eventsController.selectEvent(null);
+      _rootFocus.requestFocus();
+    }
   }
 
   void _onEventTriggered(String categoryId) {
@@ -1188,7 +1347,9 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     final currentTransform = _transformationController.value;
     final isZoomed = currentTransform.getMaxScaleOnAxis() > 1.01;
     final newEvent = GameEvent(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      sportId: taxonomy.sportId,
+      taxonomyRevision: taxonomy.revision,
       timestamp: position,
       categoryId: categoryId,
       label: category.name,
@@ -1197,14 +1358,16 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     );
 
     _eventsController.selectEvent(newEvent);
+    if (_altKey.isEntryActive) {
+      _altKey.setStage(EventEntryStage.labels);
+    }
 
     AppLog.debug("EVENT DRAFTED: ${newEvent.label} at ${position.toString()}");
   }
 
   void _updateEvent(GameEvent updatedEvent) {
-    // Check if the event is now "complete" (has detail and grade)
-    final isComplete =
-        updatedEvent.detail != null && updatedEvent.grade != null;
+    // A selected sub-event is complete; grading is optional.
+    final isComplete = updatedEvent.isComplete;
 
     if (isComplete) {
       final existingIndex = _eventsController.allEvents.indexWhere(
@@ -1222,10 +1385,20 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
     // Always update active event state so HUD reflects changes
     _eventsController.selectEvent(updatedEvent);
+    if (isComplete &&
+        _altKey.isEntryActive &&
+        _altKey.stage == EventEntryStage.labels) {
+      _altKey.setStage(EventEntryStage.grades);
+    }
+    if (_lastQuickEvent.value?.id == updatedEvent.id) {
+      _lastQuickEvent.value = updatedEvent;
+    }
   }
 
   void _deleteEvent(GameEvent event) {
     _eventsController.deleteEvent(event);
+    _eventsController.selectEvent(null);
+    if (_lastQuickEvent.value?.id == event.id) _lastQuickEvent.value = null;
     AppLog.debug("EVENT DELETED: ${event.label}");
     // Reclaim keyboard focus — removing the SmartHUD can leave focus orphaned.
     _rootFocus.requestFocus();
@@ -1233,74 +1406,161 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
   void _dismissHUD() {
     _eventsController.selectEvent(null);
+    if (_altKey.isEntryActive) {
+      _altKey.setStage(EventEntryStage.categories);
+    }
     // Reclaim keyboard focus — removing the SmartHUD can leave focus orphaned.
     _rootFocus.requestFocus();
   }
 
   Widget _buildVideoSurface() {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        ListenableBuilder(
-          listenable: _drawing,
-          builder: (context, _) => VideoCanvas(
-            controller: controller,
-            transformationController: _transformationController,
-            isDrawingMode: _drawing.isDrawingMode,
-            currentTool: _drawing.currentTool,
-            drawingStrokes: _drawing.strokes,
-            lineShapes: _drawing.lines,
-            arrowShapes: _drawing.arrows,
-            drawingColor: _drawing.drawingColor,
-            strokeWidth: _drawing.strokeWidth,
-            drawingRevision: _drawing.revision,
-            videoAspectRatio: _videoAspectRatio,
-            onStrokeCompleted: _onStrokeCompleted,
-            onLineCompleted: _onLineCompleted,
-            onArrowCompleted: _onArrowCompleted,
-            onClearDrawing: _clearDrawing,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        _videoSurfaceWidth = math.max(
+          1,
+          math.min(
+            constraints.maxWidth,
+            constraints.maxHeight * _videoAspectRatio,
           ),
-        ),
-        ListenableBuilder(
-          listenable: _drawing,
-          builder: (context, _) {
-            if (_drawing.currentTool != DrawingTool.laser &&
-                _drawing.laserTrails.isEmpty) {
-              return const SizedBox.shrink();
-            }
-            return LaserPointerOverlay(
-              isActive: _drawing.currentTool == DrawingTool.laser,
-              isDrawingMode: _drawing.isDrawingMode,
-              trails: _drawing.laserTrails,
-              color: _drawing.drawingColor,
-              strokeWidth: _drawing.strokeWidth,
-              videoAspectRatio: _videoAspectRatio,
-              onCompleteDrawing: _completeLaserDrawing,
-              onRemoveTrail: _removeTrail,
-            );
-          },
-        ),
-      ],
+        );
+        return Center(
+          child: SizedBox(
+            width: _videoSurfaceWidth,
+            height: _videoSurfaceWidth / _videoAspectRatio,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ListenableBuilder(
+                  listenable: _drawing,
+                  builder: (context, _) => VideoCanvas(
+                    controller: controller,
+                    transformationController: _transformationController,
+                    isDrawingMode: _drawing.isDrawingMode,
+                    currentTool: _drawing.currentTool,
+                    drawingStrokes: _drawing.strokes,
+                    lineShapes: _drawing.lines,
+                    arrowShapes: _drawing.arrows,
+                    drawingColor: _drawing.drawingColor,
+                    strokeWidth: _drawing.strokeWidth,
+                    drawingRevision: _drawing.revision,
+                    videoAspectRatio: _videoAspectRatio,
+                    onStrokeCompleted: _onStrokeCompleted,
+                    onLineCompleted: _onLineCompleted,
+                    onArrowCompleted: _onArrowCompleted,
+                    onClearDrawing: _clearDrawing,
+                  ),
+                ),
+                ListenableBuilder(
+                  listenable: _drawing,
+                  builder: (context, _) {
+                    if (_drawing.currentTool != DrawingTool.laser &&
+                        _drawing.laserTrails.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+                    return LaserPointerOverlay(
+                      isActive: _drawing.currentTool == DrawingTool.laser,
+                      isDrawingMode: _drawing.isDrawingMode,
+                      trails: _drawing.laserTrails,
+                      color: _drawing.drawingColor,
+                      strokeWidth: _drawing.strokeWidth,
+                      videoAspectRatio: _videoAspectRatio,
+                      onCompleteDrawing: _completeLaserDrawing,
+                      onRemoveTrail: _removeTrail,
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
   List<DockPanelEntry> _buildDockPanels(BuildContext context) => [
     DockPanelEntry(
       id: PanelId.eventButtons,
-      title: 'Event Entry',
-      icon: Icons.add_task,
-      defaultFloatingPosition: const Offset(360, 360),
-      defaultFloatingSize: const Size(640, 118),
-      horizontalDockWidth: 900,
+      title: 'Quick events',
+      fillSideDock: true,
+      icon: Icons.bolt_rounded,
+      defaultFloatingPosition: const Offset(360, 160),
+      defaultFloatingSize: const Size(300, 480),
+      horizontalDockWidth: 480,
       contentRevision: _taxonomy,
-      builder: (dockEdge) => ListenableBuilder(
-        listenable: _altKey,
-        builder: (context, _) => EventButtonsPanel(
-          onEventTriggered: _onEventTriggered,
-          taxonomy: _taxonomy,
-          showNumbers: _altKey.showCategoryNumbers,
-        ),
-      ),
+      builder: (dockEdge) => _taxonomy == null
+          ? const SizedBox.shrink()
+          : ListenableBuilder(
+              listenable: _altKey,
+              builder: (context, _) => _altKey.showCategoryNumbers
+                  ? SingleChildScrollView(
+                      child: EventButtonsPanel(
+                        taxonomy: _taxonomy,
+                        dockEdge: dockEdge,
+                        showNumbers: true,
+                        entryPage: _altKey.page,
+                        onEntryPageChanged: (page) => _altKey.setPage(
+                          page,
+                          _taxonomy!.captureCategories.length,
+                        ),
+                        onEventTriggered: _onEventTriggered,
+                      ),
+                    )
+                  : QuickEventsPanel(
+                      controller: _quickEvents,
+                      taxonomy: _taxonomy!,
+                      onRecord: _recordQuickEvent,
+                      onAllEvents: _showFullEventMenu,
+                      vertical:
+                          dockEdge != PanelDockEdge.top &&
+                          dockEdge != PanelDockEdge.bottom,
+                      feedback: ValueListenableBuilder<GameEvent?>(
+                        valueListenable: _lastQuickEvent,
+                        builder: (context, event, _) => event == null
+                            ? const SizedBox.shrink()
+                            : Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Semantics(
+                                    liveRegion: true,
+                                    child: Text(
+                                      'Recorded ${event.label} ${event.detail}',
+                                      style: const TextStyle(
+                                        color: FlowTheme.accent,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    '${event.timestamp.inMinutes}:${(event.timestamp.inSeconds % 60).toString().padLeft(2, '0')}',
+                                    style: const TextStyle(
+                                      color: FlowTheme.muted,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  Wrap(
+                                    children: [
+                                      TextButton.icon(
+                                        onPressed: () {
+                                          _eventsController.deleteEvent(event);
+                                          _lastQuickEvent.value = null;
+                                        },
+                                        icon: const Icon(Icons.undo, size: 18),
+                                        label: const Text('Undo'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () {
+                                          _eventsController.selectEvent(event);
+                                          _showFullEventMenu();
+                                        },
+                                        child: const Text('Edit'),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                      ),
+                    ),
+            ),
     ),
     DockPanelEntry(
       id: PanelId.playbackControls,
@@ -1309,13 +1569,17 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
       defaultFloatingPosition: const Offset(20, 16),
       defaultFloatingSize: const Size(320, 170),
       horizontalDockWidth: 620,
-      builder: (dockEdge) => DraggableControlBar(
-        player: player,
-        onSpeedChange: _changeSpeed,
-        onJumpForward: _jumpForward,
-        onJumpBackward: _jumpBackward,
-        onTogglePlayPause: _togglePlayPause,
-        dockEdge: dockEdge,
+      builder: (dockEdge) => ListenableBuilder(
+        listenable: _settingsController,
+        builder: (context, _) => DraggableControlBar(
+          settings: _settingsController.settings,
+          player: player,
+          onSpeedChange: _changeSpeed,
+          onJumpForward: _jumpForward,
+          onJumpBackward: _jumpBackward,
+          onTogglePlayPause: _togglePlayPause,
+          dockEdge: dockEdge,
+        ),
       ),
     ),
     DockPanelEntry(
@@ -1362,6 +1626,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     ),
     DockPanelEntry(
       id: PanelId.playerTracking,
+      contentRevision: _taxonomy,
       title: 'Player Tracking',
       icon: Icons.people,
       defaultFloatingPosition: const Offset(20, 136),
@@ -1369,6 +1634,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
       horizontalDockWidth: 760,
       builder: (dockEdge) => PlayerTrackingPanel(
         controller: _trackingController,
+        taxonomy: _taxonomy,
         player: player,
         dockEdge: dockEdge,
         onSave: _saveTrackingSession,
@@ -1385,6 +1651,9 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     return Focus(
       focusNode: _rootFocus,
       autofocus: true,
+      onFocusChange: (focused) {
+        if (!focused) _restoreFastPlayback();
+      },
       onKeyEvent: (node, event) {
         // =====================================================================
         // Guard: detect whether a text field currently has focus.
@@ -1399,6 +1668,9 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                 ?.findAncestorWidgetOfExactType<EditableText>() !=
             null;
 
+        if (ModalRoute.of(context)?.isCurrent != true) {
+          return KeyEventResult.ignored;
+        }
         final mode = _uiController.currentMode;
         final isAltPressed = HardwareKeyboard.instance.isAltPressed;
         final isCtrlPressed = HardwareKeyboard.instance.isControlPressed;
@@ -1425,7 +1697,10 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
           // Latched so the user does NOT hold Alt while pressing numbers.
           if (event.logicalKey == LogicalKeyboardKey.altLeft ||
               event.logicalKey == LogicalKeyboardKey.altRight) {
-            if (mode == AppMode.record) {
+            if (mode == AppMode.record &&
+                !isTextFieldFocused &&
+                !isCtrlPressed &&
+                !HardwareKeyboard.instance.isMetaPressed) {
               _altKey.toggle();
               return KeyEventResult.handled;
             }
@@ -1438,104 +1713,66 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
               !isTextFieldFocused &&
               event.logicalKey == LogicalKeyboardKey.escape) {
             if (_eventsController.activeEvent != null) {
-              _cancelAndCloseSmartHud();
+              _dismissHUD();
             }
             _altKey.exit();
             return KeyEventResult.handled;
           }
 
-          // Number (no Alt held): Create event / SmartHUD grade while the
-          // latched entry mode is active (record mode only).
-          if (_altKey.isEntryActive && mode == AppMode.record) {
-            // SmartHUD label/grade selection when HUD is active
-            if (_eventsController.activeEvent != null &&
-                !_drawing.isDrawingMode) {
-              if (event.logicalKey == LogicalKeyboardKey.digit1 ||
-                  event.logicalKey == LogicalKeyboardKey.numpad1) {
-                _handleSmartHudNumber(1);
-                return KeyEventResult.handled;
-              }
-              if (event.logicalKey == LogicalKeyboardKey.digit2 ||
-                  event.logicalKey == LogicalKeyboardKey.numpad2) {
-                _handleSmartHudNumber(2);
-                return KeyEventResult.handled;
-              }
-              if (event.logicalKey == LogicalKeyboardKey.digit3 ||
-                  event.logicalKey == LogicalKeyboardKey.numpad3) {
-                _handleSmartHudNumber(3);
-                return KeyEventResult.handled;
-              }
-              if (_altKey.stage == _AltEntryStage.labels) {
-                if (event.logicalKey == LogicalKeyboardKey.digit4 ||
-                    event.logicalKey == LogicalKeyboardKey.numpad4) {
-                  _handleSmartHudNumber(4);
-                  return KeyEventResult.handled;
-                }
-                if (event.logicalKey == LogicalKeyboardKey.digit5 ||
-                    event.logicalKey == LogicalKeyboardKey.numpad5) {
-                  _handleSmartHudNumber(5);
-                  return KeyEventResult.handled;
-                }
-              }
+          if (_altKey.isEntryActive &&
+              mode == AppMode.record &&
+              !isTextFieldFocused &&
+              !hasModifier &&
+              !isShiftPressed &&
+              !HardwareKeyboard.instance.isMetaPressed &&
+              !_drawing.isDrawingMode) {
+            final optionsCount = _altKey.stage == EventEntryStage.categories
+                ? (_taxonomy?.captureCategories.length ?? 0)
+                : (_taxonomy
+                          ?.getCategoryById(
+                            _eventsController.activeEvent?.categoryId ?? '',
+                          )
+                          ?.captureEventTypes
+                          .length ??
+                      0);
+            if (_altKey.stage != EventEntryStage.grades &&
+                (event.logicalKey == LogicalKeyboardKey.pageDown ||
+                    event.logicalKey == LogicalKeyboardKey.pageUp)) {
+              _altKey.setPage(
+                _altKey.page +
+                    (event.logicalKey == LogicalKeyboardKey.pageDown ? 1 : -1),
+                optionsCount,
+              );
+              return KeyEventResult.handled;
             }
-
-            // Alt+number: create event with category
-            if (_altKey.stage == _AltEntryStage.categories &&
-                hasVideoLoaded &&
-                !_drawing.isDrawingMode) {
-              KeyEventResult? tryAltCreate(
-                LogicalKeyboardKey a,
-                LogicalKeyboardKey b,
-                int n,
-              ) {
-                if (event.logicalKey == a || event.logicalKey == b) {
-                  final didCreate = _createEventFromAltNumber(n);
-                  if (didCreate) _altKey.setStage(_AltEntryStage.labels);
-                  return KeyEventResult.handled;
+            final digit = EventEntryController.digitFor(event.logicalKey);
+            if (digit != null) {
+              if (_altKey.stage == EventEntryStage.grades) {
+                _handleSmartHudNumber(digit);
+              } else {
+                final index = _altKey.selectionIndex(
+                  event.logicalKey,
+                  optionsCount,
+                );
+                if (index != null) {
+                  if (_altKey.stage == EventEntryStage.categories &&
+                      hasVideoLoaded) {
+                    if (_createEventFromAltNumber(index + 1)) {
+                      _altKey.setStage(EventEntryStage.labels);
+                    }
+                  } else if (_altKey.stage == EventEntryStage.labels) {
+                    _handleSmartHudNumber(index + 1);
+                  }
                 }
-                return null;
               }
-
-              final result =
-                  tryAltCreate(
-                    LogicalKeyboardKey.digit1,
-                    LogicalKeyboardKey.numpad1,
-                    1,
-                  ) ??
-                  tryAltCreate(
-                    LogicalKeyboardKey.digit2,
-                    LogicalKeyboardKey.numpad2,
-                    2,
-                  ) ??
-                  tryAltCreate(
-                    LogicalKeyboardKey.digit3,
-                    LogicalKeyboardKey.numpad3,
-                    3,
-                  ) ??
-                  tryAltCreate(
-                    LogicalKeyboardKey.digit4,
-                    LogicalKeyboardKey.numpad4,
-                    4,
-                  ) ??
-                  tryAltCreate(
-                    LogicalKeyboardKey.digit5,
-                    LogicalKeyboardKey.numpad5,
-                    5,
-                  ) ??
-                  tryAltCreate(
-                    LogicalKeyboardKey.digit6,
-                    LogicalKeyboardKey.numpad6,
-                    6,
-                  );
-              if (result != null) return result;
+              return KeyEventResult.handled;
             }
           }
 
           // -----------------------------------------------------------------
-          // 2. SmartHUD Enter/Esc (record mode, HUD active, not text-field)
+          // 2. SmartHUD Enter/Esc (HUD active, not text-field)
           // -----------------------------------------------------------------
-          if (mode == AppMode.record &&
-              _eventsController.activeEvent != null &&
+          if (_eventsController.activeEvent != null &&
               !_drawing.isDrawingMode &&
               !isTextFieldFocused) {
             if (event.logicalKey == LogicalKeyboardKey.enter ||
@@ -1544,7 +1781,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
               return KeyEventResult.handled;
             }
             if (event.logicalKey == LogicalKeyboardKey.escape) {
-              _cancelAndCloseSmartHud();
+              _dismissHUD();
               _altKey.exit();
               return KeyEventResult.handled;
             }
@@ -1552,12 +1789,14 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
           // -----------------------------------------------------------------
           // 3. Tracking hotkeys (tracking mode, NOT in text fields)
-          //    Skip when Alt/Ctrl held — those are system/app shortcuts.
+          //    Modified keys belong to system/app shortcuts.
           // -----------------------------------------------------------------
           if (mode == AppMode.tracking &&
               !isTextFieldFocused &&
               !isAltPressed &&
-              !isCtrlPressed) {
+              !isCtrlPressed &&
+              !isShiftPressed &&
+              !HardwareKeyboard.instance.isMetaPressed) {
             final keyLabel = event.logicalKey.keyLabel.toLowerCase();
             if (keyLabel.isNotEmpty &&
                 _trackingController.handleHotkeyDown(
@@ -1572,13 +1811,29 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
           // STOP HERE if a text field is focused — no bare-key shortcuts below
           // should fire while the user is typing.
           // =================================================================
-          if (isTextFieldFocused && !hasModifier) {
+          if (isTextFieldFocused) {
             return KeyEventResult.ignored;
           }
 
           // -----------------------------------------------------------------
           // 4. Global playback shortcuts (all modes)
           // -----------------------------------------------------------------
+
+          if (mode == AppMode.record &&
+              hasVideoLoaded &&
+              !_altKey.isEntryActive &&
+              !hasModifier &&
+              !isShiftPressed &&
+              !HardwareKeyboard.instance.isMetaPressed) {
+            final key = event.logicalKey.keyLabel.toLowerCase();
+            final item = _quickEvents.items
+                .where((item) => item.hotkey == key)
+                .firstOrNull;
+            if (item != null) {
+              _recordQuickEvent(item);
+              return KeyEventResult.handled;
+            }
+          }
 
           // Space: Play/Pause
           if (event.logicalKey == LogicalKeyboardKey.space) {
@@ -1665,7 +1920,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
           // -----------------------------------------------------------------
           // 5. Drawing / annotation shortcuts (record + review modes only)
           // -----------------------------------------------------------------
-          if (mode == AppMode.record || mode == AppMode.review) {
+          if (mode == AppMode.review) {
             // 'G' key: Toggle graphics/drawing mode
             if (event.logicalKey == LogicalKeyboardKey.keyG) {
               _toggleDrawingMode();
@@ -1744,13 +1999,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
           if (!isTextFieldFocused &&
               event.logicalKey == LogicalKeyboardKey.keyF &&
               _isSpeedShortcutActive) {
-            _isSpeedShortcutActive = false;
-            player.setRate(_previousPlaybackSpeed);
-            nativeResyncAfterFF(player, () => _isSpeedShortcutActive).then((_) {
-              if (!_isSpeedShortcutActive) {
-                player.setVolume(_previousVolume);
-              }
-            });
+            _restoreFastPlayback();
             AppLog.debug("Speed restored to ${_previousPlaybackSpeed}x");
             return KeyEventResult.handled;
           }
@@ -1759,192 +2008,223 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
       },
       child: Scaffold(
         backgroundColor: Colors.black,
-        body: Row(
-          children: [
-            // Main content area (video + overlays)
-            Expanded(
-              child: Stack(
-                children: [
-                  // LAYER 0: Branded Title Bar (Top)
-                  ListenableBuilder(
-                    listenable: Listenable.merge([
-                      _uiController,
-                      _accountController,
-                    ]),
-                    builder: (context, _) => Positioned(
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      child: BrandedTitleBar(
-                        onShowShortcuts: _toggleShortcutsPanel,
-                        showShortcuts: _showShortcuts,
-                        currentMode: _uiController.currentMode,
-                        onModeChanged: _changeMode,
-                        onSaveEvents: hasVideoLoaded ? _saveEvents : null,
-                        onLoadEvents: hasVideoLoaded ? _loadEvents : null,
-                        onShowEventsTable: hasVideoLoaded
-                            ? _showEventsTable
-                            : null,
-                        onShowSettings: hasVideoLoaded ? _showSettings : null,
-                        onShowAccount: _showAccount,
-                        onShowCloudSessions: _showCloudSessions,
-                        isSignedIn: _accountController.isSignedIn,
-                        hasPremium:
-                            _accountController.capabilities.canSyncSettings,
-                        onToggleDockedEvents: hasVideoLoaded
-                            ? _toggleDockedEvents
-                            : null,
-                        showDockedEvents: _showDockedEvents,
-                      ),
-                    ),
-                  ),
-
-                  // Video canvas is hosted by DockLayout after a video loads.
-                  if (!hasVideoLoaded)
-                    ListenableBuilder(
-                      listenable: _drawing,
-                      builder: (context, _) => Padding(
-                        padding: const EdgeInsets.only(top: 64),
-                        child: VideoCanvas(
-                          controller: controller,
-                          transformationController: _transformationController,
-                          isDrawingMode: _drawing.isDrawingMode,
-                          currentTool: _drawing.currentTool,
-                          drawingStrokes: _drawing.strokes,
-                          lineShapes: _drawing.lines,
-                          arrowShapes: _drawing.arrows,
-                          drawingColor: _drawing.drawingColor,
-                          strokeWidth: _drawing.strokeWidth,
-                          drawingRevision: _drawing.revision,
-                          videoAspectRatio: _videoAspectRatio,
-                          onStrokeCompleted: _onStrokeCompleted,
-                          onLineCompleted: _onLineCompleted,
-                          onArrowCompleted: _onArrowCompleted,
-                          onClearDrawing: _clearDrawing,
-                        ),
-                      ),
-                    ),
-
-                  // LAYER 2: Laser trails and cursor (No zoom scaling - overlay)
-                  // Only show when laser is active or there are trails to display
-                  if (!hasVideoLoaded)
-                    ListenableBuilder(
-                      listenable: _drawing,
-                      builder: (context, _) {
-                        if (_drawing.currentTool != DrawingTool.laser &&
-                            _drawing.laserTrails.isEmpty) {
-                          return const SizedBox.shrink();
-                        }
-                        return LaserPointerOverlay(
-                          isActive: _drawing.currentTool == DrawingTool.laser,
-                          isDrawingMode: _drawing.isDrawingMode,
-                          trails: _drawing.laserTrails,
-                          color: _drawing.drawingColor,
-                          strokeWidth: _drawing.strokeWidth,
-                          videoAspectRatio: _videoAspectRatio,
-                          onCompleteDrawing: _completeLaserDrawing,
-                          onRemoveTrail: _removeTrail,
-                        );
-                      },
-                    ),
-
-                  // LAYER 3–5c: All dockable panels via DockLayout
-                  if (hasVideoLoaded)
-                    ListenableBuilder(
-                      listenable: _uiController,
-                      builder: (context, _) => Padding(
-                        padding: const EdgeInsets.only(top: kAppTitleBarHeight),
-                        child: DockLayout(
-                          uiController: _uiController,
-                          panels: _buildDockPanels(context),
-                          child: _buildVideoSurface(),
-                        ),
-                      ),
-                    ),
-
-                  // SmartHUD stays over the video while event buttons use the dock.
-                  if (hasVideoLoaded)
+        body: SafeArea(
+          child: Row(
+            children: [
+              // Main content area (video + overlays)
+              Expanded(
+                child: Stack(
+                  children: [
+                    // LAYER 0: Branded Title Bar (Top)
                     ListenableBuilder(
                       listenable: Listenable.merge([
                         _uiController,
-                        _eventsController,
-                        _altKey,
+                        _accountController,
                       ]),
-                      builder: (context, _) {
-                        if (!_uiController.panelVisible(PanelId.eventButtons) ||
-                            _eventsController.activeEvent == null) {
-                          return const SizedBox.shrink();
-                        }
-                        return Positioned(
-                          bottom: 80,
-                          left: 0,
-                          right: 0,
-                          child: Center(
-                            child: SmartHUD(
-                              event: _eventsController.activeEvent!,
-                              onUpdateEvent: _updateEvent,
-                              onDeleteEvent: _deleteEvent,
-                              onDismiss: _dismissHUD,
-                              isAltPressed: _altKey.isEntryActive,
-                              showTagNumbers: _altKey.showLabelNumbers,
-                              showGradeNumbers: _altKey.showGradeNumbers,
-                              taxonomy: _taxonomy,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-
-                  // LAYER 6: Video Progress Bar
-                  if (hasVideoLoaded)
-                    ListenableBuilder(
-                      listenable: _eventsController.dataRevision,
-                      builder: (context, _) => VideoProgressBar(
-                        player: player,
-                        events: _eventsController.filteredEvents,
-                        onEventTap: _navigateToEvent,
-                        onScrubStart: _eventPreview.cancel,
+                      builder: (context, _) => Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        child: BrandedTitleBar(
+                          onResetLayout: _uiController.resetLayout,
+                          onShowShortcuts: _toggleShortcutsPanel,
+                          showShortcuts: _showShortcuts,
+                          currentMode: _uiController.currentMode,
+                          onModeChanged: _changeMode,
+                          onSaveEvents: hasVideoLoaded ? _saveEvents : null,
+                          onLoadEvents: hasVideoLoaded ? _loadEvents : null,
+                          onShowEventsTable: hasVideoLoaded
+                              ? _showEventsTable
+                              : null,
+                          onShowSettings: hasVideoLoaded ? _showSettings : null,
+                          onShowAccount: _showAccount,
+                          onShowCloudSessions: _showCloudSessions,
+                          isSignedIn: _accountController.isSignedIn,
+                          hasPremium:
+                              _accountController.capabilities.canSyncSettings,
+                          onToggleDockedEvents: hasVideoLoaded
+                              ? _toggleDockedEvents
+                              : null,
+                          showDockedEvents: _showDockedEvents,
+                        ),
                       ),
                     ),
 
-                  // LAYER 7: Shortcuts Panel (toggleable and draggable)
-                  if (hasVideoLoaded && _showShortcuts)
-                    ShortcutsPanel(
-                      isVisible: _showShortcuts,
-                      onToggle: _toggleShortcutsPanel,
-                      positionX: _shortcutsPanelX,
-                      positionY: _shortcutsPanelY,
-                      onPositionChanged: _onShortcutsPanelDragged,
-                      onResetPosition: _resetShortcutsPanelPosition,
-                    ),
+                    // Video canvas is hosted by DockLayout after a video loads.
+                    if (!hasVideoLoaded)
+                      ListenableBuilder(
+                        listenable: _drawing,
+                        builder: (context, _) => Padding(
+                          padding: const EdgeInsets.only(top: 64),
+                          child: VideoCanvas(
+                            controller: controller,
+                            transformationController: _transformationController,
+                            isDrawingMode: _drawing.isDrawingMode,
+                            currentTool: _drawing.currentTool,
+                            drawingStrokes: _drawing.strokes,
+                            lineShapes: _drawing.lines,
+                            arrowShapes: _drawing.arrows,
+                            drawingColor: _drawing.drawingColor,
+                            strokeWidth: _drawing.strokeWidth,
+                            drawingRevision: _drawing.revision,
+                            videoAspectRatio: _videoAspectRatio,
+                            onStrokeCompleted: _onStrokeCompleted,
+                            onLineCompleted: _onLineCompleted,
+                            onArrowCompleted: _onArrowCompleted,
+                            onClearDrawing: _clearDrawing,
+                          ),
+                        ),
+                      ),
 
-                  // Video Picker (shown when no video is loaded)
-                  if (!hasVideoLoaded)
-                    VideoPicker(
-                      onPickVideo: _pickVideo,
-                      onLoadUrl: _loadUrl,
-                      onSportSelected: _onSportSelected,
-                    ),
-                ],
-              ),
-            ),
+                    // LAYER 2: Laser trails and cursor (No zoom scaling - overlay)
+                    // Only show when laser is active or there are trails to display
+                    if (!hasVideoLoaded)
+                      ListenableBuilder(
+                        listenable: _drawing,
+                        builder: (context, _) {
+                          if (_drawing.currentTool != DrawingTool.laser &&
+                              _drawing.laserTrails.isEmpty) {
+                            return const SizedBox.shrink();
+                          }
+                          return LaserPointerOverlay(
+                            isActive: _drawing.currentTool == DrawingTool.laser,
+                            isDrawingMode: _drawing.isDrawingMode,
+                            trails: _drawing.laserTrails,
+                            color: _drawing.drawingColor,
+                            strokeWidth: _drawing.strokeWidth,
+                            videoAspectRatio: _videoAspectRatio,
+                            onCompleteDrawing: _completeLaserDrawing,
+                            onRemoveTrail: _removeTrail,
+                          );
+                        },
+                      ),
 
-            // Docked Events Panel (right side)
-            if (_showDockedEvents && hasVideoLoaded)
-              ListenableBuilder(
-                listenable: _eventsController,
-                builder: (context, _) => StreamBuilder<Duration>(
-                  stream: player.stream.position,
-                  builder: (context, snapshot) => DockedEventsPanel(
-                    controller: _eventsController,
-                    taxonomy: _taxonomy,
-                    onEventTap: _navigateToEvent,
-                    onClose: _toggleDockedEvents,
-                    currentPosition: snapshot.data ?? player.state.position,
-                  ),
+                    // LAYER 3–5c: All dockable panels via DockLayout
+                    if (hasVideoLoaded)
+                      ListenableBuilder(
+                        listenable: _uiController,
+                        builder: (context, _) => Padding(
+                          padding: const EdgeInsets.only(
+                            top: kAppTitleBarHeight,
+                            bottom: 70,
+                          ),
+                          child: DockLayout(
+                            adaptive: true,
+                            uiController: _uiController,
+                            panels: _buildDockPanels(context),
+                            child: _buildVideoSurface(),
+                          ),
+                        ),
+                      ),
+
+                    // SmartHUD stays over the video while event buttons use the dock.
+                    if (hasVideoLoaded)
+                      ListenableBuilder(
+                        listenable: Listenable.merge([
+                          _uiController,
+                          _eventsController,
+                          _altKey,
+                        ]),
+                        builder: (context, _) {
+                          if (!_uiController.panelVisible(
+                                PanelId.eventButtons,
+                              ) ||
+                              _eventsController.activeEvent == null) {
+                            return const SizedBox.shrink();
+                          }
+                          return Positioned(
+                            top: kAppTitleBarHeight,
+                            bottom: 80,
+                            left: 0,
+                            right: 0,
+                            child: Align(
+                              alignment: Alignment.bottomCenter,
+                              child: SmartHUD(
+                                event: _eventsController.activeEvent!,
+                                onUpdateEvent: _updateEvent,
+                                onDeleteEvent: _deleteEvent,
+                                onDismiss: _dismissHUD,
+                                onSave: _saveAndCloseSmartHud,
+                                isAltPressed: _altKey.isEntryActive,
+                                showTagNumbers: _altKey.showLabelNumbers,
+                                entryPage: _altKey.page,
+                                onEntryPageChanged: (page) => _altKey.setPage(
+                                  page,
+                                  _taxonomy!
+                                      .getCategoryById(
+                                        _eventsController
+                                            .activeEvent!
+                                            .categoryId,
+                                      )!
+                                      .captureEventTypes
+                                      .length,
+                                ),
+                                showGradeNumbers: _altKey.showGradeNumbers,
+                                taxonomy: _taxonomy,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+
+                    // LAYER 6: Video Progress Bar
+                    if (hasVideoLoaded)
+                      ListenableBuilder(
+                        listenable: _eventsController.dataRevision,
+                        builder: (context, _) => VideoProgressBar(
+                          player: player,
+                          events: _eventsController.filteredEvents,
+                          onEventTap: _navigateToEvent,
+                          onScrubStart: _eventPreview.cancel,
+                        ),
+                      ),
+
+                    // LAYER 7: Shortcuts Panel (toggleable and draggable)
+                    if (hasVideoLoaded && _showShortcuts)
+                      ShortcutsPanel(
+                        isVisible: _showShortcuts,
+                        onToggle: _toggleShortcutsPanel,
+                        positionX: _shortcutsPanelX,
+                        positionY: _shortcutsPanelY,
+                        onPositionChanged: _onShortcutsPanelDragged,
+                        onResetPosition: _resetShortcutsPanelPosition,
+                      ),
+
+                    // Video Picker (shown when no video is loaded)
+                    if (!hasVideoLoaded)
+                      Positioned.fill(
+                        top: 64,
+                        child: SingleChildScrollView(
+                          child: VideoPicker(
+                            onPickVideo: _pickVideo,
+                            onLoadUrl: _loadUrl,
+                            onSportSelected: _onSportSelected,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
-          ],
+
+              // Docked Events Panel (right side)
+              if (_showDockedEvents &&
+                  hasVideoLoaded &&
+                  MediaQuery.sizeOf(context).width >= 1100)
+                ListenableBuilder(
+                  listenable: _eventsController,
+                  builder: (context, _) => StreamBuilder<Duration>(
+                    stream: player.stream.position,
+                    builder: (context, snapshot) => DockedEventsPanel(
+                      controller: _eventsController,
+                      taxonomy: _taxonomy,
+                      onEventTap: _navigateToEvent,
+                      onClose: _toggleDockedEvents,
+                      currentPosition: snapshot.data ?? player.state.position,
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

@@ -50,6 +50,105 @@ void main() {
     'bottom': Offset(0, 350),
   };
 
+  for (final edge in [PanelDockEdge.top, PanelDockEdge.bottom]) {
+    testWidgets('$edge uses inline controls and collapses to one button', (
+      tester,
+    ) async {
+      final controller = UIController()..setDockEdge(panelId, edge);
+      await tester.pumpWidget(buildLayout(controller));
+      await tester.pumpAndSettle();
+      expect(find.text('Test Panel'), findsNothing);
+      final dock = find.byTooltip('Test Panel — Dock position');
+      final collapse = find.byTooltip('Collapse panel');
+      final content = find.text('Panel content');
+      expect(tester.getCenter(dock).dy, tester.getCenter(collapse).dy);
+      expect(
+        tester.getRect(dock).right,
+        lessThanOrEqualTo(tester.getRect(content).left),
+      );
+      expect(
+        tester.getRect(content).right,
+        lessThanOrEqualTo(tester.getRect(collapse).left),
+      );
+      expect(tester.getSize(find.byType(DockPanel)).height, 104);
+      expect(
+        tester.getTopLeft(content).dy -
+            tester.getTopLeft(find.byType(DockPanel)).dy,
+        lessThan(kPanelTitleStripHeight),
+      );
+      final expandedWidth = tester.getSize(find.byType(DockPanel)).width;
+      await tester.tap(collapse);
+      await tester.pumpAndSettle();
+      expect(
+        tester.getSize(find.byType(DockPanel)).width,
+        kPanelCollapsedInlineWidth,
+      );
+      expect(find.text('Panel content'), findsNothing);
+      expect(find.byTooltip('Test Panel — Dock position'), findsNothing);
+      await tester.tap(find.byTooltip('Expand Test Panel'));
+      await tester.pumpAndSettle();
+      expect(tester.getSize(find.byType(DockPanel)).width, expandedWidth);
+      expect(content, findsOneWidget);
+      await tester.tap(dock);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Dock Left'));
+      await tester.pumpAndSettle();
+      expect(controller.dockEdge(panelId), PanelDockEdge.left);
+      expect(find.text('Test Panel'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      controller.dispose();
+    });
+  }
+
+  testWidgets('horizontal collapse preserves content state', (tester) async {
+    var collapsed = false;
+    late StateSetter update;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              update = setState;
+              return SizedBox(
+                width: collapsed ? kPanelCollapsedInlineWidth : 360,
+                height: 104,
+                child: DockPanel(
+                  panelId: panelId,
+                  title: 'Test Panel',
+                  icon: Icons.widgets,
+                  dockEdge: PanelDockEdge.top,
+                  onDockEdgeChanged: (_) {},
+                  isCollapsed: collapsed,
+                  onCollapsedChanged: (value) =>
+                      setState(() => collapsed = value),
+                  presentationMode: DockPresentationMode.overlay,
+                  onPresentationModeChanged: (_) {},
+                  child: const TextField(),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.enterText(find.byType(TextField), 'Keep this value');
+    update(() => collapsed = true);
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsNothing);
+    expect(
+      tester
+          .widget<EditableText>(find.byType(EditableText, skipOffstage: false))
+          .focusNode
+          .canRequestFocus,
+      isFalse,
+    );
+    await tester.tap(find.byTooltip('Expand Test Panel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Keep this value'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final MapEntry(key: edge, value: dragOffset) in edgeDrags.entries) {
     testWidgets('dragging near the $edge edge keeps the panel floating', (
       tester,

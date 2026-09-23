@@ -160,7 +160,7 @@ class _ShortcutsPanelState extends State<ShortcutsPanel> {
                   const SizedBox(height: 12),
 
                   // ── Record + Review ──
-                  _buildSectionHeader('Record & Review', Colors.orange),
+                  _buildSectionHeader('Review Only', Colors.orange),
                   _buildShortcutRow('G', 'Toggle drawing mode'),
                   _buildShortcutRow('C', 'Clear all drawings'),
                   _buildShortcutRow('K', 'Toggle laser pointer'),
@@ -173,13 +173,16 @@ class _ShortcutsPanelState extends State<ShortcutsPanel> {
 
                   // ── Record only ──
                   _buildSectionHeader('Record Only', Colors.redAccent),
-                  _buildShortcutRow('Alt+1‑6', 'Create event by category'),
                   _buildShortcutRow(
-                    'Alt+1‑5',
-                    'Grade / label event (SmartHUD)',
+                    'Assigned key',
+                    'Quick event (edit keys in quick menu)',
                   ),
+                  _buildShortcutRow('Alt (tap)', 'Toggle staged event entry'),
+                  _buildShortcutRow('1–9', 'Choose category, type, then grade'),
+                  _buildShortcutRow('PgUp/PgDn', 'Previous / next choices'),
+                  _buildShortcutRow('0 (grade)', 'Save without a grade'),
                   _buildShortcutRow('Enter', 'Save event (SmartHUD)'),
-                  _buildShortcutRow('Esc', 'Cancel event (SmartHUD)'),
+                  _buildShortcutRow('Esc', 'Close event popup'),
 
                   const SizedBox(height: 12),
 
@@ -194,7 +197,8 @@ class _ShortcutsPanelState extends State<ShortcutsPanel> {
                     padding: EdgeInsets.only(top: 4),
                     child: Text(
                       'Assign hotkeys per tracker via the key badge '
-                      'in the tracking panel.',
+                      'in the tracking panel. Use a letter or number; '
+                      'playback keys are reserved.',
                       style: TextStyle(color: Colors.white38, fontSize: 11),
                     ),
                   ),

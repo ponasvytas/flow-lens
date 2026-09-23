@@ -4,19 +4,35 @@ class EventsFilter {
   final Set<String>? categoryIds;
   final Set<String>? eventTypeIds;
   final Set<EventGrade>? impacts;
+  final bool includeUngraded;
+  final Map<String, String> contextValues;
 
-  EventsFilter({this.categoryIds, this.eventTypeIds, this.impacts});
+  EventsFilter({
+    Set<String>? categoryIds,
+    Set<String>? eventTypeIds,
+    Set<EventGrade>? impacts,
+    this.includeUngraded = false,
+    Map<String, String> contextValues = const {},
+  }) : categoryIds = categoryIds == null ? null : Set.unmodifiable(categoryIds),
+       eventTypeIds = eventTypeIds == null
+           ? null
+           : Set.unmodifiable(eventTypeIds),
+       impacts = impacts == null ? null : Set.unmodifiable(impacts),
+       contextValues = Map.unmodifiable(contextValues);
 
   bool get isActive =>
       (categoryIds != null && categoryIds!.isNotEmpty) ||
       (eventTypeIds != null && eventTypeIds!.isNotEmpty) ||
-      (impacts != null && impacts!.isNotEmpty);
+      (impacts != null && impacts!.isNotEmpty) ||
+      includeUngraded ||
+      contextValues.isNotEmpty;
 
   int get activeFilterCount {
     int count = 0;
     if (categoryIds != null && categoryIds!.isNotEmpty) count++;
     if (eventTypeIds != null && eventTypeIds!.isNotEmpty) count++;
-    if (impacts != null && impacts!.isNotEmpty) count++;
+    if ((impacts != null && impacts!.isNotEmpty) || includeUngraded) count++;
+    count += contextValues.length;
     return count;
   }
 
@@ -44,12 +60,16 @@ class EventsFilter {
       }
     }
 
-    if (impacts != null && impacts!.isNotEmpty) {
-      if (event.grade == null || !impacts!.contains(event.grade)) {
+    if ((impacts != null && impacts!.isNotEmpty) || includeUngraded) {
+      if (event.grade == null
+          ? !includeUngraded
+          : !(impacts?.contains(event.grade) ?? false)) {
         return false;
       }
     }
-
+    for (final entry in contextValues.entries) {
+      if (event.context[entry.key] != entry.value) return false;
+    }
     return true;
   }
 
@@ -57,6 +77,8 @@ class EventsFilter {
     Set<String>? categoryIds,
     Set<String>? eventTypeIds,
     Set<EventGrade>? impacts,
+    bool? includeUngraded,
+    Map<String, String>? contextValues,
     bool clearCategories = false,
     bool clearEventTypes = false,
     bool clearImpacts = false,
@@ -67,6 +89,10 @@ class EventsFilter {
           ? null
           : (eventTypeIds ?? this.eventTypeIds),
       impacts: clearImpacts ? null : (impacts ?? this.impacts),
+      includeUngraded: clearImpacts
+          ? false
+          : (includeUngraded ?? this.includeUngraded),
+      contextValues: contextValues ?? this.contextValues,
     );
   }
 

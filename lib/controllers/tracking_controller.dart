@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../models/tracking_models.dart';
+import '../utils/app_hotkeys.dart';
 
 /// Key for identifying a running timer: (subjectId, trackerId).
 typedef _TimerKey = ({String subjectId, String trackerId});
@@ -526,12 +527,25 @@ class TrackingController extends ChangeNotifier {
     return _session.hotkeys['$subjectId:$trackerId'];
   }
 
-  /// Set a hotkey binding. Removes any previous binding using the same key.
-  void setHotkey(String subjectId, String trackerId, String key) {
-    // Remove any existing binding for this key
-    _session.hotkeys.removeWhere((_, v) => v == key);
-    _session.hotkeys['$subjectId:$trackerId'] = key;
+  String? hotkeyError(String subjectId, String trackerId, String key) {
+    final error = trackingHotkeyError(key);
+    if (error != null) return error;
+    final normalized = key.toLowerCase();
+    final target = '$subjectId:$trackerId';
+    if (_session.hotkeys.entries.any(
+      (entry) => entry.key != target && entry.value.toLowerCase() == normalized,
+    )) {
+      return 'This key is already assigned to another tracker.';
+    }
+    return null;
+  }
+
+  /// Invalid assignments leave both the current and other bindings intact.
+  bool setHotkey(String subjectId, String trackerId, String key) {
+    if (hotkeyError(subjectId, trackerId, key) != null) return false;
+    _session.hotkeys['$subjectId:$trackerId'] = key.toLowerCase();
     notifyListeners();
+    return true;
   }
 
   /// Remove a hotkey binding.
@@ -542,10 +556,12 @@ class TrackingController extends ChangeNotifier {
 
   /// Find the subject+tracker pair bound to a given key label.
   ({String subjectId, String trackerId})? findByHotkey(String key) {
+    // Older saved sessions may contain playback keys or unsupported bindings.
+    if (trackingHotkeyError(key) != null) return null;
     for (final entry in _session.hotkeys.entries) {
-      if (entry.value == key) {
+      if (entry.value.toLowerCase() == key.toLowerCase()) {
         final parts = entry.key.split(':');
-        if (parts.length == 2) {
+        if (parts.length == 2 && subjects.any((s) => s.id == parts[0])) {
           return (subjectId: parts[0], trackerId: parts[1]);
         }
       }

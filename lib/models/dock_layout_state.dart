@@ -83,8 +83,8 @@ class DockEdgeExtents {
   const DockEdgeExtents({
     this.left = 280,
     this.right = 280,
-    this.top = 150,
-    this.bottom = 150,
+    this.top = 112,
+    this.bottom = 112,
   });
 
   double forEdge(PanelDockEdge edge) => switch (edge) {
@@ -126,8 +126,8 @@ class DockEdgeExtents {
       DockEdgeExtents(
         left: (json['left'] as num?)?.toDouble() ?? 280,
         right: (json['right'] as num?)?.toDouble() ?? 280,
-        top: (json['top'] as num?)?.toDouble() ?? 150,
-        bottom: (json['bottom'] as num?)?.toDouble() ?? 150,
+        top: (json['top'] as num?)?.toDouble() ?? 112,
+        bottom: (json['bottom'] as num?)?.toDouble() ?? 112,
       );
 }
 

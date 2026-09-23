@@ -111,6 +111,9 @@ class TrackingDefinition {
   final String sportId;
   final String? categoryId;
   final bool isBuiltIn;
+  final String? eventTypeId;
+  final String? definition;
+  final String? taxonomyRevision;
 
   const TrackingDefinition({
     required this.id,
@@ -120,6 +123,9 @@ class TrackingDefinition {
     this.sportId = 'hockey',
     this.categoryId,
     this.isBuiltIn = false,
+    this.eventTypeId,
+    this.definition,
+    this.taxonomyRevision,
   });
 
   TrackingDefinition copyWith({
@@ -130,6 +136,9 @@ class TrackingDefinition {
     String? sportId,
     String? categoryId,
     bool? isBuiltIn,
+    String? eventTypeId,
+    String? definition,
+    String? taxonomyRevision,
   }) {
     return TrackingDefinition(
       id: id ?? this.id,
@@ -139,6 +148,9 @@ class TrackingDefinition {
       sportId: sportId ?? this.sportId,
       categoryId: categoryId ?? this.categoryId,
       isBuiltIn: isBuiltIn ?? this.isBuiltIn,
+      eventTypeId: eventTypeId ?? this.eventTypeId,
+      definition: definition ?? this.definition,
+      taxonomyRevision: taxonomyRevision ?? this.taxonomyRevision,
     );
   }
 
@@ -151,6 +163,9 @@ class TrackingDefinition {
       'sportId': sportId,
       if (categoryId != null) 'categoryId': categoryId,
       'isBuiltIn': isBuiltIn,
+      if (eventTypeId != null) 'eventTypeId': eventTypeId,
+      if (definition != null) 'definition': definition,
+      if (taxonomyRevision != null) 'taxonomyRevision': taxonomyRevision,
     };
   }
 
@@ -171,6 +186,9 @@ class TrackingDefinition {
       sportId: json['sportId'] as String? ?? 'hockey',
       categoryId: json['categoryId'] as String?,
       isBuiltIn: json['isBuiltIn'] as bool? ?? false,
+      eventTypeId: json['eventTypeId'] as String?,
+      definition: json['definition'] as String?,
+      taxonomyRevision: json['taxonomyRevision'] as String?,
     );
   }
 
@@ -184,11 +202,24 @@ class TrackingDefinition {
           other.timerMode == timerMode &&
           other.sportId == sportId &&
           other.categoryId == categoryId &&
-          other.isBuiltIn == isBuiltIn;
+          other.isBuiltIn == isBuiltIn &&
+          other.eventTypeId == eventTypeId &&
+          other.definition == definition &&
+          other.taxonomyRevision == taxonomyRevision;
 
   @override
-  int get hashCode =>
-      Object.hash(id, label, kind, timerMode, sportId, categoryId, isBuiltIn);
+  int get hashCode => Object.hash(
+    id,
+    label,
+    kind,
+    timerMode,
+    sportId,
+    categoryId,
+    isBuiltIn,
+    eventTypeId,
+    definition,
+    taxonomyRevision,
+  );
 
   @override
   String toString() => 'TrackingDefinition($label, $kind)';

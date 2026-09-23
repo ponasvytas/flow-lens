@@ -86,7 +86,7 @@ class _DrawingToolsPanelState extends State<DrawingToolsPanel> {
         active: widget.isDrawingMode,
         onPressed: widget.onToggleDrawingMode,
         axis: axis,
-        size: 36,
+        size: 48,
       ),
       spacing,
       // Reset Zoom
@@ -95,7 +95,7 @@ class _DrawingToolsPanelState extends State<DrawingToolsPanel> {
         label: 'Zoom',
         onPressed: widget.onResetZoom,
         axis: axis,
-        size: 32,
+        size: 48,
       ),
     ];
 
@@ -109,7 +109,7 @@ class _DrawingToolsPanelState extends State<DrawingToolsPanel> {
           color: Colors.redAccent.shade700,
           onPressed: widget.onClearDrawing,
           axis: axis,
-          size: 32,
+          size: 48,
           shortcut: 'C',
         ),
         spacing,
@@ -120,7 +120,7 @@ class _DrawingToolsPanelState extends State<DrawingToolsPanel> {
           active: widget.currentTool == DrawingTool.freehand,
           onPressed: () => widget.onToolChange(DrawingTool.freehand),
           axis: axis,
-          size: 32,
+          size: 48,
           shortcut: '1',
         ),
         spacing,
@@ -130,7 +130,7 @@ class _DrawingToolsPanelState extends State<DrawingToolsPanel> {
           active: widget.currentTool == DrawingTool.line,
           onPressed: () => widget.onToolChange(DrawingTool.line),
           axis: axis,
-          size: 32,
+          size: 48,
           shortcut: '2',
         ),
         spacing,
@@ -140,7 +140,7 @@ class _DrawingToolsPanelState extends State<DrawingToolsPanel> {
           active: widget.currentTool == DrawingTool.arrow,
           onPressed: () => widget.onToolChange(DrawingTool.arrow),
           axis: axis,
-          size: 32,
+          size: 48,
           shortcut: '3',
         ),
         spacing,
@@ -150,7 +150,7 @@ class _DrawingToolsPanelState extends State<DrawingToolsPanel> {
           active: widget.currentTool == DrawingTool.laser,
           onPressed: () => widget.onToolChange(DrawingTool.laser),
           axis: axis,
-          size: 32,
+          size: 48,
           shortcut: 'K',
         ),
         spacing,
@@ -206,7 +206,8 @@ class _IconButtonWrap extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bgColor = color ?? (active ? Colors.orange : Colors.grey.shade700);
+    final bgColor =
+        color ?? (active ? const Color(0xFF63418A) : const Color(0xFF292237));
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -271,7 +272,7 @@ class _ColorSwatch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const size = 26.0;
+    const size = 48.0;
     return GestureDetector(
       onTap: onTap,
       child: Tooltip(

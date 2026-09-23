@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Flow Lens — touch layout proposal</title>
+<style>
+:root{color-scheme:dark;font:15px system-ui,sans-serif;background:#100e17;color:#f3f6fa}
+*{box-sizing:border-box}body{margin:0;padding:24px}h1{font-size:24px;margin:0 0 8px}
+p{color:#c0b6cd;max-width:850px;line-height:1.5}button,select{font:inherit;color:inherit;background:#292237;border:1px solid #526077;border-radius:8px;min-height:48px;padding:10px 14px;cursor:pointer}
+button:hover{background:#35465d}button:focus-visible,select:focus-visible{outline:3px solid #c4a5fa;outline-offset:2px}
+button[aria-pressed=true],.primary{background:#c4a5fa;color:#161023;border-color:#c4a5fa}
+.options{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:20px 0}.options label{display:flex;gap:8px;align-items:center}
+.device{width:100%;max-width:1180px;container-type:inline-size;border:1px solid #526077;border-radius:12px;overflow:hidden;transition:max-width .15s}
+.header{height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;background:#1c1827;border-bottom:1px solid #354355;gap:8px}
+.brand{font-size:14px;letter-spacing:1px}.badge{font-size:13px;color:#c4a5fa}.workspace{display:grid;grid-template-columns:88px minmax(0,1fr) 200px;gap:12px;padding:12px;background:#100e17;align-items:center}
+.workspace.full{grid-template-columns:88px minmax(0,1fr) 320px}
+.rail,.quick{display:flex;flex-direction:column;gap:8px;background:#1c1827;padding:8px;border-radius:10px;align-self:stretch;justify-content:center}
+.rail button{min-height:56px;padding:8px 2px;font-size:13px}.rail small{display:block;margin-top:3px}
+.video{min-width:0}.rink{aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;background:#141d27;border-radius:4px;position:relative;overflow:hidden}
+.rink svg{width:100%;height:100%;opacity:.8}.caption{position:absolute;bottom:8px;left:8px;color:#fff;background:#100e17e8;padding:6px 8px;border-radius:4px;font-size:12px}
+.timeline{display:flex;align-items:center;gap:10px;min-height:52px;font-variant-numeric:tabular-nums;font-size:12px;color:#c0b6cd}.track{height:5px;flex:1;background:#35465d;border-radius:4px}.track:before{content:'';display:block;width:35%;height:5px;background:#c4a5fa}
+.quick h2{font-size:14px;margin:2px 0}.quick .items{display:grid;gap:8px;max-height:350px;overflow:auto}.event{min-height:64px;text-align:left;display:flex;align-items:center;gap:8px}.event:before{content:'';width:4px;align-self:stretch;background:#d2a768;border-radius:4px;flex:none}.event span{flex:1}.event small{color:#c0b6cd;font-size:12px}
+.all{margin-top:auto}.status{min-height:64px;background:#1c1827;border-top:1px solid #354355;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px}.status span{font-size:14px}.muted{color:#c0b6cd}.library{display:none}.full .library{display:grid;gap:8px}.full .items{display:none}.library button{text-align:left}.library p{font-size:12px;margin:0}.legend{font-size:13px;max-width:1180px}.hidden{display:none!important}
+@container (max-width:899px){.workspace,.workspace.full{grid-template-columns:minmax(0,1fr);gap:8px}.video{grid-row:1}.rail{flex-direction:row;justify-content:stretch}.rail button{flex:1;min-width:0;min-height:56px}.quick{gap:12px}.quick .items{grid-template-columns:repeat(3,minmax(0,1fr));max-height:240px}.all{margin-top:0}.full .library{grid-template-columns:repeat(2,minmax(0,1fr))}.full .library p{grid-column:1/-1}.timeline{min-height:48px}}
+@container (max-width:499px){.brand{font-size:12px}.header .game{display:none}.quick .items{grid-template-columns:repeat(2,minmax(0,1fr))}.event{font-size:14px;padding:8px}.rail{gap:4px;padding:4px}.rail button{font-size:12px}.status span{font-size:12px}.caption{font-size:10px}.workspace{padding:8px}}
+@media(prefers-reduced-motion:reduce){.device{transition:none}}
+</style>
+</head>
+<body>
+<h1>Watch. Mark the moment. Keep moving.</h1>
+<p>Proposed Record workspace. Playback stays on the left and selected events on the right when space allows. Narrow windows place controls below the video. This standalone wireframe uses a synthetic rink; it does not play video, save data or change the app.</p>
+<div class="options">
+  <label>Preview width <select id="size"><option value="1180">Tablet landscape · 1180</option><option value="1024">Tablet landscape · 1024</option><option value="820">Tablet portrait · 820</option><option value="600">Split View · 600</option><option value="390">Phone · 390</option></select></label>
+  <span class="muted">Tap events, try Undo, or expand All events.</span>
+</div>
+<main class="device" id="device">
+  <div class="header"><strong class="brand">FLOW LENS</strong><span class="game muted">Game · Shots preset</span><span class="badge">Record</span></div>
+  <div class="workspace" id="workspace">
+    <nav class="rail" aria-label="Demo playback controls">
+      <button id="play" aria-pressed="true">Pause</button>
+      <button id="back">Back<small>5 sec</small></button>
+      <button data-rate="0.5" aria-pressed="false">Slow<small>0.5×</small></button>
+      <button data-rate="1" aria-pressed="true">Normal<small>1×</small></button>
+      <button data-rate="3" aria-pressed="false">Fast<small>3×</small></button>
+    </nav>
+    <section class="video" aria-label="Synthetic video placeholder">
+      <div class="rink">
+        <svg viewBox="0 0 800 450" role="img" aria-label="Illustrated hockey rink, no actual footage">
+          <rect x="25" y="30" width="750" height="390" rx="100" fill="#ccd8e1"/>
+          <rect x="42" y="46" width="716" height="358" rx="84" fill="none" stroke="#7a8c9d" stroke-width="3"/>
+          <path d="M400 30V420" stroke="#b45768" stroke-width="4"/><path d="M270 32V418M530 32V418" stroke="#668cad" stroke-width="6"/>
+          <circle cx="400" cy="225" r="56" fill="none" stroke="#668cad" stroke-width="3"/>
+          <g fill="none" stroke="#b45768" stroke-width="2"><circle cx="175" cy="125" r="48"/><circle cx="175" cy="325" r="48"/><circle cx="625" cy="125" r="48"/><circle cx="625" cy="325" r="48"/></g>
+          <g fill="#344961" stroke="#fff" stroke-width="3"><circle cx="487" cy="234" r="11"/><circle cx="583" cy="164" r="11"/><circle cx="411" cy="110" r="11"/></g>
+          <g fill="#aa566b" stroke="#fff" stroke-width="3"><circle cx="627" cy="232" r="11"/><circle cx="538" cy="309" r="11"/><circle cx="457" cy="304" r="11"/></g>
+          <circle cx="515" cy="245" r="5" fill="#17212d"/>
+        </svg>
+        <span class="caption" id="caption">Synthetic preview · Playing · 1×</span>
+      </div>
+      <div class="timeline"><span id="time">12:34</span><div class="track"></div><span>35:00</span></div>
+    </section>
+    <aside class="quick" aria-label="Quick events">
+      <h2 id="menuTitle">Quick events <span class="muted" id="count">· 0</span></h2>
+      <div class="items">
+        <button class="event" data-event="Shot on Net"><span>Shot on Net</span><small>J</small></button>
+        <button class="event" data-event="Shot Wide"><span>Shot Wide</span><small>K</small></button>
+        <button class="event" data-event="Shot Blocked"><span>Shot Blocked</span><small>L</small></button>
+      </div>
+      <div class="library" id="library">
+        <p>Full entry replaces this rail. Production will include category search, grade/details and Add to quick actions.</p>
+        <button data-category="Shot">Shot</button><button data-category="Pass">Pass</button><button data-category="Battle">Battle</button><button data-category="Defense">Defense</button><button data-category="Goalie">Goalie</button><button data-category="Team Play">Team Play</button><button data-category="Penalty">Penalty</button>
+      </div>
+      <button class="all" id="expand" aria-expanded="false" aria-controls="library">All events ↑</button>
+    </aside>
+  </div>
+  <div class="status"><span id="feedback" role="status" aria-live="polite">Ready · Quick taps keep playback going</span><button id="undo" disabled>Undo</button></div>
+</main>
+<p class="legend">Starting dimensions: 88–104 playback rail · 184–224 quick rail · 56–64 event buttons · minimum 48 touch targets. J/K/L illustrate editable hotkeys; keys are not connected in this layout demo. Full-menu details, preset editing, drawing and persistence are specified in <a href="README.md">the plan</a>.</p>
+<script>
+const byId=id=>document.getElementById(id);
+const entries=[];let seconds=754;let playing=true;let rate='1';
+function time(){return `${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`;}
+function update(){byId('time').textContent=time();byId('caption').textContent=`Synthetic preview · ${playing?'Playing':'Paused'} · ${rate}×`;byId('count').textContent=`· ${entries.length}`;byId('undo').disabled=entries.length===0;}
+byId('size').addEventListener('change',e=>{byId('device').style.maxWidth=e.target.value+'px';});
+byId('play').addEventListener('click',()=>{playing=!playing;byId('play').textContent=playing?'Pause':'Play';byId('play').setAttribute('aria-pressed',String(playing));update();});
+byId('back').addEventListener('click',()=>{seconds=Math.max(0,seconds-5);update();});
+document.querySelectorAll('[data-rate]').forEach(button=>button.addEventListener('click',()=>{rate=button.dataset.rate;document.querySelectorAll('[data-rate]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));update();}));
+document.querySelectorAll('[data-event]').forEach(button=>button.addEventListener('click',()=>{entries.push({label:button.dataset.event,time:time()});byId('feedback').textContent=`Recorded ${button.dataset.event} at ${time()} · ${playing?'Playback continues':'Video remains paused'}`;update();}));
+byId('undo').addEventListener('click',()=>{const removed=entries.pop();if(removed)byId('feedback').textContent=`Undid ${removed.label} at ${removed.time}`;update();});
+byId('expand').addEventListener('click',()=>{const expanded=byId('workspace').classList.toggle('full');byId('expand').setAttribute('aria-expanded',String(expanded));byId('expand').textContent=expanded?'Back to quick events ↓':'All events ↑';});
+document.querySelectorAll('[data-category]').forEach(button=>button.addEventListener('click',()=>{byId('feedback').textContent=`${button.dataset.category} selected · Full entry details are described in the plan`; }));
+</script>
+</body>
+</html>

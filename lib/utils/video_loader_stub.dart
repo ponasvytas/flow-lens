@@ -5,3 +5,5 @@ Future<String?> pickVideoFileWeb() async {
 void releaseVideoUrl(String? url) {}
 
 bool isOwnedVideoUrl(String url) => false;
+
+String? videoFileIdentity(String url) => null;

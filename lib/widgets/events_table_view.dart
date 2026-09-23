@@ -3,6 +3,7 @@ import '../models/game_event.dart';
 import '../models/sport_taxonomy.dart';
 import '../controllers/events_controller.dart';
 import 'export_dialog.dart';
+import '../theme/flow_theme.dart';
 
 class EventsTableView extends StatefulWidget {
   final EventsController controller;
@@ -58,7 +59,7 @@ class _EventsTableViewState extends State<EventsTableView> {
     int impactRank(EventGrade? g) => switch (g) {
       EventGrade.negative => 0,
       EventGrade.neutral => 1,
-      null => 1,
+      null => -1,
       EventGrade.positive => 2,
     };
     int cmp(GameEvent a, GameEvent b) {
@@ -66,9 +67,7 @@ class _EventsTableViewState extends State<EventsTableView> {
         case _SortColumn.time:
           return a.timestamp.compareTo(b.timestamp);
         case _SortColumn.category:
-          final r = _getCategoryName(a.categoryId).toLowerCase().compareTo(
-            _getCategoryName(b.categoryId).toLowerCase(),
-          );
+          final r = a.label.toLowerCase().compareTo(b.label.toLowerCase());
           return r != 0 ? r : a.timestamp.compareTo(b.timestamp);
         case _SortColumn.event:
           final r = _getEventTypeName(
@@ -147,6 +146,7 @@ class _EventsTableViewState extends State<EventsTableView> {
   }
 
   String _getEventTypeName(GameEvent event) {
+    if (event.detail != null) return event.detail!;
     if (event.eventTypeId != null) {
       final eventType = widget.taxonomy.getEventTypeById(event.eventTypeId!);
       if (eventType != null) {
@@ -158,7 +158,7 @@ class _EventsTableViewState extends State<EventsTableView> {
   }
 
   String _getImpactName(EventGrade? grade) {
-    if (grade == null) return 'Neutral';
+    if (grade == null) return 'Ungraded';
     return switch (grade) {
       EventGrade.positive => 'Positive',
       EventGrade.negative => 'Negative',
@@ -167,11 +167,11 @@ class _EventsTableViewState extends State<EventsTableView> {
   }
 
   Color _getImpactColor(EventGrade? grade) {
-    if (grade == null) return Colors.grey;
+    if (grade == null) return FlowTheme.muted;
     return switch (grade) {
-      EventGrade.positive => Colors.green,
-      EventGrade.negative => Colors.red,
-      EventGrade.neutral => Colors.grey,
+      EventGrade.positive => Colors.greenAccent,
+      EventGrade.negative => Colors.redAccent,
+      EventGrade.neutral => FlowTheme.muted,
     };
   }
 
@@ -200,6 +200,7 @@ class _EventsTableViewState extends State<EventsTableView> {
       onApply: (selected) {
         final newFilter = widget.controller.filter.copyWith(
           categoryIds: selected.isEmpty ? null : selected,
+          clearCategories: selected.isEmpty,
         );
         widget.controller.setFilter(newFilter);
       },
@@ -219,7 +220,7 @@ class _EventsTableViewState extends State<EventsTableView> {
         // Use taxonomy-based event type
         key = event.eventTypeId!;
         final eventType = widget.taxonomy.getEventTypeById(key);
-        displayName = eventType?.name ?? key;
+        displayName = event.detail ?? eventType?.name ?? key;
       } else {
         // Use label/detail as identifier for events without eventTypeId
         key = event.detail ?? event.label;
@@ -242,6 +243,7 @@ class _EventsTableViewState extends State<EventsTableView> {
       onApply: (selected) {
         final newFilter = widget.controller.filter.copyWith(
           eventTypeIds: selected.isEmpty ? null : selected,
+          clearEventTypes: selected.isEmpty,
         );
         widget.controller.setFilter(newFilter);
       },
@@ -266,27 +268,124 @@ class _EventsTableViewState extends State<EventsTableView> {
       availableImpacts.add(MapEntry(grade.name, name));
     }
 
+    if (widget.controller.allEvents.any((e) => e.grade == null)) {
+      availableImpacts.add(const MapEntry('ungraded', 'Ungraded'));
+    }
     // Sort by name for better UX
     availableImpacts.sort((a, b) => a.value.compareTo(b.value));
 
     _showColumnFilter(
-      title: 'Filter by Impact',
+      title: 'Filter by Grade',
       availableValues: availableImpacts,
-      currentSelection: widget.controller.filter.impacts
-          ?.map((g) => g.name)
-          .toSet(),
+      currentSelection: {
+        ...?widget.controller.filter.impacts?.map((g) => g.name),
+        if (widget.controller.filter.includeUngraded) 'ungraded',
+      },
       onApply: (selected) {
         final grades = selected.isEmpty
             ? null
             : selected
+                  .where((name) => name != 'ungraded')
                   .map(
                     (name) =>
                         EventGrade.values.firstWhere((g) => g.name == name),
                   )
                   .toSet();
-        final newFilter = widget.controller.filter.copyWith(impacts: grades);
+        final newFilter = widget.controller.filter.copyWith(
+          impacts: grades,
+          clearImpacts: selected.isEmpty,
+          includeUngraded: selected.contains('ungraded'),
+        );
         widget.controller.setFilter(newFilter);
       },
+    );
+  }
+
+  void _showContextFilter() {
+    final options = <String, Set<String>>{};
+    for (final event in widget.controller.allEvents) {
+      for (final entry in event.context.entries) {
+        options.putIfAbsent(entry.key, () => {}).add(entry.value);
+      }
+    }
+    var selection = Map<String, String>.of(
+      widget.controller.filter.contextValues,
+    );
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setLocalState) => AlertDialog(
+          title: const Text('Filter by event context'),
+          content: SizedBox(
+            width: 360,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final entry in options.entries)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: DropdownButtonFormField<String>(
+                        key: ValueKey('${entry.key}:${selection[entry.key]}'),
+                        initialValue: selection[entry.key] ?? '',
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          labelText:
+                              widget.taxonomy.contextFields
+                                  .where((f) => f.id == entry.key)
+                                  .firstOrNull
+                                  ?.name ??
+                              entry.key,
+                        ),
+                        items: [
+                          const DropdownMenuItem(value: '', child: Text('Any')),
+                          for (final value in {
+                            ...entry.value,
+                            if (selection[entry.key] != null)
+                              selection[entry.key]!,
+                          })
+                            DropdownMenuItem(
+                              value: value,
+                              child: Text(
+                                value,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                        ],
+                        onChanged: (value) => setLocalState(() {
+                          if (value == null || value.isEmpty) {
+                            selection.remove(entry.key);
+                          } else {
+                            selection[entry.key] = value;
+                          }
+                        }),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => setLocalState(() => selection = {}),
+              child: const Text('Clear'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                widget.controller.setFilter(
+                  widget.controller.filter.copyWith(contextValues: selection),
+                );
+                Navigator.pop(dialogContext);
+              },
+              child: const Text('Apply'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -321,7 +420,7 @@ class _EventsTableViewState extends State<EventsTableView> {
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Cancel'),
           ),
-          ElevatedButton(
+          FilledButton(
             onPressed: () {
               widget.controller.deleteEvent(event);
               Navigator.of(context).pop();
@@ -332,9 +431,9 @@ class _EventsTableViewState extends State<EventsTableView> {
                 ),
               );
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
             ),
             child: const Text('Delete'),
           ),
@@ -390,7 +489,7 @@ class _EventsTableViewState extends State<EventsTableView> {
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Cancel'),
           ),
-          ElevatedButton(
+          FilledButton(
             onPressed: () {
               widget.controller.deleteEventsById(
                 selectedEvents.map((event) => event.id),
@@ -403,9 +502,9 @@ class _EventsTableViewState extends State<EventsTableView> {
                 ),
               );
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
             ),
             child: const Text('Delete All'),
           ),
@@ -421,89 +520,105 @@ class _EventsTableViewState extends State<EventsTableView> {
 
     final content = Column(
       children: [
-        // Header
         Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF753b8f),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.2),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-            ],
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+          decoration: const BoxDecoration(
+            color: FlowTheme.panel,
+            border: Border(bottom: BorderSide(color: FlowTheme.border)),
           ),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
-                'Events',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.table_chart_outlined,
+                    color: FlowTheme.accent,
+                    size: 22,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Events',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          'Showing ${events.length} / ${widget.controller.totalEventCount}',
+                          style: const TextStyle(
+                            color: FlowTheme.muted,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: widget.onClose,
+                    icon: const Icon(Icons.close),
+                    tooltip: 'Close',
+                  ),
+                ],
               ),
-              const Spacer(),
-              if (_selectedEventIds.isNotEmpty) ...[
-                TextButton.icon(
-                  onPressed: _exportSelected,
-                  icon: const Icon(
-                    Icons.movie_creation,
-                    color: Colors.white70,
-                    size: 18,
-                  ),
-                  label: Text(
-                    'Export Selected (${_selectedEventIds.length})',
-                    style: const TextStyle(color: Colors.white70),
-                  ),
-                  style: TextButton.styleFrom(
-                    backgroundColor: const Color(
-                      0xFF753b8f,
-                    ).withValues(alpha: 0.3),
+              if (_selectedEventIds.isNotEmpty ||
+                  widget.controller.filter.isActive ||
+                  widget.controller.allEvents.any((e) => e.context.isNotEmpty))
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      if (widget.controller.allEvents.any(
+                        (e) => e.context.isNotEmpty,
+                      ))
+                        OutlinedButton.icon(
+                          onPressed: _showContextFilter,
+                          icon: const Icon(Icons.filter_list),
+                          label: const Text('Filter context'),
+                        ),
+                      if (_selectedEventIds.isNotEmpty) ...[
+                        FilledButton.tonalIcon(
+                          onPressed: _exportSelected,
+                          icon: const Icon(
+                            Icons.movie_creation_outlined,
+                            size: 18,
+                          ),
+                          label: Text(
+                            'Export selected (${_selectedEventIds.length})',
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: _confirmBulkDelete,
+                          icon: const Icon(Icons.delete_outline, size: 18),
+                          label: Text(
+                            'Delete selected (${_selectedEventIds.length})',
+                          ),
+                          style: TextButton.styleFrom(
+                            foregroundColor: Theme.of(
+                              context,
+                            ).colorScheme.error,
+                          ),
+                        ),
+                      ],
+                      if (widget.controller.filter.isActive)
+                        OutlinedButton.icon(
+                          onPressed: widget.controller.clearFilter,
+                          icon: const Icon(
+                            Icons.filter_alt_off_outlined,
+                            size: 18,
+                          ),
+                          label: const Text('Clear filters'),
+                        ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                TextButton.icon(
-                  onPressed: _confirmBulkDelete,
-                  icon: const Icon(
-                    Icons.delete,
-                    color: Colors.white70,
-                    size: 18,
-                  ),
-                  label: Text(
-                    'Delete Selected (${_selectedEventIds.length})',
-                    style: const TextStyle(color: Colors.white70),
-                  ),
-                  style: TextButton.styleFrom(
-                    backgroundColor: Colors.red.withValues(alpha: 0.2),
-                  ),
-                ),
-              ],
-              const SizedBox(width: 16),
-              Text(
-                'Showing ${events.length} / ${widget.controller.totalEventCount}',
-                style: const TextStyle(color: Colors.white70, fontSize: 14),
-              ),
-              const SizedBox(width: 16),
-              if (widget.controller.filter.isActive)
-                TextButton.icon(
-                  onPressed: () => widget.controller.clearFilter(),
-                  icon: const Icon(
-                    Icons.clear,
-                    color: Colors.white70,
-                    size: 18,
-                  ),
-                  label: const Text(
-                    'Clear Filters',
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                ),
-              IconButton(
-                onPressed: widget.onClose,
-                icon: const Icon(Icons.close, color: Colors.white),
-                tooltip: 'Close',
-              ),
             ],
           ),
         ),
@@ -511,8 +626,8 @@ class _EventsTableViewState extends State<EventsTableView> {
         // Table Header
         Container(
           decoration: BoxDecoration(
-            color: Colors.grey[200],
-            border: Border(bottom: BorderSide(color: Colors.grey[400]!)),
+            color: FlowTheme.raised,
+            border: Border(bottom: const BorderSide(color: FlowTheme.border)),
           ),
           child: Row(
             children: [
@@ -543,10 +658,12 @@ class _EventsTableViewState extends State<EventsTableView> {
                 sortColumn: _SortColumn.event,
               ),
               _buildHeaderCell(
-                'Impact',
+                'Grade',
                 flex: 2,
                 hasFilter: true,
-                isFiltered: widget.controller.filter.impacts != null,
+                isFiltered:
+                    widget.controller.filter.impacts != null ||
+                    widget.controller.filter.includeUngraded,
                 onFilterTap: _showImpactFilter,
                 sortColumn: _SortColumn.impact,
               ),
@@ -563,18 +680,24 @@ class _EventsTableViewState extends State<EventsTableView> {
                     widget.controller.filter.isActive
                         ? 'No events match the current filters'
                         : 'No events yet',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 16),
+                    style: const TextStyle(
+                      color: FlowTheme.muted,
+                      fontSize: 16,
+                    ),
                   ),
                 )
               : ListView.separated(
                   itemCount: events.length,
                   separatorBuilder: (context, index) =>
-                      Divider(height: 1, color: Colors.grey[300]),
+                      const Divider(height: 1, color: FlowTheme.border),
                   itemBuilder: (context, index) {
                     final event = events[index];
                     return InkWell(
                       onTap: () => widget.onEventTap(event),
                       child: Container(
+                        color: _selectedEventIds.contains(event.id)
+                            ? FlowTheme.accent.withValues(alpha: 0.12)
+                            : null,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 8,
                           vertical: 12,
@@ -594,10 +717,7 @@ class _EventsTableViewState extends State<EventsTableView> {
                               _formatDuration(event.timestamp),
                               flex: 2,
                             ),
-                            _buildDataCell(
-                              _getCategoryName(event.categoryId),
-                              flex: 3,
-                            ),
+                            _buildDataCell(event.label, flex: 3),
                             _buildDataCell(_getEventTypeName(event), flex: 3),
                             _buildDataCell(
                               _getImpactName(event.grade),
@@ -613,7 +733,7 @@ class _EventsTableViewState extends State<EventsTableView> {
                                     Icons.delete_outline,
                                     size: 20,
                                   ),
-                                  color: Colors.red[400],
+                                  color: Theme.of(context).colorScheme.error,
                                   tooltip: 'Delete event',
                                   onPressed: () => _confirmDelete(event),
                                 ),
@@ -630,7 +750,10 @@ class _EventsTableViewState extends State<EventsTableView> {
     );
 
     if (isDesktop) {
-      return Dialog(child: SizedBox(width: 800, height: 600, child: content));
+      return Dialog(
+        clipBehavior: Clip.antiAlias,
+        child: SizedBox(width: 800, height: 600, child: content),
+      );
     } else {
       return Scaffold(body: SafeArea(child: content));
     }
@@ -654,7 +777,9 @@ class _EventsTableViewState extends State<EventsTableView> {
             style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 14,
-              color: isActiveSort ? const Color(0xFF753b8f) : Colors.black87,
+              color: isActiveSort
+                  ? FlowTheme.accent
+                  : Theme.of(context).colorScheme.onSurface,
             ),
             overflow: TextOverflow.ellipsis,
           ),
@@ -664,7 +789,7 @@ class _EventsTableViewState extends State<EventsTableView> {
           Icon(
             _sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
             size: 14,
-            color: const Color(0xFF753b8f),
+            color: FlowTheme.accent,
           ),
         ],
       ],
@@ -687,9 +812,7 @@ class _EventsTableViewState extends State<EventsTableView> {
                 child: Icon(
                   isFiltered ? Icons.filter_alt : Icons.filter_alt_outlined,
                   size: 18,
-                  color: isFiltered
-                      ? const Color(0xFF753b8f)
-                      : Colors.grey[600],
+                  color: isFiltered ? FlowTheme.accent : FlowTheme.muted,
                 ),
               ),
           ],
@@ -707,7 +830,7 @@ class _EventsTableViewState extends State<EventsTableView> {
           text,
           style: TextStyle(
             fontSize: 14,
-            color: color ?? Colors.black87,
+            color: color ?? Theme.of(context).colorScheme.onSurface,
             fontWeight: color != null ? FontWeight.w600 : FontWeight.normal,
           ),
           overflow: TextOverflow.ellipsis,
@@ -809,7 +932,7 @@ class _ColumnFilterDialogState extends State<_ColumnFilterDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
-        ElevatedButton(
+        FilledButton(
           onPressed: () {
             widget.onApply(_selection);
             Navigator.of(context).pop();

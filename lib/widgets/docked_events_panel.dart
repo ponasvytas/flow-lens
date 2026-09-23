@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import '../controllers/events_controller.dart';
 import '../models/game_event.dart';
 import '../models/sport_taxonomy.dart';
+import '../theme/flow_theme.dart';
 
 /// Compact events table designed to be docked beside the video player.
 ///
 /// Shows a scrollable list of events with minimal columns:
-/// grade dot, timestamp, category, and event type.
+/// category icon, timestamp, event hierarchy, and grade.
 /// The active event is highlighted and auto-scrolled into view.
 class DockedEventsPanel extends StatefulWidget {
   final EventsController controller;
@@ -51,12 +52,15 @@ class _DockedEventsPanelState extends State<DockedEventsPanel> {
     }
   }
 
+  double get _rowHeight =>
+      16 + 40 * MediaQuery.textScalerOf(context).scale(14) / 14;
+
   void _scrollToEvent(GameEvent event) {
-    final events = widget.controller.filteredEvents;
+    final events = widget.controller.chronologicalFilteredEvents;
     final index = events.indexWhere((e) => e.id == event.id);
     if (index == -1 || !_scrollController.hasClients) return;
 
-    const itemHeight = 44.0; // Approximate row height
+    final itemHeight = _rowHeight;
     final targetOffset = index * itemHeight;
     final viewportHeight = _scrollController.position.viewportDimension;
     final currentOffset = _scrollController.offset;
@@ -84,12 +88,8 @@ class _DockedEventsPanelState extends State<DockedEventsPanel> {
     return '$minutes:$seconds';
   }
 
-  String _getCategoryName(String categoryId) {
-    final category = widget.taxonomy?.getCategoryById(categoryId);
-    return category?.name ?? categoryId;
-  }
-
   String _getEventTypeName(GameEvent event) {
+    if (event.detail != null) return event.detail!;
     if (event.eventTypeId != null && widget.taxonomy != null) {
       final eventType = widget.taxonomy!.getEventTypeById(event.eventTypeId!);
       if (eventType != null) return eventType.name;
@@ -99,10 +99,10 @@ class _DockedEventsPanelState extends State<DockedEventsPanel> {
 
   Color _getGradeColor(EventGrade? grade) {
     return switch (grade) {
-      EventGrade.positive => Colors.green,
-      EventGrade.negative => Colors.red,
-      EventGrade.neutral => Colors.grey,
-      null => Colors.grey,
+      EventGrade.positive => Colors.greenAccent,
+      EventGrade.negative => Colors.redAccent,
+      EventGrade.neutral => FlowTheme.muted,
+      null => FlowTheme.muted,
     };
   }
 
@@ -114,57 +114,44 @@ class _DockedEventsPanelState extends State<DockedEventsPanel> {
     return Container(
       width: 340,
       decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E),
-        border: Border(
-          left: BorderSide(
-            color: Colors.white.withValues(alpha: 0.1),
-            width: 1,
-          ),
-        ),
+        color: FlowTheme.panel,
+        border: Border(left: BorderSide(color: FlowTheme.border, width: 1)),
       ),
       child: Column(
         children: [
           // Header
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF753b8f),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.3),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: const BoxDecoration(
+              color: FlowTheme.panel,
+              border: Border(bottom: BorderSide(color: FlowTheme.border)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.table_chart, color: Colors.white, size: 16),
+                const Icon(
+                  Icons.view_sidebar_outlined,
+                  color: FlowTheme.accent,
+                  size: 20,
+                ),
                 const SizedBox(width: 8),
                 const Text(
                   'Events',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 14,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(width: 8),
                 Text(
                   '${events.length}',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.6),
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: FlowTheme.muted, fontSize: 12),
                 ),
                 const Spacer(),
-                InkWell(
-                  onTap: widget.onClose,
-                  borderRadius: BorderRadius.circular(12),
-                  child: const Padding(
-                    padding: EdgeInsets.all(4),
-                    child: Icon(Icons.close, color: Colors.white70, size: 16),
-                  ),
+                IconButton(
+                  onPressed: widget.onClose,
+                  tooltip: 'Close events list',
+                  icon: const Icon(Icons.close, size: 20),
                 ),
               ],
             ),
@@ -178,16 +165,13 @@ class _DockedEventsPanelState extends State<DockedEventsPanel> {
                       widget.controller.filter.isActive
                           ? 'No matches'
                           : 'No events',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.4),
-                        fontSize: 13,
-                      ),
+                      style: TextStyle(color: FlowTheme.muted, fontSize: 13),
                     ),
                   )
                 : ListView.builder(
                     controller: _scrollController,
                     itemCount: events.length,
-                    itemExtent: 44,
+                    itemExtent: _rowHeight,
                     itemBuilder: (context, index) {
                       final event = events[index];
                       final isActive = event.id == activeId;
@@ -195,8 +179,19 @@ class _DockedEventsPanelState extends State<DockedEventsPanel> {
 
                       return _CompactEventRow(
                         timestamp: _formatDuration(event.timestamp),
-                        category: _getCategoryName(event.categoryId),
+                        category: event.label,
                         eventType: _getEventTypeName(event),
+                        categoryIcon:
+                            widget.taxonomy
+                                ?.getCategoryById(event.categoryId)
+                                ?.getIcon() ??
+                            Icons.label_outline,
+                        categoryColor:
+                            widget.taxonomy
+                                ?.getCategoryById(event.categoryId)
+                                ?.getColor() ??
+                            FlowTheme.muted,
+                        grade: event.grade,
                         gradeColor: _getGradeColor(event.grade),
                         isActive: isActive,
                         isPast: isPast,
@@ -216,6 +211,9 @@ class _CompactEventRow extends StatelessWidget {
   final String timestamp;
   final String category;
   final String eventType;
+  final IconData categoryIcon;
+  final Color categoryColor;
+  final EventGrade? grade;
   final Color gradeColor;
   final bool isActive;
   final bool isPast;
@@ -226,6 +224,9 @@ class _CompactEventRow extends StatelessWidget {
     required this.timestamp,
     required this.category,
     required this.eventType,
+    required this.categoryIcon,
+    required this.categoryColor,
+    required this.grade,
     required this.gradeColor,
     required this.isActive,
     required this.isPast,
@@ -235,97 +236,103 @@ class _CompactEventRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: isActive
-              ? const Color(0xFF753b8f).withValues(alpha: 0.35)
-              : Colors.transparent,
-          border: Border(
-            left: BorderSide(
-              color: isActive ? const Color(0xFF9b5fb8) : Colors.transparent,
-              width: 3,
-            ),
-            bottom: BorderSide(
-              color: Colors.white.withValues(alpha: 0.04),
-              width: 1,
+    final gradeLabel = switch (grade) {
+      EventGrade.positive => 'Positive',
+      EventGrade.negative => 'Negative',
+      EventGrade.neutral => 'Neutral',
+      null => 'Ungraded',
+    };
+    return Semantics(
+      selected: isActive,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: isActive ? FlowTheme.accent.withValues(alpha: 0.12) : null,
+            border: Border(
+              left: BorderSide(
+                color: isActive ? FlowTheme.accent : Colors.transparent,
+                width: 3,
+              ),
+              bottom: const BorderSide(color: FlowTheme.border),
             ),
           ),
-        ),
-        child: Row(
-          children: [
-            // Grade dot
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: gradeColor,
-                shape: BoxShape.circle,
+          child: Row(
+            children: [
+              Icon(categoryIcon, color: categoryColor, size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Tooltip(
+                  message: '$category ? $eventType',
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        category,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: FlowTheme.muted,
+                          fontSize: 12,
+                        ),
+                      ),
+                      Text(
+                        eventType,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-
-            // Timestamp
-            SizedBox(
-              width: 52,
-              child: Text(
+              const SizedBox(width: 8),
+              Text(
                 timestamp,
                 style: TextStyle(
-                  color: isPast
-                      ? Colors.white.withValues(alpha: 0.5)
-                      : Colors.white.withValues(alpha: 0.9),
+                  color: isActive
+                      ? FlowTheme.accent
+                      : isPast
+                      ? FlowTheme.muted
+                      : Theme.of(context).colorScheme.onSurface,
                   fontSize: 12,
                   fontFamily: 'monospace',
-                  fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
                 ),
               ),
-            ),
-            const SizedBox(width: 6),
-
-            // Category
-            SizedBox(
-              width: 80,
-              child: Text(
-                category,
-                style: TextStyle(
-                  color: isPast
-                      ? Colors.white.withValues(alpha: 0.4)
-                      : Colors.white.withValues(alpha: 0.7),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 6),
-
-            // Event type
-            Expanded(
-              child: Text(
-                eventType,
-                style: TextStyle(
-                  color: isPast
-                      ? Colors.white.withValues(alpha: 0.35)
-                      : Colors.white.withValues(alpha: 0.6),
-                  fontSize: 11,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-
-            // Zoom indicator
-            if (hasZoom)
-              Padding(
-                padding: const EdgeInsets.only(left: 4),
+              const SizedBox(width: 10),
+              Tooltip(
+                message: gradeLabel,
                 child: Icon(
-                  Icons.zoom_in,
-                  size: 12,
-                  color: Colors.white.withValues(alpha: 0.3),
+                  switch (grade) {
+                    EventGrade.positive => Icons.thumb_up,
+                    EventGrade.negative => Icons.thumb_down,
+                    EventGrade.neutral => Icons.remove,
+                    null => Icons.radio_button_unchecked,
+                  },
+                  color: gradeColor,
+                  size: 16,
+                  semanticLabel: gradeLabel,
                 ),
               ),
-          ],
+              if (hasZoom)
+                const Padding(
+                  padding: EdgeInsets.only(left: 6),
+                  child: Tooltip(
+                    message: 'Saved zoom',
+                    child: Icon(
+                      Icons.zoom_in,
+                      size: 16,
+                      color: FlowTheme.muted,
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

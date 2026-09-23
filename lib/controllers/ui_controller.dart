@@ -56,6 +56,35 @@ class UIController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void initializeRecommendedLayouts() {
+    for (final mode in AppMode.values) {
+      if (!_layoutState.workflows.containsKey(mode)) {
+        _layoutState = _layoutState.withWorkflow(mode, _recommended(mode));
+      }
+    }
+    notifyListeners();
+  }
+
+  void resetLayout() => _updateWorkflow(_recommended(_currentMode));
+
+  WorkflowDockState _recommended(AppMode mode) => WorkflowDockState(
+    presentationMode: DockPresentationMode.squeeze,
+    extents: DockEdgeExtents(
+      left: 112,
+      right: mode == AppMode.tracking ? 360 : 224,
+    ),
+    panels: {
+      PanelId.playbackControls: const DockPanelState(edge: PanelDockEdge.left),
+      PanelId.eventButtons: const DockPanelState(edge: PanelDockEdge.right),
+      PanelId.eventNavigation: const DockPanelState(edge: PanelDockEdge.right),
+      PanelId.playerTracking: const DockPanelState(edge: PanelDockEdge.right),
+      PanelId.drawingTools: const DockPanelState(
+        edge: PanelDockEdge.right,
+        collapsed: true,
+      ),
+    },
+  );
+
   bool panelVisible(PanelId id) =>
       _panel(id).visible ?? _modeDefaults[_currentMode]?[id] ?? false;
 

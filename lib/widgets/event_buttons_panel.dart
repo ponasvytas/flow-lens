@@ -1,20 +1,39 @@
 import 'package:flutter/material.dart';
 import '../models/sport_taxonomy.dart';
+import '../models/dock_layout_state.dart';
+import '../controllers/event_entry_controller.dart';
+import 'event_entry_pager.dart';
 
-class EventButtonsPanel extends StatelessWidget {
+class EventButtonsPanel extends StatefulWidget {
   final Function(String categoryId) onEventTriggered;
   final SportTaxonomy? taxonomy;
   final bool showNumbers;
+  final int entryPage;
+  final ValueChanged<int>? onEntryPageChanged;
+  final PanelDockEdge dockEdge;
 
   const EventButtonsPanel({
     required this.onEventTriggered,
     this.taxonomy,
     this.showNumbers = false,
+    this.entryPage = 0,
+    this.onEntryPageChanged,
+    this.dockEdge = PanelDockEdge.floating,
     super.key,
   });
 
   @override
+  State<EventButtonsPanel> createState() => _EventButtonsPanelState();
+}
+
+class _EventButtonsPanelState extends State<EventButtonsPanel> {
+  String _query = '';
+  @override
   Widget build(BuildContext context) {
+    final taxonomy = widget.taxonomy;
+    final dockEdge = widget.dockEdge;
+    final showNumbers = widget.showNumbers;
+    final onEventTriggered = widget.onEventTriggered;
     if (taxonomy == null) {
       return Container(
         padding: const EdgeInsets.all(10),
@@ -29,117 +48,69 @@ class EventButtonsPanel extends StatelessWidget {
       );
     }
 
-    final categories = taxonomy!.categories;
-
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.black54,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: categories.asMap().entries.map((entry) {
-            final index = entry.key;
-            final category = entry.value;
-            return Padding(
-              padding: EdgeInsets.only(
-                right: index < categories.length - 1 ? 8 : 0,
-              ),
-              child: _buildButton(
-                context,
-                category.categoryId,
-                category.getIcon(),
-                category.name,
-                category.getColor(),
-                index + 1,
-              ),
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildButton(
-    BuildContext context,
-    String categoryId,
-    IconData icon,
-    String label,
-    Color color,
-    int number,
-  ) {
-    return SizedBox(
-      width: 80, // Slightly narrower to fit in one row
-      height: 60,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // Main button
-          SizedBox(
-            width: 80,
-            height: 60,
-            child: ElevatedButton(
-              onPressed: () => onEventTriggered(categoryId),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: color.withValues(alpha: 0.8),
-                padding: EdgeInsets.zero,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(icon, size: 24, color: Colors.white),
-                  const SizedBox(height: 4),
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
+    final vertical =
+        dockEdge == PanelDockEdge.left || dockEdge == PanelDockEdge.right;
+    return Padding(
+      padding: const EdgeInsets.all(8),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final all = taxonomy.captureCategories;
+          final choices = showNumbers
+              ? all
+                    .skip(widget.entryPage * EventEntryController.pageSize)
+                    .take(EventEntryController.pageSize)
+                    .toList()
+              : all.where((c) => c.matches(_query)).toList();
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!showNumbers)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: TextField(
+                    decoration: const InputDecoration(
+                      labelText: 'Find event category',
+                      prefixIcon: Icon(Icons.search),
                     ),
+                    onChanged: (value) => setState(() => _query = value.trim()),
                   ),
+                ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final entry in choices.asMap().entries)
+                    SizedBox(
+                      width: vertical ? constraints.maxWidth : 132,
+                      child: OutlinedButton.icon(
+                        onPressed: () =>
+                            onEventTriggered(entry.value.categoryId),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(48, 56),
+                          alignment: Alignment.centerLeft,
+                          padding: const EdgeInsets.all(12),
+                        ),
+                        icon: Icon(
+                          entry.value.getIcon(),
+                          size: 22,
+                          color: entry.value.getColor(),
+                        ),
+                        label: Text(
+                          '${showNumbers ? '${entry.key + 1}. ' : ''}${entry.value.name}',
+                        ),
+                      ),
+                    ),
                 ],
               ),
-            ),
-          ),
-          // Number badge (only shown when showNumbers is true)
-          if (showNumbers)
-            Positioned(
-              top: -6,
-              right: -6,
-              child: Container(
-                width: 24,
-                height: 24,
-                decoration: BoxDecoration(
-                  color: Colors.blue,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.5),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
+              if (showNumbers)
+                EventEntryPager(
+                  page: widget.entryPage,
+                  count: all.length,
+                  onChanged: widget.onEntryPageChanged,
                 ),
-                child: Center(
-                  child: Text(
-                    number.toString(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }

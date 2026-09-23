@@ -7,7 +7,7 @@ import '../models/app_mode.dart';
 import 'dockable_panel.dart';
 
 const double kDockResizeHandleSize = 8;
-const double kDockMinSideExtent = 180;
+const double kDockMinSideExtent = 112;
 const double kDockMinHorizontalExtent = 88;
 const double kDockMinCenterWidth = 320;
 const double kDockMinCenterHeight = 220;
@@ -20,6 +20,7 @@ class DockPanelEntry {
   final Size defaultFloatingSize;
   final double horizontalDockWidth;
   final Object? contentRevision;
+  final bool fillSideDock;
   final Widget Function(PanelDockEdge dockEdge) builder;
 
   const DockPanelEntry({
@@ -31,6 +32,7 @@ class DockPanelEntry {
     this.defaultFloatingSize = const Size(300, 240),
     this.horizontalDockWidth = 360,
     this.contentRevision,
+    this.fillSideDock = false,
   });
 }
 
@@ -122,11 +124,13 @@ class DockLayout extends StatefulWidget {
   final UIController uiController;
   final List<DockPanelEntry> panels;
   final Widget child;
+  final bool adaptive;
 
   const DockLayout({
     required this.uiController,
     required this.panels,
     this.child = const SizedBox.expand(),
+    this.adaptive = false,
     super.key,
   });
 
@@ -161,6 +165,67 @@ class _DockLayoutState extends State<DockLayout> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = constraints.biggest;
+        if (widget.adaptive &&
+            (size.width < 900 ||
+                size.width < size.height ||
+                size.height < 440)) {
+          final entries =
+              widget.panels
+                  .where((entry) => widget.uiController.panelVisible(entry.id))
+                  .toList()
+                ..sort(
+                  (a, b) => a.id == PanelId.playbackControls
+                      ? -1
+                      : b.id == PanelId.playbackControls
+                      ? 1
+                      : 0,
+                );
+          final primary = entries
+              .where((entry) => entry.id == PanelId.playbackControls)
+              .firstOrNull;
+          final others = entries
+              .where((entry) => entry.id != PanelId.playbackControls)
+              .toList();
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: widget.child),
+              if (entries.isNotEmpty)
+                SizedBox(
+                  height: math.min(400, size.height * 0.52),
+                  child: Material(
+                    color: const Color(0xFF1C1827),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (primary != null)
+                          Flexible(
+                            flex: 0,
+                            child: primary.builder(PanelDockEdge.bottom),
+                          ),
+                        if (others.length == 1 && others.single.fillSideDock)
+                          Expanded(
+                            child: others.single.builder(PanelDockEdge.bottom),
+                          )
+                        else if (others.isNotEmpty)
+                          Expanded(
+                            child: ListView(
+                              children: [
+                                for (final entry in others)
+                                  Padding(
+                                    padding: const EdgeInsets.all(8),
+                                    child: entry.builder(PanelDockEdge.bottom),
+                                  ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          );
+        }
         final groups = <PanelDockEdge, List<DockPanelEntry>>{};
         for (final entry in widget.panels) {
           if (!widget.uiController.panelVisible(entry.id)) continue;
@@ -235,7 +300,9 @@ class _DockLayoutState extends State<DockLayout> {
           child: horizontal
               ? SizedBox(
                   width: math.min(
-                    entry.horizontalDockWidth,
+                    widget.uiController.panelCollapsed(entry.id)
+                        ? kPanelCollapsedInlineWidth
+                        : entry.horizontalDockWidth,
                     workspaceSize.width,
                   ),
                   height: math.max(0, rect.height - 8),
@@ -243,6 +310,11 @@ class _DockLayoutState extends State<DockLayout> {
                 )
               : SizedBox(
                   width: math.max(0, rect.width - 8),
+                  height: entry.fillSideDock
+                      ? widget.uiController.panelCollapsed(entry.id)
+                            ? 50
+                            : math.max(0, rect.height - 8)
+                      : null,
                   child: _wrapPanel(entry, edge, workspaceSize),
                 ),
         ),
@@ -494,9 +566,10 @@ class _DockLayoutState extends State<DockLayout> {
       onDragStart: onDragStart,
       onDragUpdate: onDragUpdate,
       onDragEnd: onDragEnd,
-      constraints: sideDock
+      constraints: sideDock && !entry.fillSideDock
           ? const BoxConstraints()
           : const BoxConstraints.expand(),
+      scrollContent: !entry.fillSideDock,
       child: _panelChildren.putIfAbsent((
         entry.id,
         edge,

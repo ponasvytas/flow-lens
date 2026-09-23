@@ -4,6 +4,7 @@ import 'dart:js_interop';
 import 'package:web/web.dart' as web;
 
 final Set<String> _ownedVideoUrls = <String>{};
+final Map<String, String> _fileIdentities = {};
 
 String _own(String url) {
   _ownedVideoUrls.add(url);
@@ -31,7 +32,10 @@ Future<String?> pickVideoFileWeb() async {
   changeListener = ((web.Event event) {
     final files = input.files;
     if (files != null && files.length > 0) {
-      resolve(_own(web.URL.createObjectURL(files.item(0)!)));
+      final file = files.item(0)!;
+      final url = _own(web.URL.createObjectURL(file));
+      _fileIdentities[url] = '${file.name}:${file.size}';
+      resolve(url);
     } else {
       resolve(null);
     }
@@ -51,6 +55,9 @@ Future<String?> pickVideoFileWeb() async {
 void releaseVideoUrl(String? url) {
   if (url == null || !_ownedVideoUrls.remove(url)) return;
   web.URL.revokeObjectURL(url);
+  _fileIdentities.remove(url);
 }
 
 bool isOwnedVideoUrl(String url) => _ownedVideoUrls.contains(url);
+
+String? videoFileIdentity(String url) => _fileIdentities[url];

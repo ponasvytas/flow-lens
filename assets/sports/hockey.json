@@ -1,7 +1,1207 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "revision": "hockey-2",
   "sportId": "hockey",
   "name": "Hockey",
+  "contextFields": [
+    {
+      "id": "analysisTeam",
+      "name": "Analysis team",
+      "options": [],
+      "description": "Team whose perspective is used for Our/Opponent and coaching grades.",
+      "common": true
+    },
+    {
+      "id": "side",
+      "name": "Acting side",
+      "options": [
+        "Our team",
+        "Opponent",
+        "Unknown"
+      ],
+      "description": "",
+      "common": true
+    },
+    {
+      "id": "actor",
+      "name": "Player / goalie",
+      "options": [],
+      "description": "Name or jersey number; leave unset when unknown.",
+      "common": true
+    },
+    {
+      "id": "zone",
+      "name": "Zone",
+      "options": [
+        "Defensive",
+        "Neutral",
+        "Offensive",
+        "Unknown"
+      ],
+      "description": "",
+      "common": true
+    },
+    {
+      "id": "strength",
+      "name": "Strength",
+      "options": [
+        "Even strength",
+        "Power play",
+        "Penalty kill",
+        "Empty net",
+        "Other",
+        "Unknown"
+      ],
+      "description": "",
+      "common": true
+    },
+    {
+      "id": "period",
+      "name": "Period",
+      "options": [
+        "1",
+        "2",
+        "3",
+        "Overtime",
+        "Shootout",
+        "Other"
+      ],
+      "description": "",
+      "common": true
+    },
+    {
+      "id": "coverage",
+      "name": "Recording coverage",
+      "options": [
+        "Selective clips",
+        "Complete tracking"
+      ],
+      "description": "Complete tracking only when all relevant opportunities were coded; selective clips do not support success rates.",
+      "common": true
+    },
+    {
+      "id": "incident",
+      "name": "Linked play ID",
+      "options": [],
+      "description": "Use the same ID for observations of the same play. Do not count a shot, save and block as separate attempts.",
+      "common": true
+    },
+    {
+      "id": "notes",
+      "name": "Coaching note",
+      "options": [],
+      "description": "",
+      "common": true
+    },
+    {
+      "id": "shotContext",
+      "name": "Shot context",
+      "options": [
+        "Rebound shot",
+        "One-timer",
+        "Rush",
+        "Screened",
+        "Deflected",
+        "Other"
+      ],
+      "description": "",
+      "common": false
+    },
+    {
+      "id": "shotTechnique",
+      "name": "Shot technique",
+      "options": [
+        "Wrist",
+        "Snap",
+        "Slap",
+        "Backhand",
+        "Tip/deflection",
+        "Other",
+        "Unknown"
+      ],
+      "description": "",
+      "common": false
+    },
+    {
+      "id": "miss",
+      "name": "Miss detail",
+      "options": [
+        "Wide",
+        "High",
+        "Post/crossbar",
+        "Unknown"
+      ],
+      "description": "",
+      "common": false
+    },
+    {
+      "id": "passMethod",
+      "name": "Pass method",
+      "options": [
+        "Direct",
+        "Stretch",
+        "Bank/board",
+        "Area/lead",
+        "Lateral",
+        "Backward",
+        "One-touch",
+        "Other"
+      ],
+      "description": "",
+      "common": false
+    },
+    {
+      "id": "passExecution",
+      "name": "Pass execution",
+      "options": [
+        "Tape-to-tape",
+        "Reachable",
+        "Difficult reception",
+        "Unknown"
+      ],
+      "description": "",
+      "common": false
+    },
+    {
+      "id": "pressure",
+      "name": "Pressure",
+      "options": [
+        "Pressured",
+        "Unpressured",
+        "Unknown"
+      ],
+      "description": "",
+      "common": false
+    },
+    {
+      "id": "possession",
+      "name": "Possession after action",
+      "options": [
+        "Retained",
+        "Lost",
+        "Contested",
+        "Unknown"
+      ],
+      "description": "",
+      "common": false
+    },
+    {
+      "id": "battleLocation",
+      "name": "Battle location",
+      "options": [
+        "Boards",
+        "Open ice",
+        "Net front",
+        "Other"
+      ],
+      "description": "",
+      "common": false
+    },
+    {
+      "id": "contact",
+      "name": "Contact",
+      "options": [
+        "Applied",
+        "Received",
+        "Both",
+        "None",
+        "Unknown"
+      ],
+      "description": "",
+      "common": false
+    },
+    {
+      "id": "crossedLine",
+      "name": "Crossed blue line",
+      "options": [
+        "Yes",
+        "No",
+        "Unknown"
+      ],
+      "description": "",
+      "common": false
+    },
+    {
+      "id": "intendedMethod",
+      "name": "Intended transition",
+      "options": [
+        "Carry",
+        "Pass",
+        "Dump/clear",
+        "Unknown"
+      ],
+      "description": "",
+      "common": false
+    },
+    {
+      "id": "recovered",
+      "name": "Dump/clear recovered by",
+      "options": [
+        "Our team",
+        "Opponent",
+        "Neither yet",
+        "Unknown"
+      ],
+      "description": "",
+      "common": false
+    },
+    {
+      "id": "defensiveResult",
+      "name": "Defensive result",
+      "options": [
+        "Possession gained",
+        "Lane denied",
+        "Forced dump",
+        "Forced turnover",
+        "Beaten",
+        "No change",
+        "Unknown"
+      ],
+      "description": "",
+      "common": false
+    },
+    {
+      "id": "coverageIssue",
+      "name": "Coaching focus",
+      "options": [
+        "Gap",
+        "Assignment",
+        "Support",
+        "Timing",
+        "Lane",
+        "Other"
+      ],
+      "description": "",
+      "common": false
+    },
+    {
+      "id": "rebound",
+      "name": "Rebound disposition",
+      "options": [
+        "Frozen",
+        "Directed safely",
+        "Dangerous rebound",
+        "Unclear"
+      ],
+      "description": "",
+      "common": false
+    },
+    {
+      "id": "goalieAction",
+      "name": "Goalie puck action",
+      "options": [
+        "Stop rim",
+        "Pass",
+        "Clear",
+        "Set/leave puck",
+        "Other"
+      ],
+      "description": "",
+      "common": false
+    },
+    {
+      "id": "goaliePosition",
+      "name": "Positioning focus",
+      "options": [
+        "Angle",
+        "Depth",
+        "Set position",
+        "Recovery",
+        "Other"
+      ],
+      "description": "",
+      "common": false
+    },
+    {
+      "id": "infraction",
+      "name": "Infraction",
+      "options": [],
+      "description": "Use the competition rule terminology; no assumed duration.",
+      "common": false
+    },
+    {
+      "id": "penaltyDuration",
+      "name": "Assessed duration",
+      "options": [],
+      "description": "As assessed (for example 2 min, 5 min, misconduct).",
+      "common": false
+    },
+    {
+      "id": "drawnBy",
+      "name": "Penalty drawn by",
+      "options": [],
+      "description": "Only identify a player when attribution is supported.",
+      "common": false
+    },
+    {
+      "id": "checkingRules",
+      "name": "Checking rules",
+      "options": [
+        "Body checking permitted",
+        "Body checking not permitted",
+        "Unknown"
+      ],
+      "description": "",
+      "common": false
+    }
+  ],
+  "quickPresets": [
+    {
+      "name": "Match review",
+      "eventTypeIds": [
+        "shot_goal",
+        "shot_saved",
+        "pass_completed",
+        "battle_won",
+        "zone_exit_denied",
+        "zone_entry_carry"
+      ]
+    },
+    {
+      "name": "Transition review",
+      "eventTypeIds": [
+        "possession_recovery",
+        "zone_exit_carry",
+        "zone_exit_denied",
+        "teamplay_regroup",
+        "zone_entry_carry",
+        "zone_entry_dump"
+      ]
+    },
+    {
+      "name": "Player development",
+      "eventTypeIds": [
+        "pass_completed",
+        "pass_incomplete",
+        "possession_lost",
+        "battle_won",
+        "teamplay_support",
+        "defense_coverage"
+      ]
+    },
+    {
+      "name": "Goalie review",
+      "eventTypeIds": [
+        "goalie_save",
+        "goalie_goal_against",
+        "goalie_puck_play",
+        "goalie_positioning"
+      ]
+    }
+  ],
+  "trackingPresets": [
+    {
+      "id": "hockey_pass_attempted",
+      "label": "Pass Attempted",
+      "kind": "counter",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "categoryId": "pass",
+      "definition": "Manual count of pass attempted. Record all relevant opportunities before using rates; do not add manual counts to derived Record totals."
+    },
+    {
+      "id": "hockey_pass_completed",
+      "label": "Pass / Completed",
+      "kind": "counter",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "categoryId": "pass",
+      "eventTypeId": "pass_completed",
+      "definition": "Intended teammate gains control from the pass, including bank, area and lead passes. Timestamp release."
+    },
+    {
+      "id": "hockey_pass_received",
+      "label": "Pass Received",
+      "kind": "counter",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "categoryId": "pass",
+      "definition": "Manual count of pass received. Record all relevant opportunities before using rates; do not add manual counts to derived Record totals."
+    },
+    {
+      "id": "hockey_shot_attempt",
+      "label": "Shot Attempt",
+      "kind": "counter",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "categoryId": "shot",
+      "definition": "Manual count of shot attempt. Record all relevant opportunities before using rates; do not add manual counts to derived Record totals."
+    },
+    {
+      "id": "hockey_shot_on_net",
+      "label": "Shots on target (including goals)",
+      "kind": "counter",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "categoryId": "shot",
+      "definition": "Count each on-target attempt once, including goals. Do not also add the Goal counter to this aggregate."
+    },
+    {
+      "id": "hockey_goal",
+      "label": "Shot / Goal",
+      "kind": "counter",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "categoryId": "shot",
+      "eventTypeId": "shot_goal",
+      "definition": "Awarded goal. Timestamp the scoring shot release; attribute the shooting team. A disallowed goal must be corrected. Grade assesses execution, not the score."
+    },
+    {
+      "id": "hockey_puck_touch",
+      "label": "Puck Touch",
+      "kind": "counter",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "categoryId": "possession",
+      "definition": "Manual count of puck touch. Record all relevant opportunities before using rates; do not add manual counts to derived Record totals."
+    },
+    {
+      "id": "hockey_puck_battle_won",
+      "label": "Battle / Won",
+      "kind": "counter",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "categoryId": "battle",
+      "eventTypeId": "battle_won",
+      "definition": "Our analysis team establishes controlled possession from a genuine puck contest. Timestamp resolution; touching the puck alone is not control."
+    },
+    {
+      "id": "hockey_puck_battle_lost",
+      "label": "Battle / Lost",
+      "kind": "counter",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "categoryId": "battle",
+      "eventTypeId": "battle_lost",
+      "definition": "The opponent establishes controlled possession from a genuine puck contest. Timestamp resolution; this does not assign blame to an individual."
+    },
+    {
+      "id": "hockey_turnover",
+      "label": "Possession losses (all causes)",
+      "kind": "counter",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "categoryId": "possession",
+      "definition": "Count each possession-change incident once across passes, carries and battles. Do not sum this aggregate with its causes."
+    },
+    {
+      "id": "hockey_takeaway",
+      "label": "Defense / Takeaway",
+      "kind": "counter",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "categoryId": "defense",
+      "eventTypeId": "defense_takeaway",
+      "definition": "Directly dispossess an opponent who controlled the puck. Excludes pass interception and uncontested recovery. Link the same possession-change incident."
+    },
+    {
+      "id": "hockey_interception",
+      "label": "Defense / Interception",
+      "kind": "counter",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "categoryId": "defense",
+      "eventTypeId": "defense_intercept",
+      "definition": "Gain controlled possession by intercepting an intended opponent pass. A deflection without control is not an interception."
+    },
+    {
+      "id": "hockey_zone_entry",
+      "label": "Zone Entry",
+      "kind": "counter",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "categoryId": "zone_entry",
+      "definition": "Manual count of zone entry. Record all relevant opportunities before using rates; do not add manual counts to derived Record totals."
+    },
+    {
+      "id": "hockey_controlled_zone_entry",
+      "label": "Controlled Zone Entry",
+      "kind": "counter",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "categoryId": "zone_entry",
+      "definition": "Manual count of controlled zone entry. Record all relevant opportunities before using rates; do not add manual counts to derived Record totals."
+    },
+    {
+      "id": "hockey_dump_in",
+      "label": "Zone entries / Dump-in",
+      "kind": "counter",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "categoryId": "zone_entry",
+      "eventTypeId": "zone_entry_dump",
+      "definition": "Puck crosses the blue line to enter the offensive zone by dump. Timestamp crossing; record retained possession or recovery independently."
+    },
+    {
+      "id": "hockey_zone_exit",
+      "label": "Zone Exit",
+      "kind": "counter",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "categoryId": "zone_exit",
+      "definition": "Manual count of zone exit. Record all relevant opportunities before using rates; do not add manual counts to derived Record totals."
+    },
+    {
+      "id": "hockey_controlled_zone_exit",
+      "label": "Controlled Zone Exit",
+      "kind": "counter",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "categoryId": "zone_exit",
+      "definition": "Manual count of controlled zone exit. Record all relevant opportunities before using rates; do not add manual counts to derived Record totals."
+    },
+    {
+      "id": "hockey_check_applied",
+      "label": "Check / pressure applied",
+      "kind": "counter",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "categoryId": "defense",
+      "definition": "Manual combined count of checks or pressure actions. Not an inference of possession gained or good execution."
+    },
+    {
+      "id": "hockey_blocked_shot",
+      "label": "Defense / Shot block",
+      "kind": "counter",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "categoryId": "defense",
+      "eventTypeId": "defense_shot_block",
+      "definition": "Defending skater blocks a shot attempt. Excludes blocked passes. Link to the originating shot; timestamp contact."
+    },
+    {
+      "id": "hockey_faceoff_won",
+      "label": "Faceoffs / Won",
+      "kind": "counter",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "categoryId": "faceoff",
+      "eventTypeId": "faceoff_won",
+      "definition": "Our team establishes controlled possession following the draw. Timestamp control; this is team outcome, not individual center credit."
+    },
+    {
+      "id": "hockey_faceoff_lost",
+      "label": "Faceoffs / Lost",
+      "kind": "counter",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "categoryId": "faceoff",
+      "eventTypeId": "faceoff_lost",
+      "definition": "Opponent establishes controlled possession following the draw. Timestamp control; do not infer individual blame."
+    },
+    {
+      "id": "hockey_time_with_puck",
+      "label": "Time with Puck",
+      "kind": "timer",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "timerMode": "toggle",
+      "categoryId": "possession",
+      "definition": "Manual duration of time with puck. Record all relevant opportunities before using rates; do not add manual counts to derived Record totals."
+    },
+    {
+      "id": "hockey_shift_time",
+      "label": "Shift Time",
+      "kind": "timer",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "timerMode": "toggle",
+      "definition": "Manual duration of shift time. Record all relevant opportunities before using rates; do not add manual counts to derived Record totals."
+    },
+    {
+      "id": "hockey_time_moving",
+      "label": "Time Moving",
+      "kind": "timer",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "timerMode": "hold",
+      "definition": "Manual duration of time moving. Record all relevant opportunities before using rates; do not add manual counts to derived Record totals."
+    },
+    {
+      "id": "hockey_time_stationary",
+      "label": "Time Stationary",
+      "kind": "timer",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "timerMode": "hold",
+      "definition": "Manual duration of time stationary. Record all relevant opportunities before using rates; do not add manual counts to derived Record totals."
+    },
+    {
+      "id": "hockey_time_in_offensive_zone",
+      "label": "Time in Offensive Zone",
+      "kind": "timer",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "timerMode": "toggle",
+      "categoryId": "teamPlay",
+      "definition": "Manual duration of time in offensive zone. Record all relevant opportunities before using rates; do not add manual counts to derived Record totals."
+    },
+    {
+      "id": "hockey_time_in_defensive_zone",
+      "label": "Time in Defensive Zone",
+      "kind": "timer",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "timerMode": "toggle",
+      "categoryId": "teamPlay",
+      "definition": "Manual duration of time in defensive zone. Record all relevant opportunities before using rates; do not add manual counts to derived Record totals."
+    },
+    {
+      "id": "hockey_time_pressuring",
+      "label": "Time Pressuring Puck Carrier",
+      "kind": "timer",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "timerMode": "hold",
+      "categoryId": "defense",
+      "definition": "Manual duration of time pressuring puck carrier. Record all relevant opportunities before using rates; do not add manual counts to derived Record totals."
+    },
+    {
+      "id": "hockey_time_defending_slot",
+      "label": "Time Defending Slot",
+      "kind": "timer",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "timerMode": "hold",
+      "categoryId": "defense",
+      "definition": "Manual duration of time defending slot. Record all relevant opportunities before using rates; do not add manual counts to derived Record totals."
+    },
+    {
+      "id": "hockey_time_in_battle",
+      "label": "Time in Puck Battle",
+      "kind": "timer",
+      "sportId": "hockey",
+      "isBuiltIn": true,
+      "taxonomyRevision": "hockey-2",
+      "timerMode": "hold",
+      "categoryId": "battle",
+      "definition": "Manual duration of time in puck battle. Record all relevant opportunities before using rates; do not add manual counts to derived Record totals."
+    },
+    {
+      "id": "event_shot_blocked",
+      "label": "Shot / Blocked",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "shot",
+      "eventTypeId": "shot_blocked",
+      "definition": "Shot attempt prevented from reaching the net by a defending skater. Link a defensive Shot block to this attempt; timestamp release.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_shot_saved",
+      "label": "Shot / Saved",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "shot",
+      "eventTypeId": "shot_saved",
+      "definition": "On-target shot stopped by the goalie, without a goal. Excludes goals and defensive shot blocks. Timestamp release.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_shot_missed",
+      "label": "Shot / Missed target",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "shot",
+      "eventTypeId": "shot_missed",
+      "definition": "Shot that does not enter and is not a save or defensive block; includes wide, high, post and crossbar. Timestamp release.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_shot_unknown",
+      "label": "Shot / Outcome unclear",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "shot",
+      "eventTypeId": "shot_unknown",
+      "definition": "A shot attempt is visible but its result cannot be established. Do not infer a result from the grade.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_pass_intercepted",
+      "label": "Pass / Intercepted",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "pass",
+      "eventTypeId": "pass_intercepted",
+      "definition": "Opponent gains control by intercepting an intended pass. Takes precedence over generic Incomplete. Timestamp release.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_pass_incomplete",
+      "label": "Pass / Incomplete",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "pass",
+      "eventTypeId": "pass_incomplete",
+      "definition": "Intended pass does not reach controlled teammate possession and is not an interception. Possession may remain contested or with our team.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_pass_unknown",
+      "label": "Pass / Outcome unclear",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "pass",
+      "eventTypeId": "pass_unknown",
+      "definition": "Pass attempt is visible but completion/control cannot be established.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_battle_unchanged",
+      "label": "Battle / No possession change",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "battle",
+      "eventTypeId": "battle_unchanged",
+      "definition": "A genuine contest ends with the original controlling team retaining control. Do not also label this as a new possession gain.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_battle_unknown",
+      "label": "Battle / Unclear",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "battle",
+      "eventTypeId": "battle_unknown",
+      "definition": "A puck contest is visible but control at its resolution cannot be established.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_defense_pressure",
+      "label": "Defense / Pressure",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "defense",
+      "eventTypeId": "defense_pressure",
+      "definition": "Reduce the puck carrier time or options through proximity and positioning. Record consequence separately; pressure need not produce a takeaway.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_defense_stick_check",
+      "label": "Defense / Stick check",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "defense",
+      "eventTypeId": "defense_stick_check",
+      "definition": "Use the stick to challenge the puck or restrict an option. A successful contact need not establish possession.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_defense_body_check",
+      "label": "Defense / Body check",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "defense",
+      "eventTypeId": "defense_body_check",
+      "definition": "Apply body contact to challenge an eligible opponent under the competition rules. Contact is not inherently positive; record checking rules and consequence.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_defense_gap",
+      "label": "Defense / Gap control",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "defense",
+      "eventTypeId": "defense_gap",
+      "definition": "Assess defender distance, angle and speed relative to the attacker at the marked moment. Specify the observed issue in context.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_defense_coverage",
+      "label": "Defense / Coverage",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "defense",
+      "eventTypeId": "defense_coverage",
+      "definition": "Assess assignment, positioning and lane protection at the marked moment. Do not infer a breakdown cause without evidence.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_goalie_goal_against",
+      "label": "Goalie / Goal Against",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "goalie",
+      "eventTypeId": "goalie_goal_against",
+      "definition": "Awarded goal conceded by the observed goalie/team. Timestamp shot release. This result does not establish goalie error.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_goalie_save",
+      "label": "Goalie / Save",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "goalie",
+      "eventTypeId": "goalie_save",
+      "definition": "The goalie prevents an on-target shot from scoring. Timestamp shot release and link the shot incident; assess rebound disposition separately.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_goalie_puck_play",
+      "label": "Goalie / Puck Play",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "goalie",
+      "eventTypeId": "goalie_puck_play",
+      "definition": "Goalie handles the puck outside a save: stop a rim, pass, clear, or set the puck. Record action outcome when observed.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_goalie_positioning",
+      "label": "Goalie / Positioning",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "goalie",
+      "eventTypeId": "goalie_positioning",
+      "definition": "Coaching observation of goalie angle, depth, set position, or recovery at the marked instant. Grade only what the view supports.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_teamplay_breakout",
+      "label": "Team Play / Breakout",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "teamPlay",
+      "eventTypeId": "teamplay_breakout",
+      "definition": "Sequence-level observation of recovery, support and puck movement out of the defensive zone. Not an additional discrete zone-exit attempt.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_teamplay_regroup",
+      "label": "Team Play / Regroup",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "teamPlay",
+      "eventTypeId": "teamplay_regroup",
+      "definition": "Controlled team reorganization before another attack, usually in the neutral zone. A backward pass alone is not a regroup.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_teamplay_forecheck",
+      "label": "Team Play / Forecheck",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "teamPlay",
+      "eventTypeId": "teamplay_forecheck",
+      "definition": "Coaching observation of coordinated pressure on an opponent breakout. Individual pressure/takeaway records may link to the same sequence.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_teamplay_backcheck",
+      "label": "Team Play / Backcheck",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "teamPlay",
+      "eventTypeId": "teamplay_backcheck",
+      "definition": "Team or player recovery pressure toward the defensive zone; assess positioning and assignment at the marked moment.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_teamplay_cycle",
+      "label": "Team Play / Cycle",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "teamPlay",
+      "eventTypeId": "teamplay_cycle",
+      "definition": "Coordinated possession rotation in the offensive zone. A sequence observation, not a new pass count.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_teamplay_support",
+      "label": "Team Play / Support / outlet",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "teamPlay",
+      "eventTypeId": "teamplay_support",
+      "definition": "Off-puck movement or positioning that creates a usable puck-carrier option. Note timing and lane availability.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_teamplay_screen",
+      "label": "Team Play / Screen",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "teamPlay",
+      "eventTypeId": "teamplay_screen",
+      "definition": "Off-puck positioning that obstructs the goalie view. Record whether the view supports the observation.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_teamplay_net_drive",
+      "label": "Team Play / Net drive",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "teamPlay",
+      "eventTypeId": "teamplay_net_drive",
+      "definition": "Off-puck route toward the net that creates space, a passing option or rebound presence. Grade decision/execution separately.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_penalty_us",
+      "label": "Penalty / Our penalty",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "penalty",
+      "eventTypeId": "penalty_us",
+      "definition": "Penalty assessed to the analysis team. Record the assessed infraction and duration if known; do not infer either from grade.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_penalty_them",
+      "label": "Penalty / Opponent penalty",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "penalty",
+      "eventTypeId": "penalty_them",
+      "definition": "Penalty assessed to the opponent. Do not infer which player drew it, or that it was drawn by a player.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_penalty_coincidental",
+      "label": "Penalty / Coincidental penalties",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "penalty",
+      "eventTypeId": "penalty_coincidental",
+      "definition": "Linked penalties assessed to both teams on the same incident. Preserve separate assessments in linked notes/events; do not infer strength state.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_possession_recovery",
+      "label": "Puck possession / Recovery",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "possession",
+      "eventTypeId": "possession_recovery",
+      "definition": "Establish control of an available loose puck without a direct opponent dispossession. Exclude already counted battle resolutions. Timestamp control.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_possession_carry",
+      "label": "Puck possession / Controlled carry",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "possession",
+      "eventTypeId": "possession_carry",
+      "definition": "Move while maintaining puck control. Mark the coaching moment; do not count every stride as a new carry.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_possession_lost",
+      "label": "Puck possession / Lost control",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "possession",
+      "eventTypeId": "possession_lost",
+      "definition": "Lose controlled possession outside a classified pass or resolved battle. Use notes for reception/carry cause if visible.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_zone_exit_carry",
+      "label": "Zone exits / Carry-out",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "zone_exit",
+      "eventTypeId": "zone_exit_carry",
+      "definition": "Puck crosses the blue line to leave the defensive zone by carry. Timestamp crossing; record retained possession or recovery independently.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_zone_exit_pass",
+      "label": "Zone exits / Pass-out",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "zone_exit",
+      "eventTypeId": "zone_exit_pass",
+      "definition": "Puck crosses the blue line to leave the defensive zone by pass. Timestamp crossing; record retained possession or recovery independently.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_zone_exit_clear",
+      "label": "Zone exits / Clear-out",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "zone_exit",
+      "eventTypeId": "zone_exit_clear",
+      "definition": "Puck crosses the blue line to leave the defensive zone by clear. Timestamp crossing; record retained possession or recovery independently.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_zone_exit_denied",
+      "label": "Zone exits / Exit denied",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "zone_exit",
+      "eventTypeId": "zone_exit_denied",
+      "definition": "An observable attempt to leave the defensive zone ends before crossing the line. Record intended method; timestamp the denial.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_zone_entry_carry",
+      "label": "Zone entries / Carry-in",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "zone_entry",
+      "eventTypeId": "zone_entry_carry",
+      "definition": "Puck crosses the blue line to enter the offensive zone by carry. Timestamp crossing; record retained possession or recovery independently.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_zone_entry_pass",
+      "label": "Zone entries / Pass-in",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "zone_entry",
+      "eventTypeId": "zone_entry_pass",
+      "definition": "Puck crosses the blue line to enter the offensive zone by pass. Timestamp crossing; record retained possession or recovery independently.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_zone_entry_denied",
+      "label": "Zone entries / Entry denied",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "zone_entry",
+      "eventTypeId": "zone_entry_denied",
+      "definition": "An observable attempt to enter the offensive zone ends before crossing the line. Record intended method; timestamp the denial.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_faceoff_unknown",
+      "label": "Faceoffs / Undetermined",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "faceoff",
+      "eventTypeId": "faceoff_unknown",
+      "definition": "The draw occurs but resulting team control cannot be established.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_stoppage_icing",
+      "label": "Stoppages / Icing",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "stoppage",
+      "eventTypeId": "stoppage_icing",
+      "definition": "Icing called under the competition rules. Attribute offending side if known; do not infer a pass attempt or turnover.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_stoppage_offside",
+      "label": "Stoppages / Offside",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "stoppage",
+      "eventTypeId": "stoppage_offside",
+      "definition": "Offside called under the competition rules. Link the entry attempt if known.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_stoppage_puck_out",
+      "label": "Stoppages / Puck out of play",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "stoppage",
+      "eventTypeId": "stoppage_puck_out",
+      "definition": "Play stops because the puck leaves the playing area. Do not infer delay-of-game without an assessed penalty.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_stoppage_covered",
+      "label": "Stoppages / Puck covered / frozen",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "stoppage",
+      "eventTypeId": "stoppage_covered",
+      "definition": "Play stops because the puck is covered or frozen. Link a goalie save when applicable; not an extra shot.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    },
+    {
+      "id": "event_stoppage_other",
+      "label": "Stoppages / Other whistle",
+      "kind": "counter",
+      "sportId": "hockey",
+      "categoryId": "stoppage",
+      "eventTypeId": "stoppage_other",
+      "definition": "Other observable stoppage. Describe the reason in notes; leave unknown when the footage does not establish it.",
+      "taxonomyRevision": "hockey-2",
+      "isBuiltIn": true
+    }
+  ],
   "categories": [
     {
       "categoryId": "shot",
@@ -12,28 +1212,63 @@
         {
           "eventTypeId": "shot_goal",
           "name": "Goal",
-          "defaultImpact": "positive"
+          "definition": "Awarded goal. Timestamp the scoring shot release; attribute the shooting team. A disallowed goal must be corrected. Grade assesses execution, not the score."
         },
         {
           "eventTypeId": "shot_on_net",
           "name": "On Net",
-          "defaultImpact": "positive"
+          "definition": "Legacy on-net observation; may include goals. Do not infer a non-goal save.",
+          "archived": true
         },
         {
           "eventTypeId": "shot_wide",
           "name": "Wide",
-          "defaultImpact": "negative"
+          "definition": "Legacy shot marked wide; high misses and posts were not explicitly distinguished.",
+          "archived": true
         },
         {
           "eventTypeId": "shot_blocked",
           "name": "Blocked",
-          "defaultImpact": "negative"
+          "definition": "Shot attempt prevented from reaching the net by a defending skater. Link a defensive Shot block to this attempt; timestamp release."
         },
         {
           "eventTypeId": "shot_rebound",
           "name": "Rebound",
-          "defaultImpact": "neutral"
+          "definition": "Legacy rebound observation; may refer to a rebound shot, rebound allowed, or recovery.",
+          "archived": true
+        },
+        {
+          "eventTypeId": "shot_saved",
+          "name": "Saved",
+          "definition": "On-target shot stopped by the goalie, without a goal. Excludes goals and defensive shot blocks. Timestamp release.",
+          "aliases": [
+            "on net",
+            "on target",
+            "save"
+          ]
+        },
+        {
+          "eventTypeId": "shot_missed",
+          "name": "Missed target",
+          "definition": "Shot that does not enter and is not a save or defensive block; includes wide, high, post and crossbar. Timestamp release.",
+          "aliases": [
+            "wide",
+            "high",
+            "post"
+          ]
+        },
+        {
+          "eventTypeId": "shot_unknown",
+          "name": "Outcome unclear",
+          "definition": "A shot attempt is visible but its result cannot be established. Do not infer a result from the grade.",
+          "aliases": []
         }
+      ],
+      "description": "One primary outcome per shot attempt; technique and quality are separate. Timestamp release.",
+      "contextFieldIds": [
+        "shotContext",
+        "shotTechnique",
+        "miss"
       ]
     },
     {
@@ -45,51 +1280,254 @@
         {
           "eventTypeId": "pass_tape_to_tape",
           "name": "Tape-to-Tape",
-          "defaultImpact": "positive"
+          "definition": "Legacy precise pass to a teammate stick; not a count of all completed passes.",
+          "archived": true
         },
         {
           "eventTypeId": "pass_turnover",
           "name": "Turnover",
-          "defaultImpact": "negative"
+          "definition": "Legacy possession loss attributed to a pass; mechanism unspecified.",
+          "archived": true
         },
         {
           "eventTypeId": "pass_stretch",
           "name": "Stretch",
-          "defaultImpact": "neutral"
+          "definition": "Legacy long advancing pass; completion and possession outcome unspecified.",
+          "archived": true
         },
         {
           "eventTypeId": "pass_icing",
           "name": "Icing",
-          "defaultImpact": "negative"
+          "definition": "Legacy icing observation filed under Passing; do not infer a pass attempt.",
+          "archived": true
+        },
+        {
+          "eventTypeId": "pass_completed",
+          "name": "Completed",
+          "definition": "Intended teammate gains control from the pass, including bank, area and lead passes. Timestamp release.",
+          "aliases": [
+            "tape-to-tape",
+            "complete"
+          ]
+        },
+        {
+          "eventTypeId": "pass_intercepted",
+          "name": "Intercepted",
+          "definition": "Opponent gains control by intercepting an intended pass. Takes precedence over generic Incomplete. Timestamp release.",
+          "aliases": []
+        },
+        {
+          "eventTypeId": "pass_incomplete",
+          "name": "Incomplete",
+          "definition": "Intended pass does not reach controlled teammate possession and is not an interception. Possession may remain contested or with our team.",
+          "aliases": []
+        },
+        {
+          "eventTypeId": "pass_unknown",
+          "name": "Outcome unclear",
+          "definition": "Pass attempt is visible but completion/control cannot be established.",
+          "aliases": []
         }
+      ],
+      "description": "Classify each intended pass by outcome; method and precision are independent. Timestamp release.",
+      "contextFieldIds": [
+        "passMethod",
+        "passExecution",
+        "pressure",
+        "possession"
+      ]
+    },
+    {
+      "categoryId": "possession",
+      "name": "Puck possession",
+      "iconKey": "touch_app",
+      "colorKey": "amber",
+      "eventTypes": [
+        {
+          "eventTypeId": "possession_recovery",
+          "name": "Recovery",
+          "definition": "Establish control of an available loose puck without a direct opponent dispossession. Exclude already counted battle resolutions. Timestamp control.",
+          "aliases": []
+        },
+        {
+          "eventTypeId": "possession_carry",
+          "name": "Controlled carry",
+          "definition": "Move while maintaining puck control. Mark the coaching moment; do not count every stride as a new carry.",
+          "aliases": []
+        },
+        {
+          "eventTypeId": "possession_lost",
+          "name": "Lost control",
+          "definition": "Lose controlled possession outside a classified pass or resolved battle. Use notes for reception/carry cause if visible.",
+          "aliases": [
+            "giveaway",
+            "turnover"
+          ]
+        }
+      ],
+      "description": "Possession actions outside separately recorded passes and resolved battles.",
+      "contextFieldIds": [
+        "pressure",
+        "possession",
+        "contact"
       ]
     },
     {
       "categoryId": "battle",
       "name": "Battle",
-      "iconKey": "close",
-      "colorKey": "redAccent",
+      "iconKey": "compare_arrows",
+      "colorKey": "deepPurple",
       "eventTypes": [
         {
           "eventTypeId": "battle_won",
           "name": "Won",
-          "defaultImpact": "positive"
+          "definition": "Our analysis team establishes controlled possession from a genuine puck contest. Timestamp resolution; touching the puck alone is not control."
         },
         {
           "eventTypeId": "battle_lost",
           "name": "Lost",
-          "defaultImpact": "negative"
+          "definition": "The opponent establishes controlled possession from a genuine puck contest. Timestamp resolution; this does not assign blame to an individual."
         },
         {
           "eventTypeId": "battle_hit_given",
           "name": "Hit Given",
-          "defaultImpact": "positive"
+          "definition": "Legacy contact applied; does not imply a battle win or good execution.",
+          "archived": true
         },
         {
           "eventTypeId": "battle_hit_taken",
           "name": "Hit Taken",
-          "defaultImpact": "negative"
+          "definition": "Legacy contact received; does not imply a battle loss or poor execution.",
+          "archived": true
+        },
+        {
+          "eventTypeId": "battle_unchanged",
+          "name": "No possession change",
+          "definition": "A genuine contest ends with the original controlling team retaining control. Do not also label this as a new possession gain.",
+          "aliases": []
+        },
+        {
+          "eventTypeId": "battle_unknown",
+          "name": "Unclear",
+          "definition": "A puck contest is visible but control at its resolution cannot be established.",
+          "aliases": []
         }
+      ],
+      "description": "A genuine puck contest, resolved by team control. Contact alone is not success.",
+      "contextFieldIds": [
+        "battleLocation",
+        "contact",
+        "possession"
+      ]
+    },
+    {
+      "categoryId": "zone_exit",
+      "name": "Zone exits",
+      "iconKey": "logout",
+      "colorKey": "lightBlue",
+      "eventTypes": [
+        {
+          "eventTypeId": "zone_exit_carry",
+          "name": "Carry-out",
+          "definition": "Puck crosses the blue line to leave the defensive zone by carry. Timestamp crossing; record retained possession or recovery independently.",
+          "aliases": [],
+          "contextDefaults": {
+            "crossedLine": "Yes",
+            "intendedMethod": "Carry"
+          }
+        },
+        {
+          "eventTypeId": "zone_exit_pass",
+          "name": "Pass-out",
+          "definition": "Puck crosses the blue line to leave the defensive zone by pass. Timestamp crossing; record retained possession or recovery independently.",
+          "aliases": [],
+          "contextDefaults": {
+            "crossedLine": "Yes",
+            "intendedMethod": "Pass"
+          }
+        },
+        {
+          "eventTypeId": "zone_exit_clear",
+          "name": "Clear-out",
+          "definition": "Puck crosses the blue line to leave the defensive zone by clear. Timestamp crossing; record retained possession or recovery independently.",
+          "aliases": [],
+          "contextDefaults": {
+            "crossedLine": "Yes",
+            "intendedMethod": "Dump/clear"
+          }
+        },
+        {
+          "eventTypeId": "zone_exit_denied",
+          "name": "Exit denied",
+          "definition": "An observable attempt to leave the defensive zone ends before crossing the line. Record intended method; timestamp the denial.",
+          "aliases": [],
+          "contextDefaults": {
+            "crossedLine": "No"
+          }
+        }
+      ],
+      "description": "Attempts to leave the defensive zone. Crossing the line and retaining control are separate facts.",
+      "contextFieldIds": [
+        "crossedLine",
+        "intendedMethod",
+        "possession",
+        "recovered",
+        "pressure"
+      ]
+    },
+    {
+      "categoryId": "zone_entry",
+      "name": "Zone entries",
+      "iconKey": "login",
+      "colorKey": "indigo",
+      "eventTypes": [
+        {
+          "eventTypeId": "zone_entry_carry",
+          "name": "Carry-in",
+          "definition": "Puck crosses the blue line to enter the offensive zone by carry. Timestamp crossing; record retained possession or recovery independently.",
+          "aliases": [],
+          "contextDefaults": {
+            "crossedLine": "Yes",
+            "intendedMethod": "Carry"
+          }
+        },
+        {
+          "eventTypeId": "zone_entry_pass",
+          "name": "Pass-in",
+          "definition": "Puck crosses the blue line to enter the offensive zone by pass. Timestamp crossing; record retained possession or recovery independently.",
+          "aliases": [],
+          "contextDefaults": {
+            "crossedLine": "Yes",
+            "intendedMethod": "Pass"
+          }
+        },
+        {
+          "eventTypeId": "zone_entry_dump",
+          "name": "Dump-in",
+          "definition": "Puck crosses the blue line to enter the offensive zone by dump. Timestamp crossing; record retained possession or recovery independently.",
+          "aliases": [],
+          "contextDefaults": {
+            "crossedLine": "Yes",
+            "intendedMethod": "Dump/clear"
+          }
+        },
+        {
+          "eventTypeId": "zone_entry_denied",
+          "name": "Entry denied",
+          "definition": "An observable attempt to enter the offensive zone ends before crossing the line. Record intended method; timestamp the denial.",
+          "aliases": [],
+          "contextDefaults": {
+            "crossedLine": "No"
+          }
+        }
+      ],
+      "description": "Attempts to enter the offensive zone. Count each attempt once; record retained/recovered control separately.",
+      "contextFieldIds": [
+        "crossedLine",
+        "intendedMethod",
+        "possession",
+        "recovered",
+        "pressure"
       ]
     },
     {
@@ -101,66 +1539,85 @@
         {
           "eventTypeId": "defense_block",
           "name": "Block",
-          "defaultImpact": "positive"
+          "definition": "Legacy block observation; the blocked object was not specified.",
+          "archived": true
         },
         {
           "eventTypeId": "defense_takeaway",
           "name": "Takeaway",
-          "defaultImpact": "positive"
+          "definition": "Directly dispossess an opponent who controlled the puck. Excludes pass interception and uncontested recovery. Link the same possession-change incident."
         },
         {
           "eventTypeId": "defense_intercept",
-          "name": "Intercept",
-          "defaultImpact": "positive"
+          "name": "Interception",
+          "definition": "Gain controlled possession by intercepting an intended opponent pass. A deflection without control is not an interception."
         },
         {
           "eventTypeId": "defense_giveaway",
           "name": "Giveaway",
-          "defaultImpact": "negative"
+          "definition": "Legacy possession loss; action and responsible role unspecified.",
+          "archived": true
         },
         {
           "eventTypeId": "defense_clear",
           "name": "Clear",
-          "defaultImpact": "positive"
+          "definition": "Legacy clearance observation; crossing the blue line and retained possession unspecified.",
+          "archived": true
         },
         {
           "eventTypeId": "defense_breakdown",
           "name": "Breakdown",
-          "defaultImpact": "negative"
+          "definition": "Legacy defensive breakdown; technical cause unspecified.",
+          "archived": true
+        },
+        {
+          "eventTypeId": "defense_shot_block",
+          "name": "Shot block",
+          "definition": "Defending skater blocks a shot attempt. Excludes blocked passes. Link to the originating shot; timestamp contact.",
+          "aliases": []
+        },
+        {
+          "eventTypeId": "defense_pressure",
+          "name": "Pressure",
+          "definition": "Reduce the puck carrier time or options through proximity and positioning. Record consequence separately; pressure need not produce a takeaway.",
+          "aliases": []
+        },
+        {
+          "eventTypeId": "defense_stick_check",
+          "name": "Stick check",
+          "definition": "Use the stick to challenge the puck or restrict an option. A successful contact need not establish possession.",
+          "aliases": []
+        },
+        {
+          "eventTypeId": "defense_body_check",
+          "name": "Body check",
+          "definition": "Apply body contact to challenge an eligible opponent under the competition rules. Contact is not inherently positive; record checking rules and consequence.",
+          "aliases": []
+        },
+        {
+          "eventTypeId": "defense_gap",
+          "name": "Gap control",
+          "definition": "Assess defender distance, angle and speed relative to the attacker at the marked moment. Specify the observed issue in context.",
+          "aliases": [
+            "breakdown"
+          ]
+        },
+        {
+          "eventTypeId": "defense_coverage",
+          "name": "Coverage",
+          "definition": "Assess assignment, positioning and lane protection at the marked moment. Do not infer a breakdown cause without evidence.",
+          "aliases": [
+            "breakdown"
+          ]
         }
-      ]
-    },
-    {
-      "categoryId": "goalie",
-      "name": "Goalie",
-      "iconKey": "security",
-      "colorKey": "teal",
-      "eventTypes": [
-        {
-          "eventTypeId": "goalie_goal_against",
-          "name": "Goal Against",
-          "defaultImpact": "negative"
-        },
-        {
-          "eventTypeId": "goalie_save",
-          "name": "Save",
-          "defaultImpact": "positive"
-        },
-        {
-          "eventTypeId": "goalie_rebound_control",
-          "name": "Rebound Control",
-          "defaultImpact": "negative"
-        },
-        {
-          "eventTypeId": "goalie_puck_play",
-          "name": "Puck Play",
-          "defaultImpact": "neutral"
-        },
-        {
-          "eventTypeId": "goalie_positioning",
-          "name": "Positioning",
-          "defaultImpact": "neutral"
-        }
+      ],
+      "description": "Discrete defensive actions and technical observations; consequences can be linked to the same play.",
+      "contextFieldIds": [
+        "defensiveResult",
+        "coverageIssue",
+        "pressure",
+        "contact",
+        "checkingRules"
       ]
     },
     {
@@ -172,28 +1629,138 @@
         {
           "eventTypeId": "teamplay_breakout",
           "name": "Breakout",
-          "defaultImpact": "neutral"
+          "definition": "Sequence-level observation of recovery, support and puck movement out of the defensive zone. Not an additional discrete zone-exit attempt."
         },
         {
           "eventTypeId": "teamplay_zone_entry",
           "name": "Zone Entry",
-          "defaultImpact": "neutral"
+          "definition": "Legacy zone-entry observation; method and possession outcome unspecified.",
+          "archived": true
         },
         {
           "eventTypeId": "teamplay_regroup",
           "name": "Regroup",
-          "defaultImpact": "neutral"
+          "definition": "Controlled team reorganization before another attack, usually in the neutral zone. A backward pass alone is not a regroup."
         },
         {
           "eventTypeId": "teamplay_forecheck",
           "name": "Forecheck",
-          "defaultImpact": "neutral"
+          "definition": "Coaching observation of coordinated pressure on an opponent breakout. Individual pressure/takeaway records may link to the same sequence."
         },
         {
           "eventTypeId": "teamplay_faceoff",
           "name": "Face Off",
-          "defaultImpact": "neutral"
+          "definition": "Legacy faceoff observation; win/loss outcome unspecified.",
+          "archived": true
+        },
+        {
+          "eventTypeId": "teamplay_backcheck",
+          "name": "Backcheck",
+          "definition": "Team or player recovery pressure toward the defensive zone; assess positioning and assignment at the marked moment.",
+          "aliases": []
+        },
+        {
+          "eventTypeId": "teamplay_cycle",
+          "name": "Cycle",
+          "definition": "Coordinated possession rotation in the offensive zone. A sequence observation, not a new pass count.",
+          "aliases": []
+        },
+        {
+          "eventTypeId": "teamplay_support",
+          "name": "Support / outlet",
+          "definition": "Off-puck movement or positioning that creates a usable puck-carrier option. Note timing and lane availability.",
+          "aliases": []
+        },
+        {
+          "eventTypeId": "teamplay_screen",
+          "name": "Screen",
+          "definition": "Off-puck positioning that obstructs the goalie view. Record whether the view supports the observation.",
+          "aliases": []
+        },
+        {
+          "eventTypeId": "teamplay_net_drive",
+          "name": "Net drive",
+          "definition": "Off-puck route toward the net that creates space, a passing option or rebound presence. Grade decision/execution separately.",
+          "aliases": []
         }
+      ],
+      "description": "Tactical observations and sequences; do not sum these with discrete action totals.",
+      "contextFieldIds": [
+        "coverageIssue",
+        "pressure",
+        "possession"
+      ]
+    },
+    {
+      "categoryId": "faceoff",
+      "name": "Faceoffs",
+      "iconKey": "sports",
+      "colorKey": "brown",
+      "eventTypes": [
+        {
+          "eventTypeId": "faceoff_won",
+          "name": "Won",
+          "definition": "Our team establishes controlled possession following the draw. Timestamp control; this is team outcome, not individual center credit.",
+          "aliases": []
+        },
+        {
+          "eventTypeId": "faceoff_lost",
+          "name": "Lost",
+          "definition": "Opponent establishes controlled possession following the draw. Timestamp control; do not infer individual blame.",
+          "aliases": []
+        },
+        {
+          "eventTypeId": "faceoff_unknown",
+          "name": "Undetermined",
+          "definition": "The draw occurs but resulting team control cannot be established.",
+          "aliases": []
+        }
+      ],
+      "description": "Resolve a legal draw by team controlled possession under this coding protocol.",
+      "contextFieldIds": [
+        "possession"
+      ]
+    },
+    {
+      "categoryId": "goalie",
+      "name": "Goalie",
+      "iconKey": "security",
+      "colorKey": "teal",
+      "eventTypes": [
+        {
+          "eventTypeId": "goalie_goal_against",
+          "name": "Goal Against",
+          "definition": "Awarded goal conceded by the observed goalie/team. Timestamp shot release. This result does not establish goalie error."
+        },
+        {
+          "eventTypeId": "goalie_save",
+          "name": "Save",
+          "definition": "The goalie prevents an on-target shot from scoring. Timestamp shot release and link the shot incident; assess rebound disposition separately."
+        },
+        {
+          "eventTypeId": "goalie_rebound_control",
+          "name": "Rebound Control",
+          "definition": "Legacy rebound-control assessment; rebound disposition unspecified. Preserve the recorded grade.",
+          "archived": true
+        },
+        {
+          "eventTypeId": "goalie_puck_play",
+          "name": "Puck Play",
+          "definition": "Goalie handles the puck outside a save: stop a rim, pass, clear, or set the puck. Record action outcome when observed."
+        },
+        {
+          "eventTypeId": "goalie_positioning",
+          "name": "Positioning",
+          "definition": "Coaching observation of goalie angle, depth, set position, or recovery at the marked instant. Grade only what the view supports."
+        }
+      ],
+      "description": "Goalie observations linked to the originating shot where applicable. Outcomes do not imply execution quality.",
+      "contextFieldIds": [
+        "rebound",
+        "goalieAction",
+        "goaliePosition",
+        "shotContext",
+        "possession"
       ]
     },
     {
@@ -204,15 +1771,69 @@
       "eventTypes": [
         {
           "eventTypeId": "penalty_us",
-          "name": "Us",
-          "defaultImpact": "negative"
+          "name": "Our penalty",
+          "definition": "Penalty assessed to the analysis team. Record the assessed infraction and duration if known; do not infer either from grade."
         },
         {
           "eventTypeId": "penalty_them",
-          "name": "Them",
-          "defaultImpact": "positive"
+          "name": "Opponent penalty",
+          "definition": "Penalty assessed to the opponent. Do not infer which player drew it, or that it was drawn by a player."
+        },
+        {
+          "eventTypeId": "penalty_coincidental",
+          "name": "Coincidental penalties",
+          "definition": "Linked penalties assessed to both teams on the same incident. Preserve separate assessments in linked notes/events; do not infer strength state.",
+          "aliases": []
         }
+      ],
+      "description": "Assessed penalties attributed to the reference team; retain individual assessments for coincidental penalties.",
+      "contextFieldIds": [
+        "infraction",
+        "penaltyDuration",
+        "drawnBy",
+        "checkingRules"
       ]
+    },
+    {
+      "categoryId": "stoppage",
+      "name": "Stoppages",
+      "iconKey": "pause_circle_outline",
+      "colorKey": "blueGrey",
+      "eventTypes": [
+        {
+          "eventTypeId": "stoppage_icing",
+          "name": "Icing",
+          "definition": "Icing called under the competition rules. Attribute offending side if known; do not infer a pass attempt or turnover.",
+          "aliases": []
+        },
+        {
+          "eventTypeId": "stoppage_offside",
+          "name": "Offside",
+          "definition": "Offside called under the competition rules. Link the entry attempt if known.",
+          "aliases": []
+        },
+        {
+          "eventTypeId": "stoppage_puck_out",
+          "name": "Puck out of play",
+          "definition": "Play stops because the puck leaves the playing area. Do not infer delay-of-game without an assessed penalty.",
+          "aliases": []
+        },
+        {
+          "eventTypeId": "stoppage_covered",
+          "name": "Puck covered / frozen",
+          "definition": "Play stops because the puck is covered or frozen. Link a goalie save when applicable; not an extra shot.",
+          "aliases": []
+        },
+        {
+          "eventTypeId": "stoppage_other",
+          "name": "Other whistle",
+          "definition": "Other observable stoppage. Describe the reason in notes; leave unknown when the footage does not establish it.",
+          "aliases": []
+        }
+      ],
+      "description": "Whistles and stoppages linked to an action if known. Not automatically turnovers or negative grades.",
+      "contextFieldIds": []
     }
-  ]
+  ],
+  "contentVersion": 2
 }

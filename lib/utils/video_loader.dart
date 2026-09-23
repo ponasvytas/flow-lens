@@ -10,3 +10,5 @@ Future<String?> pickVideoFileWeb() => impl.pickVideoFileWeb();
 void releaseVideoUrl(String? url) => impl.releaseVideoUrl(url);
 
 bool isOwnedVideoUrl(String url) => impl.isOwnedVideoUrl(url);
+
+String? videoFileIdentity(String url) => impl.videoFileIdentity(url);
