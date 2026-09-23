@@ -53,7 +53,16 @@ class LaserPainter extends CustomPainter {
           trail.points[index].offset.dy,
         );
       }
+      canvas.save();
+      final reference = trail.canvasSize;
+      if (reference != null && reference.width > 0 && reference.height > 0) {
+        canvas.scale(
+          size.width / reference.width,
+          size.height / reference.height,
+        );
+      }
       canvas.drawPath(path, paint);
+      canvas.restore();
     }
 
     final activePoints = activeCapture?.points ?? currentStroke;

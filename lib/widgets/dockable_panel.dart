@@ -7,13 +7,14 @@ export '../models/dock_layout_state.dart';
 // ---------------------------------------------------------------------------
 // Layout constants — single source of truth
 // ---------------------------------------------------------------------------
-const double kAppTitleBarHeight = 64.0;
+const double kAppTitleBarHeight = 56.0;
 const double kProgressBarReserve = 70.0;
-const double kPanelTitleStripHeight = 32.0;
+const double kPanelTitleStripHeight = 48.0;
+const double kPanelCollapsedInlineWidth = 50.0;
 const double kPanelFloatingMinWidth = 220.0;
 const double kPanelFloatingMaxWidth = 320.0;
 const double kPanelFallbackWidth = 220.0;
-const double kPanelCornerRadius = 8.0;
+const double kPanelCornerRadius = 12.0;
 const double kPanelEdgeMargin = 20.0;
 const Duration kCollapseAnimDuration = Duration(milliseconds: 180);
 
@@ -39,6 +40,9 @@ class DockPanel extends StatefulWidget {
   final GestureDragEndCallback? onDragEnd;
   final BoxConstraints constraints;
   final Widget child;
+  final bool scrollContent;
+  final VoidCallback? onHide;
+  final bool? inlineControls;
 
   const DockPanel({
     required this.panelId,
@@ -51,6 +55,9 @@ class DockPanel extends StatefulWidget {
     required this.presentationMode,
     required this.onPresentationModeChanged,
     required this.child,
+    this.scrollContent = true,
+    this.onHide,
+    this.inlineControls,
     this.onDragStart,
     this.onDragUpdate,
     this.onDragEnd,
@@ -66,6 +73,12 @@ class _DockPanelState extends State<DockPanel>
     with SingleTickerProviderStateMixin {
   late final AnimationController _collapseAnim;
   late final Animation<double> _collapseAnimation;
+  double _inlineExpandedWidth = kPanelFallbackWidth;
+
+  bool get _isHorizontal =>
+      widget.inlineControls ??
+      (widget.dockEdge == PanelDockEdge.top ||
+          widget.dockEdge == PanelDockEdge.bottom);
 
   @override
   void initState() {
@@ -130,10 +143,27 @@ class _DockPanelState extends State<DockPanel>
           'Dock Bottom',
         ),
         _menuItem(PanelDockEdge.floating, Icons.open_with, 'Float'),
+        PopupMenuItem<Object>(
+          value: _DockMenuCommand.collapse,
+          child: Text(widget.isCollapsed ? 'Expand panel' : 'Collapse panel'),
+        ),
+        if (widget.onHide != null) ...[
+          const PopupMenuDivider(),
+          PopupMenuItem<Object>(
+            value: _DockMenuCommand.hide,
+            child: Row(
+              children: [
+                const Icon(Icons.visibility_off_outlined, size: 20),
+                const SizedBox(width: 10),
+                Text('Hide ${widget.title}'),
+              ],
+            ),
+          ),
+        ],
         const PopupMenuDivider(),
         PopupMenuItem<Object>(
           value: _DockMenuCommand.togglePresentation,
-          height: 40,
+          height: 48,
           child: Row(
             children: [
               Icon(
@@ -155,8 +185,13 @@ class _DockPanelState extends State<DockPanel>
         ),
       ],
     ).then((selection) {
+      if (!mounted) return;
       if (selection is PanelDockEdge) {
         widget.onDockEdgeChanged(selection);
+      } else if (selection == _DockMenuCommand.collapse) {
+        widget.onCollapsedChanged(!widget.isCollapsed);
+      } else if (selection == _DockMenuCommand.hide) {
+        widget.onHide?.call();
       } else if (selection == _DockMenuCommand.togglePresentation) {
         widget.onPresentationModeChanged(
           widget.presentationMode == DockPresentationMode.overlay
@@ -175,7 +210,7 @@ class _DockPanelState extends State<DockPanel>
     final isActive = widget.dockEdge == edge;
     return PopupMenuItem<Object>(
       value: edge,
-      height: 36,
+      height: 48,
       child: Row(
         children: [
           Icon(
@@ -214,9 +249,9 @@ class _DockPanelState extends State<DockPanel>
     Widget panel = Container(
       constraints: widget.constraints,
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.82),
+        color: const Color(0xFF1C1827),
         borderRadius: BorderRadius.circular(kPanelCornerRadius),
-        border: Border.all(color: Colors.white24, width: 1),
+        border: Border.all(color: const Color(0xFF453953), width: 1),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.4),
@@ -227,10 +262,13 @@ class _DockPanelState extends State<DockPanel>
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
+          if (_isHorizontal) return _buildInlineControls(constraints);
           final content = SizeTransition(
             sizeFactor: _collapseAnimation,
-            axisAlignment: -1.0,
-            child: SingleChildScrollView(child: widget.child),
+            alignment: Alignment.topCenter,
+            child: widget.scrollContent
+                ? SingleChildScrollView(child: widget.child)
+                : widget.child,
           );
           return Column(
             mainAxisSize: constraints.hasBoundedHeight
@@ -256,10 +294,49 @@ class _DockPanelState extends State<DockPanel>
   // Title strip
   // -------------------------------------------------------------------------
 
+  Widget _buildInlineControls(BoxConstraints constraints) {
+    if (!widget.isCollapsed) _inlineExpandedWidth = constraints.maxWidth;
+    return Stack(
+      alignment: Alignment.centerLeft,
+      children: [
+        // Keep panel state and scroll position while collapsed, at its full width.
+        Offstage(
+          offstage: widget.isCollapsed,
+          child: ExcludeFocus(
+            excluding: widget.isCollapsed,
+            child: OverflowBox(
+              alignment: Alignment.centerLeft,
+              minWidth: _inlineExpandedWidth,
+              maxWidth: _inlineExpandedWidth,
+              child: Row(
+                children: [
+                  SizedBox(width: 48, child: _dockButton()),
+                  Expanded(
+                    child: widget.scrollContent
+                        ? SingleChildScrollView(child: widget.child)
+                        : widget.child,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (widget.isCollapsed)
+          Center(
+            child: IconButton(
+              tooltip: 'Expand ${widget.title}',
+              onPressed: () => widget.onCollapsedChanged(false),
+              icon: Icon(widget.icon, size: 20),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _buildTitleStrip({bool compact = false}) {
     final strip = Container(
       height: kPanelTitleStripHeight,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 0),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.06),
         borderRadius: BorderRadius.only(
@@ -288,95 +365,59 @@ class _DockPanelState extends State<DockPanel>
     );
   }
 
-  Widget _buildFullStrip() {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Builder(
-          builder: (ctx) => GestureDetector(
-            onTap: () => _showDockMenu(ctx),
-            child: Tooltip(
-              message: 'Dock position',
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
-                child: Icon(
-                  widget.dockEdge == PanelDockEdge.floating
-                      ? Icons.open_with
-                      : Icons.push_pin,
-                  color: widget.dockEdge == PanelDockEdge.floating
-                      ? Colors.white38
-                      : const Color(0xFF9b5fb8),
-                  size: 15,
-                ),
-              ),
-            ),
+  Widget _buildFullStrip() => Row(
+    children: [
+      _dockButton(),
+      Expanded(
+        child: Text(
+          widget.title,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Color(0xFFC0B6CD),
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
           ),
         ),
-        const SizedBox(width: 4),
-        Icon(widget.icon, color: Colors.white70, size: 14),
-        const SizedBox(width: 6),
-        Flexible(
-          child: Text(
-            widget.title,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.5,
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        const SizedBox(width: 4),
-        GestureDetector(
-          onTap: () => widget.onCollapsedChanged(!widget.isCollapsed),
-          child: Padding(
-            padding: const EdgeInsets.all(4),
-            child: Icon(
-              widget.isCollapsed
-                  ? Icons.keyboard_arrow_down
-                  : Icons.keyboard_arrow_up,
-              color: Colors.white54,
-              size: 16,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+      ),
+      _collapseButton(),
+    ],
+  );
 
-  Widget _buildCompactStrip() {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Builder(
-          builder: (ctx) => GestureDetector(
-            onTap: () => _showDockMenu(ctx),
-            child: Tooltip(
-              message: 'Dock position',
-              child: Icon(
-                Icons.push_pin,
-                color: const Color(0xFF9b5fb8),
-                size: 14,
-              ),
-            ),
+  Widget _dockButton() => Builder(
+    builder: (ctx) => IconButton(
+      tooltip: _isHorizontal
+          ? '${widget.title} — Dock position'
+          : 'Dock position',
+      onPressed: () => _showDockMenu(ctx),
+      icon: Icon(
+        _isHorizontal ? widget.icon : Icons.more_horiz,
+        size: 20,
+        color: const Color(0xFFC4A5FA),
+      ),
+    ),
+  );
+
+  Widget _collapseButton() => IconButton(
+    tooltip: widget.isCollapsed ? 'Expand panel' : 'Collapse panel',
+    onPressed: () => widget.onCollapsedChanged(!widget.isCollapsed),
+    icon: Icon(
+      _isHorizontal
+          ? Icons.chevron_left
+          : widget.isCollapsed
+          ? Icons.expand_more
+          : Icons.expand_less,
+      size: 20,
+    ),
+  );
+
+  Widget _buildCompactStrip() => LayoutBuilder(
+    builder: (context, constraints) => constraints.maxWidth >= 190
+        ? _buildFullStrip()
+        : Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [_dockButton(), _collapseButton()],
           ),
-        ),
-        const SizedBox(width: 2),
-        GestureDetector(
-          onTap: () => widget.onCollapsedChanged(!widget.isCollapsed),
-          child: Icon(
-            widget.isCollapsed
-                ? Icons.keyboard_arrow_down
-                : Icons.keyboard_arrow_up,
-            color: Colors.white54,
-            size: 14,
-          ),
-        ),
-      ],
-    );
-  }
+  );
 }
 
-enum _DockMenuCommand { togglePresentation }
+enum _DockMenuCommand { togglePresentation, hide, collapse }

@@ -5,12 +5,17 @@ import 'package:flutter/material.dart';
 import '../controllers/ui_controller.dart';
 import '../models/app_mode.dart';
 import 'dockable_panel.dart';
+import 'tool_action_grid.dart';
+import 'dock_split.dart';
 
 const double kDockResizeHandleSize = 8;
-const double kDockMinSideExtent = 180;
+const double kDockMinSideExtent = 112;
 const double kDockMinHorizontalExtent = 88;
 const double kDockMinCenterWidth = 320;
 const double kDockMinCenterHeight = 220;
+
+bool usesCompactDockLayout(Size size) =>
+    size.width < 900 || size.width < size.height || size.height < 440;
 
 class DockPanelEntry {
   final PanelId id;
@@ -18,8 +23,9 @@ class DockPanelEntry {
   final IconData icon;
   final Offset defaultFloatingPosition;
   final Size defaultFloatingSize;
-  final double horizontalDockWidth;
+  final ToolsetLayout layout;
   final Object? contentRevision;
+  final bool fillSideDock;
   final Widget Function(PanelDockEdge dockEdge) builder;
 
   const DockPanelEntry({
@@ -29,8 +35,9 @@ class DockPanelEntry {
     required this.defaultFloatingPosition,
     required this.builder,
     this.defaultFloatingSize = const Size(300, 240),
-    this.horizontalDockWidth = 360,
+    this.layout = const ToolsetLayout.widget(),
     this.contentRevision,
+    this.fillSideDock = false,
   });
 }
 
@@ -122,11 +129,13 @@ class DockLayout extends StatefulWidget {
   final UIController uiController;
   final List<DockPanelEntry> panels;
   final Widget child;
+  final bool adaptive;
 
   const DockLayout({
     required this.uiController,
     required this.panels,
     this.child = const SizedBox.expand(),
+    this.adaptive = false,
     super.key,
   });
 
@@ -140,6 +149,8 @@ class _DockLayoutState extends State<DockLayout> {
   final Map<PanelId, Size> _dragSizes = {};
   final Map<(PanelId, PanelDockEdge, Object?), Widget> _panelChildren = {};
   DockEdgeExtents? _resizingExtents;
+  PanelId? _compactActive;
+  Set<PanelId> _compactVisible = {};
 
   @override
   void didUpdateWidget(DockLayout oldWidget) {
@@ -161,6 +172,155 @@ class _DockLayoutState extends State<DockLayout> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = constraints.biggest;
+        if (widget.adaptive && usesCompactDockLayout(size)) {
+          final entries =
+              widget.panels
+                  .where((entry) => widget.uiController.panelVisible(entry.id))
+                  .toList()
+                ..sort(
+                  (a, b) => a.id == PanelId.playbackControls
+                      ? -1
+                      : b.id == PanelId.playbackControls
+                      ? 1
+                      : 0,
+                );
+          final primary = entries
+              .where((entry) => entry.id == PanelId.playbackControls)
+              .firstOrNull;
+          final others = entries
+              .where((entry) => entry.id != PanelId.playbackControls)
+              .toList();
+          final newlyVisible = others.where(
+            (entry) => !_compactVisible.contains(entry.id),
+          );
+          if (_compactVisible.isNotEmpty && newlyVisible.isNotEmpty) {
+            _compactActive = newlyVisible.last.id;
+          }
+          _compactVisible = others.map((entry) => entry.id).toSet();
+          final active =
+              others.where((entry) => entry.id == _compactActive).firstOrNull ??
+              others.firstOrNull;
+          final primaryHeight = primary == null
+              ? 0.0
+              : widget.uiController.panelCollapsed(primary.id)
+              ? 50.0
+              : primary.layout.heightFor(
+                      size.width - 50,
+                      MediaQuery.textScalerOf(context),
+                    ) +
+                    2;
+          final activeExpanded =
+              active != null && !widget.uiController.panelCollapsed(active.id);
+          final tabsHeight = others.length > 1 ? 56.0 : 0.0;
+          final requestedHeight = activeExpanded
+              ? math.min(400.0, size.height * 0.52)
+              : primaryHeight + tabsHeight + (active == null ? 0 : 50);
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: widget.child),
+              if (entries.isNotEmpty)
+                SizedBox(
+                  height: math.min(requestedHeight, size.height * 0.6),
+                  child: Material(
+                    color: const Color(0xFF1C1827),
+                    child: LayoutBuilder(
+                      builder: (context, shelf) {
+                        final shortShelf =
+                            shelf.maxHeight < primaryHeight + tabsHeight + 96;
+                        if (shortShelf && active != null) {
+                          final selected =
+                              entries
+                                  .where((entry) => entry.id == _compactActive)
+                                  .firstOrNull ??
+                              active;
+                          return Column(
+                            children: [
+                              if (entries.length > 1)
+                                SizedBox(
+                                  height: 48,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                    ),
+                                    child: DropdownButton<PanelId>(
+                                      isExpanded: true,
+                                      value: selected.id,
+                                      underline: const SizedBox.shrink(),
+                                      items: [
+                                        for (final entry in entries)
+                                          DropdownMenuItem(
+                                            value: entry.id,
+                                            child: Text(entry.title),
+                                          ),
+                                      ],
+                                      onChanged: (id) =>
+                                          setState(() => _compactActive = id),
+                                    ),
+                                  ),
+                                ),
+                              Expanded(
+                                child: _wrapPanel(
+                                  selected,
+                                  PanelDockEdge.bottom,
+                                  size,
+                                  compact: entries.length == 1,
+                                ),
+                              ),
+                            ],
+                          );
+                        }
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (primary != null)
+                              SizedBox(
+                                height: primaryHeight,
+                                child: _wrapPanel(
+                                  primary,
+                                  PanelDockEdge.bottom,
+                                  size,
+                                ),
+                              ),
+                            if (others.length > 1)
+                              SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  children: [
+                                    for (final entry in others)
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 4,
+                                        ),
+                                        child: ChoiceChip(
+                                          label: Text(entry.title),
+                                          selected: entry.id == active?.id,
+                                          onSelected: (_) => setState(
+                                            () => _compactActive = entry.id,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            if (active != null)
+                              Expanded(
+                                child: _wrapPanel(
+                                  active,
+                                  PanelDockEdge.bottom,
+                                  size,
+                                  compact: true,
+                                ),
+                              ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ),
+            ],
+          );
+        }
         final groups = <PanelDockEdge, List<DockPanelEntry>>{};
         for (final entry in widget.panels) {
           if (!widget.uiController.panelVisible(entry.id)) continue;
@@ -171,10 +331,34 @@ class _DockLayoutState extends State<DockLayout> {
         final activeEdges = groups.keys
             .where((edge) => edge != PanelDockEdge.floating)
             .toSet();
+        final scaler = MediaQuery.textScalerOf(context);
+        var extents = _resizingExtents ?? widget.uiController.dockExtents;
+        for (final edge in [PanelDockEdge.top, PanelDockEdge.bottom]) {
+          final entries = groups[edge];
+          if (entries == null) continue;
+          final lanes = _horizontalLanes(entries, size.width, scaler);
+          final needed = lanes.fold(0.0, (sum, lane) => sum + lane.height);
+          extents = extents.withEdge(
+            edge,
+            entries.every(
+                  (entry) => widget.uiController.panelCollapsed(entry.id),
+                )
+                ? needed + 8
+                : math.max(extents.forEdge(edge), needed + 8),
+          );
+        }
+        for (final edge in [PanelDockEdge.left, PanelDockEdge.right]) {
+          if (groups[edge]?.every(
+                (entry) => widget.uiController.panelCollapsed(entry.id),
+              ) ??
+              false) {
+            extents = extents.withEdge(edge, kDockMinSideExtent);
+          }
+        }
         final geometry = resolveDockGeometry(
           size: size,
           activeEdges: activeEdges,
-          extents: _resizingExtents ?? widget.uiController.dockExtents,
+          extents: extents,
           presentationMode: widget.uiController.dockPresentationMode,
         );
         return Stack(
@@ -228,28 +412,101 @@ class _DockLayoutState extends State<DockLayout> {
   ) {
     final horizontal =
         edge == PanelDockEdge.top || edge == PanelDockEdge.bottom;
-    final panels = [
+    final scaler = MediaQuery.textScalerOf(context);
+    final lanes = _horizontalLanes(entries, rect.width, scaler);
+    final heights = [
       for (final entry in entries)
-        Padding(
-          padding: const EdgeInsets.all(4),
-          child: horizontal
-              ? SizedBox(
-                  width: math.min(
-                    entry.horizontalDockWidth,
-                    workspaceSize.width,
-                  ),
-                  height: math.max(0, rect.height - 8),
-                  child: _wrapPanel(entry, edge, workspaceSize),
-                )
-              : SizedBox(
-                  width: math.max(0, rect.width - 8),
-                  child: _wrapPanel(entry, edge, workspaceSize),
-                ),
-        ),
+        widget.uiController.panelCollapsed(entry.id)
+            ? 58.0
+            : entry.layout.heightFor(rect.width - 10, scaler) + 58,
     ];
-    final content = horizontal
-        ? ListView(scrollDirection: Axis.horizontal, children: panels)
-        : ListView(children: panels);
+    final available = math.max(0.0, rect.height - 8);
+    final expandedCount = entries
+        .where((entry) => !widget.uiController.panelCollapsed(entry.id))
+        .length;
+    final compactFrames =
+        !horizontal &&
+        available - (entries.length - expandedCount) * 58 < expandedCount * 106;
+    final rowsKey =
+        '${edge.name}/rows/${lanes.map((lane) => _groupKey(edge, Axis.horizontal, lane.items.map((item) => item.$1).toList())).join(';')}';
+    final content = Padding(
+      padding: EdgeInsets.only(
+        top: edge == PanelDockEdge.bottom ? 8 : 0,
+        bottom: edge == PanelDockEdge.bottom ? 0 : 8,
+      ),
+      child: horizontal
+          ? _split(
+              group: rowsKey,
+              axis: Axis.vertical,
+              preferred: lanes.map((lane) => lane.height).toList(),
+              minimums: List.filled(lanes.length, 58),
+              fixed: [
+                for (final lane in lanes)
+                  lane.items.every(
+                    (item) => widget.uiController.panelCollapsed(item.$1.id),
+                  ),
+              ],
+              labels: [
+                for (final lane in lanes)
+                  lane.items.map((item) => item.$1.title).join(', '),
+              ],
+              children: [
+                for (final lane in lanes)
+                  _split(
+                    group: _groupKey(
+                      edge,
+                      Axis.horizontal,
+                      lane.items.map((item) => item.$1).toList(),
+                    ),
+                    axis: Axis.horizontal,
+                    preferred: lane.items.map((item) => item.$2).toList(),
+                    minimums: lane.items
+                        .map((item) => _minimumWidth(item.$1, item.$2))
+                        .toList(),
+                    fixed: [
+                      for (final item in lane.items)
+                        widget.uiController.panelCollapsed(item.$1.id),
+                    ],
+                    labels: lane.items.map((item) => item.$1.title).toList(),
+                    children: [
+                      for (final item in lane.items)
+                        Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: _wrapPanel(item.$1, edge, workspaceSize),
+                        ),
+                    ],
+                  ),
+              ],
+            )
+          : _split(
+              group: _groupKey(edge, Axis.vertical, entries),
+              axis: Axis.vertical,
+              preferred: heights,
+              minimums: [
+                for (final entry in entries)
+                  widget.uiController.panelCollapsed(entry.id) || compactFrames
+                      ? 58
+                      : 106,
+              ],
+              fixed: [
+                for (final entry in entries)
+                  widget.uiController.panelCollapsed(entry.id),
+              ],
+              labels: entries.map((entry) => entry.title).toList(),
+              children: [
+                for (final entry in entries)
+                  Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: _wrapPanel(
+                      entry,
+                      edge,
+                      workspaceSize,
+                      forceInline: compactFrames,
+                    ),
+                  ),
+              ],
+            ),
+    );
     return Positioned.fromRect(
       rect: rect,
       child: DecoratedBox(
@@ -265,6 +522,109 @@ class _DockLayoutState extends State<DockLayout> {
         ),
       ),
     );
+  }
+
+  String _groupKey(
+    PanelDockEdge edge,
+    Axis axis,
+    List<DockPanelEntry> entries,
+  ) =>
+      '${edge.name}/${axis.name}/${entries.map((entry) => '${entry.id.name}${widget.uiController.panelCollapsed(entry.id) ? '!' : ''}').join('|')}';
+
+  double _minimumWidth(DockPanelEntry entry, double preferred) =>
+      widget.uiController.panelCollapsed(entry.id)
+      ? 58
+      : math.min(preferred, entry.layout.isActionSet ? 122 : 278);
+
+  Widget _split({
+    required String group,
+    required Axis axis,
+    required List<Widget> children,
+    required List<String> labels,
+    required List<double> preferred,
+    required List<double> minimums,
+    required List<bool> fixed,
+  }) => DockSplit(
+    key: ValueKey(
+      '${widget.uiController.currentMode.name}/${widget.uiController.isPresenting}/$group',
+    ),
+    axis: axis,
+    labels: labels,
+    preferred: preferred,
+    minimums: minimums,
+    fixed: fixed,
+    fractions: widget.uiController.dockSplit(group),
+    onChanged: (sizes) => widget.uiController.setDockSplit(group, sizes),
+    children: children,
+  );
+
+  List<_DockLane> _horizontalLanes(
+    List<DockPanelEntry> entries,
+    double width,
+    TextScaler scaler,
+  ) {
+    final groups = <List<DockPanelEntry>>[];
+    double ideal(DockPanelEntry entry) =>
+        widget.uiController.panelCollapsed(entry.id)
+        ? 58
+        : math.min(width, entry.layout.idealWidth + 58);
+    var used = 0.0;
+    for (final entry in entries) {
+      if (groups.isEmpty || used + ideal(entry) > width + 0.5) {
+        groups.add([]);
+        used = 0;
+      }
+      groups.last.add(entry);
+      used += ideal(entry);
+    }
+    return [
+      for (final group in groups)
+        () {
+          final used = group.fold(0.0, (sum, entry) => sum + ideal(entry));
+          final expanded = group
+              .where((entry) => !widget.uiController.panelCollapsed(entry.id))
+              .length;
+          final preferred = [
+            for (final entry in group)
+              ideal(entry) +
+                  (widget.uiController.panelCollapsed(entry.id)
+                      ? 0
+                      : (width - used) / expanded),
+          ];
+          final widths = allocateDockSplit(
+            available: width,
+            preferred: preferred,
+            minimums: [
+              for (var i = 0; i < group.length; i++)
+                _minimumWidth(group[i], preferred[i]),
+            ],
+            fixed: [
+              for (final entry in group)
+                widget.uiController.panelCollapsed(entry.id),
+            ],
+            fractions: widget.uiController.dockSplit(
+              _groupKey(
+                widget.uiController.dockEdge(group.first.id),
+                Axis.horizontal,
+                group,
+              ),
+            ),
+          );
+          final items = [
+            for (var i = 0; i < group.length; i++) (group[i], widths[i]),
+          ];
+          final height = items.fold(
+            58.0,
+            (height, item) => math.max(
+              height,
+              widget.uiController.panelCollapsed(item.$1.id)
+                  ? 58
+                  : item.$1.layout.heightFor(item.$2 - 58, scaler) + 10,
+            ),
+          );
+          return _DockLane(items, height);
+        }(),
+    ];
   }
 
   Widget _buildResizeHandle(PanelDockEdge edge) {
@@ -301,7 +661,25 @@ class _DockLayoutState extends State<DockLayout> {
           behavior: HitTestBehavior.opaque,
           onPanUpdate: (details) => _resizeDock(edge, details.delta),
           onPanEnd: (_) => _finishDockResize(edge),
-          child: ColoredBox(color: Colors.white.withValues(alpha: 0.08)),
+          // Keep the grab area generous; only the visible rail clears corners.
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: vertical ? 0 : kPanelCornerRadius + 4,
+              vertical: vertical ? kPanelCornerRadius + 4 : 0,
+            ),
+            child: Center(
+              child: Container(
+                width: vertical ? 2 : double.infinity,
+                height: vertical ? double.infinity : 2,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(
+                    kDockResizeHandleSize / 2,
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -344,10 +722,21 @@ class _DockLayoutState extends State<DockLayout> {
         kPanelFloatingMinWidth,
         math.max(kPanelFloatingMinWidth, workspaceSize.width),
       ),
-      size.height.clamp(
-        kPanelTitleStripHeight,
-        math.max(kPanelTitleStripHeight, workspaceSize.height),
-      ),
+      math
+          .max(
+            size.height,
+            entry.layout.isActionSet
+                ? entry.layout.heightFor(
+                        math.min(size.width, workspaceSize.width) - 2,
+                        MediaQuery.textScalerOf(context),
+                      ) +
+                      50
+                : 0.0,
+          )
+          .clamp(
+            kPanelTitleStripHeight,
+            math.max(kPanelTitleStripHeight, workspaceSize.height),
+          ),
     );
     final requestedPosition =
         _dragPositions[entry.id] ??
@@ -357,11 +746,13 @@ class _DockLayoutState extends State<DockLayout> {
         );
     final position = _clampPosition(
       requestedPosition,
-      collapsed ? Size(clampedSize.width, kPanelTitleStripHeight) : clampedSize,
+      collapsed
+          ? Size(clampedSize.width, kPanelTitleStripHeight + 2)
+          : clampedSize,
       workspaceSize,
     );
     final displayedHeight = collapsed
-        ? kPanelTitleStripHeight
+        ? kPanelTitleStripHeight + 2
         : clampedSize.height;
     return Positioned(
       left: position.dx,
@@ -413,10 +804,13 @@ class _DockLayoutState extends State<DockLayout> {
                   onPanEnd: (_) => _finishFloatingResize(entry, workspaceSize),
                   child: const Align(
                     alignment: Alignment.bottomRight,
-                    child: Icon(
-                      Icons.drag_handle,
-                      size: 15,
-                      color: Colors.white38,
+                    child: Padding(
+                      padding: EdgeInsets.only(right: 4, bottom: 4),
+                      child: Icon(
+                        Icons.drag_handle,
+                        size: 14,
+                        color: Colors.white38,
+                      ),
                     ),
                   ),
                 ),
@@ -475,13 +869,15 @@ class _DockLayoutState extends State<DockLayout> {
     DockPanelEntry entry,
     PanelDockEdge edge,
     Size workspaceSize, {
+    bool forceInline = false,
     GestureDragStartCallback? onDragStart,
     GestureDragUpdateCallback? onDragUpdate,
     GestureDragEndCallback? onDragEnd,
+    bool compact = false,
   }) {
     final ui = widget.uiController;
-    final sideDock = edge == PanelDockEdge.left || edge == PanelDockEdge.right;
     return DockPanel(
+      key: ValueKey('workspace-panel-${entry.id.name}'),
       panelId: entry.id,
       title: entry.title,
       icon: entry.icon,
@@ -489,14 +885,19 @@ class _DockLayoutState extends State<DockLayout> {
       onCollapsedChanged: (_) => ui.toggleCollapsed(entry.id),
       dockEdge: edge,
       onDockEdgeChanged: (newEdge) => ui.setDockEdge(entry.id, newEdge),
+      onHide: () => ui.hidePanel(entry.id),
+      inlineControls: forceInline
+          ? true
+          : compact
+          ? false
+          : null,
       presentationMode: ui.dockPresentationMode,
       onPresentationModeChanged: ui.setDockPresentationMode,
       onDragStart: onDragStart,
       onDragUpdate: onDragUpdate,
       onDragEnd: onDragEnd,
-      constraints: sideDock
-          ? const BoxConstraints()
-          : const BoxConstraints.expand(),
+      constraints: const BoxConstraints.expand(),
+      scrollContent: !entry.fillSideDock && !entry.layout.isActionSet,
       child: _panelChildren.putIfAbsent((
         entry.id,
         edge,
@@ -504,4 +905,10 @@ class _DockLayoutState extends State<DockLayout> {
       ), () => entry.builder(edge)),
     );
   }
+}
+
+class _DockLane {
+  final List<(DockPanelEntry, double)> items;
+  final double height;
+  const _DockLane(this.items, this.height);
 }

@@ -1,294 +1,150 @@
 import 'package:flutter/material.dart';
 import '../models/drawing_models.dart';
+import 'tool_action_grid.dart';
 import 'dockable_panel.dart';
 
-/// Drawing tools panel with tool selection, color picker, and controls.
-/// Adapts layout based on dock edge: horizontal row for top/bottom,
-/// vertical column for left/right sides.
-class DrawingToolsPanel extends StatefulWidget {
+class DrawingToolsPanel extends StatelessWidget {
   final bool isDrawingMode;
   final DrawingTool currentTool;
   final Color drawingColor;
   final VoidCallback onToggleDrawingMode;
-  final VoidCallback onResetZoom;
   final VoidCallback onClearDrawing;
-  final Function(DrawingTool) onToolChange;
-  final Function(Color) onColorChange;
-  final PanelDockEdge dockEdge; // NEW
+  final ValueChanged<DrawingTool> onToolChange;
+  final ValueChanged<Color> onColorChange;
+  final PanelDockEdge dockEdge;
+  final VoidCallback? onUndo;
+  final VoidCallback? onRedo;
+  final double strokeWidth;
+  final ValueChanged<double>? onWidthChange;
 
   const DrawingToolsPanel({
+    super.key,
     required this.isDrawingMode,
     required this.currentTool,
     required this.drawingColor,
     required this.onToggleDrawingMode,
-    required this.onResetZoom,
     required this.onClearDrawing,
     required this.onToolChange,
     required this.onColorChange,
     required this.dockEdge,
-    super.key,
+    this.onUndo,
+    this.onRedo,
+    this.strokeWidth = 5,
+    this.onWidthChange,
   });
 
-  @override
-  State<DrawingToolsPanel> createState() => _DrawingToolsPanelState();
-}
+  static const _tools = [
+    (DrawingTool.freehand, Icons.gesture, 'Pen', '1'),
+    (DrawingTool.line, Icons.remove, 'Line', '2'),
+    (DrawingTool.arrow, Icons.arrow_forward, 'Arrow', '3'),
+    (DrawingTool.laser, Icons.highlight_alt, 'Laser', 'K'),
+  ];
+  static const _colors = [
+    ('Purple', Color(0xFF753b8f)),
+    ('Red', Colors.red),
+    ('Blue', Colors.blue),
+    ('Yellow', Colors.yellow),
+    ('White', Colors.white),
+  ];
 
-class _DrawingToolsPanelState extends State<DrawingToolsPanel> {
+  static final layout = ToolsetLayout.actions(
+    List.filled(_tools.length + 5, ''),
+  );
+
   @override
   Widget build(BuildContext context) {
-    final isHorizontal =
-        widget.dockEdge == PanelDockEdge.top ||
-        widget.dockEdge == PanelDockEdge.bottom;
-
-    // Content only — DockLayout handles positioning
-    return Padding(
-      padding: isHorizontal
-          ? const EdgeInsets.symmetric(horizontal: 8, vertical: 8)
-          : const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-      child: isHorizontal ? _buildHorizontal() : _buildVertical(),
+    Widget button(
+      IconData icon,
+      String label,
+      VoidCallback? onPressed, {
+      bool selected = false,
+      String? shortcut,
+    }) => ToolActionButton(
+      label: '',
+      tooltip: shortcut == null ? label : '$label ($shortcut)',
+      icon: icon,
+      onPressed: onPressed,
+      selected: selected,
     );
-  }
-
-  /// Horizontal layout for top/bottom dock — scrollable row
-  Widget _buildHorizontal() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: IntrinsicHeight(
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: _buildToolButtons(Axis.horizontal),
+    final controls = <Widget>[
+      button(
+        Icons.near_me_outlined,
+        'Pointer',
+        () {
+          if (isDrawingMode) onToggleDrawingMode();
+        },
+        selected: !isDrawingMode,
+        shortcut: 'Esc',
+      ),
+      for (final (tool, icon, label, shortcut) in _tools)
+        button(
+          icon,
+          label,
+          () {
+            if (!isDrawingMode) onToggleDrawingMode();
+            onToolChange(tool);
+          },
+          selected: isDrawingMode && currentTool == tool,
+          shortcut: shortcut,
+        ),
+      PopupMenuButton<Color>(
+        tooltip: 'Drawing color',
+        initialValue: drawingColor,
+        onSelected: onColorChange,
+        itemBuilder: (_) => [
+          for (final (name, color) in _colors)
+            CheckedPopupMenuItem(
+              value: color,
+              checked: color == drawingColor,
+              child: Row(
+                children: [
+                  Icon(Icons.circle, color: color, size: 20),
+                  const SizedBox(width: 12),
+                  Text(name),
+                ],
+              ),
+            ),
+        ],
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.color_lens,
+                color: drawingColor,
+                size: ToolsetLayout.glyph,
+              ),
+            ],
+          ),
         ),
       ),
-    );
-  }
-
-  /// Vertical layout for left/right dock — tight column, no extra width
-  Widget _buildVertical() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: _buildToolButtons(Axis.vertical),
-    );
-  }
-
-  /// Shared tool button builder
-  List<Widget> _buildToolButtons(Axis axis) {
-    final spacing = axis == Axis.horizontal
-        ? const SizedBox(width: 6)
-        : const SizedBox(height: 6);
-
-    final buttons = <Widget>[
-      // Toggle Drawing Mode
-      _IconButtonWrap(
-        icon: Icons.draw,
-        label: 'Draw',
-        active: widget.isDrawingMode,
-        onPressed: widget.onToggleDrawingMode,
-        axis: axis,
-        size: 36,
-      ),
-      spacing,
-      // Reset Zoom
-      _IconButtonWrap(
-        icon: Icons.zoom_out_map,
-        label: 'Zoom',
-        onPressed: widget.onResetZoom,
-        axis: axis,
-        size: 32,
+      button(Icons.undo, 'Undo', onUndo, shortcut: 'Ctrl+Z'),
+      button(Icons.redo, 'Redo', onRedo, shortcut: 'Ctrl+Shift+Z'),
+      PopupMenuButton<String>(
+        tooltip: 'Drawing options',
+        icon: const Icon(Icons.more_horiz),
+        onSelected: (action) {
+          if (action == 'clear') onClearDrawing();
+          if (action.startsWith('width:')) {
+            onWidthChange?.call(double.parse(action.substring(6)));
+          }
+        },
+        itemBuilder: (_) => [
+          if (onWidthChange != null && currentTool != DrawingTool.laser) ...[
+            for (final width in [3.0, 5.0, 8.0])
+              CheckedPopupMenuItem(
+                value: 'width:$width',
+                checked: strokeWidth == width,
+                child: Text('${width.toInt()} px stroke'),
+              ),
+            const PopupMenuDivider(),
+          ],
+          const PopupMenuItem(value: 'clear', child: Text('Clear drawings')),
+        ],
       ),
     ];
-
-    if (widget.isDrawingMode) {
-      buttons.addAll([
-        spacing,
-        // Clear Drawing
-        _IconButtonWrap(
-          icon: Icons.clear,
-          label: 'Clear',
-          color: Colors.redAccent.shade700,
-          onPressed: widget.onClearDrawing,
-          axis: axis,
-          size: 32,
-          shortcut: 'C',
-        ),
-        spacing,
-        // Tool selectors
-        _IconButtonWrap(
-          icon: Icons.gesture,
-          label: 'Freehand',
-          active: widget.currentTool == DrawingTool.freehand,
-          onPressed: () => widget.onToolChange(DrawingTool.freehand),
-          axis: axis,
-          size: 32,
-          shortcut: '1',
-        ),
-        spacing,
-        _IconButtonWrap(
-          icon: Icons.remove,
-          label: 'Line',
-          active: widget.currentTool == DrawingTool.line,
-          onPressed: () => widget.onToolChange(DrawingTool.line),
-          axis: axis,
-          size: 32,
-          shortcut: '2',
-        ),
-        spacing,
-        _IconButtonWrap(
-          icon: Icons.arrow_forward,
-          label: 'Arrow',
-          active: widget.currentTool == DrawingTool.arrow,
-          onPressed: () => widget.onToolChange(DrawingTool.arrow),
-          axis: axis,
-          size: 32,
-          shortcut: '3',
-        ),
-        spacing,
-        _IconButtonWrap(
-          icon: Icons.flash_on,
-          label: 'Laser',
-          active: widget.currentTool == DrawingTool.laser,
-          onPressed: () => widget.onToolChange(DrawingTool.laser),
-          axis: axis,
-          size: 32,
-          shortcut: 'K',
-        ),
-        spacing,
-      ]);
-
-      // Color options
-      final colors = [
-        const Color(0xFF753b8f),
-        Colors.red,
-        Colors.blue,
-        Colors.yellow,
-        Colors.white,
-      ];
-
-      for (int i = 0; i < colors.length; i++) {
-        if (i > 0) buttons.add(spacing);
-        buttons.add(
-          _ColorSwatch(
-            color: colors[i],
-            isSelected: widget.drawingColor == colors[i],
-            onTap: () => widget.onColorChange(colors[i]),
-            axis: axis,
-          ),
-        );
-      }
-    }
-
-    return buttons;
-  }
-}
-
-/// Simple icon button wrapper with optional label/shortcut
-class _IconButtonWrap extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool active;
-  final VoidCallback onPressed;
-  final Axis axis;
-  final double size;
-  final String? shortcut;
-  final Color? color;
-
-  const _IconButtonWrap({
-    required this.icon,
-    required this.label,
-    required this.onPressed,
-    required this.axis,
-    required this.size,
-    this.active = false,
-    this.shortcut,
-    this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final bgColor = color ?? (active ? Colors.orange : Colors.grey.shade700);
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Tooltip(
-          message: shortcut != null ? '$label ($shortcut)' : label,
-          child: Container(
-            width: size,
-            height: size,
-            decoration: BoxDecoration(
-              color: bgColor,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: onPressed,
-                borderRadius: BorderRadius.circular(8),
-                child: Center(child: Icon(icon, color: Colors.white, size: 20)),
-              ),
-            ),
-          ),
-        ),
-        if (shortcut != null)
-          Positioned(
-            top: -6,
-            right: -6,
-            child: Container(
-              padding: const EdgeInsets.all(3),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade700,
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 1),
-              ),
-              child: Text(
-                shortcut!,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 9,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-/// Color swatch selector
-class _ColorSwatch extends StatelessWidget {
-  final Color color;
-  final bool isSelected;
-  final VoidCallback onTap;
-  final Axis axis;
-
-  const _ColorSwatch({
-    required this.color,
-    required this.isSelected,
-    required this.onTap,
-    required this.axis,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    const size = 26.0;
-    return GestureDetector(
-      onTap: onTap,
-      child: Tooltip(
-        message: 'Color',
-        child: Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: isSelected ? Colors.white : Colors.grey.shade600,
-              width: isSelected ? 2.5 : 1,
-            ),
-          ),
-        ),
-      ),
-    );
+    return ToolActionGrid(title: 'Drawing', layout: layout, children: controls);
   }
 }

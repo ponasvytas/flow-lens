@@ -159,7 +159,7 @@ class _NavButton extends StatelessWidget {
         onTap: enabled ? onTap : null,
         borderRadius: BorderRadius.circular(20),
         child: Padding(
-          padding: const EdgeInsets.all(6),
+          padding: const EdgeInsets.all(13),
           child: Icon(
             icon,
             color: enabled ? Colors.white : Colors.white24,

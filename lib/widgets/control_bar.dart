@@ -1,298 +1,199 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
+import '../models/app_settings.dart';
+import 'tool_action_grid.dart';
 import 'dockable_panel.dart';
 
-/// Playback control bar with speed and jump controls.
-/// Adapts layout based on dock edge: single row for top/bottom,
-/// single column for left/right sides.
-class DraggableControlBar extends StatefulWidget {
-  final Player player;
-  final Function(double) onSpeedChange;
-  final Function(Duration) onJumpForward;
-  final Function(Duration) onJumpBackward;
-  final VoidCallback onTogglePlayPause;
-  final PanelDockEdge dockEdge;
-
+class DraggableControlBar extends StatelessWidget {
   const DraggableControlBar({
     required this.player,
     required this.onSpeedChange,
     required this.onJumpForward,
     required this.onJumpBackward,
     required this.onTogglePlayPause,
+    this.onResetZoom,
+    this.settings = const AppSettings(),
     this.dockEdge = PanelDockEdge.floating,
     super.key,
   });
+  final Player player;
+  final ValueChanged<double> onSpeedChange;
+  final ValueChanged<Duration> onJumpForward;
+  final ValueChanged<Duration> onJumpBackward;
+  final VoidCallback onTogglePlayPause;
+  final VoidCallback? onResetZoom;
+  final AppSettings settings;
+  final PanelDockEdge dockEdge;
 
   @override
-  State<DraggableControlBar> createState() => _DraggableControlBarState();
+  Widget build(BuildContext context) => StreamBuilder<double>(
+    stream: player.stream.rate,
+    initialData: player.state.rate,
+    builder: (context, rate) => StreamBuilder<bool>(
+      stream: player.stream.playing,
+      initialData: player.state.playing,
+      builder: (context, playing) => PlaybackControls(
+        rate: rate.data!,
+        playing: playing.data!,
+        settings: settings,
+        dockEdge: dockEdge,
+        onSpeedChange: onSpeedChange,
+        onJumpForward: onJumpForward,
+        onJumpBackward: onJumpBackward,
+        onTogglePlayPause: onTogglePlayPause,
+        onResetZoom: onResetZoom,
+        onToggleMute: () => player.setVolume(player.state.volume > 0 ? 0 : 100),
+      ),
+    ),
+  );
 }
 
-class _DraggableControlBarState extends State<DraggableControlBar> {
-  bool get _isVertical =>
-      widget.dockEdge == PanelDockEdge.left ||
-      widget.dockEdge == PanelDockEdge.right;
-
-  bool get _isFloating => widget.dockEdge == PanelDockEdge.floating;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: _isVertical
-          ? const EdgeInsets.symmetric(horizontal: 4, vertical: 8)
-          : const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      child: _isVertical
-          ? _buildVertical()
-          : _isFloating
-          ? _buildFloating()
-          : _buildHorizontal(),
-    );
-  }
-
-  // -------------------------------------------------------------------------
-  // Floating layout — compact two-row card
-  // -------------------------------------------------------------------------
-
-  Widget _buildFloating() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Row 1: Speed chips
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: _speedButtons(Axis.horizontal),
-          ),
-        ),
-        const SizedBox(height: 6),
-        // Row 2: Jump / play controls
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: _jumpButtons(Axis.horizontal),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // -------------------------------------------------------------------------
-  // Horizontal layout (floating / top / bottom) — one scrollable row
-  // -------------------------------------------------------------------------
-
-  Widget _buildHorizontal() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Speed buttons
-          ..._speedButtons(Axis.horizontal),
-          const SizedBox(width: 8),
-          _divider(Axis.horizontal),
-          const SizedBox(width: 8),
-          // Jump / play controls
-          ..._jumpButtons(Axis.horizontal),
-        ],
-      ),
-    );
-  }
-
-  // -------------------------------------------------------------------------
-  // Vertical layout (left / right) — one column
-  // -------------------------------------------------------------------------
-
-  Widget _buildVertical() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Speed buttons stacked
-        ..._speedButtons(Axis.vertical),
-        const SizedBox(height: 6),
-        _divider(Axis.vertical),
-        const SizedBox(height: 6),
-        // Jump / play controls stacked
-        ..._jumpButtons(Axis.vertical),
-      ],
-    );
-  }
-
-  // -------------------------------------------------------------------------
-  // Shared builders
-  // -------------------------------------------------------------------------
-
-  Widget _divider(Axis axis) {
-    return axis == Axis.horizontal
-        ? Container(width: 1, height: 24, color: Colors.white24)
-        : Container(height: 1, width: 24, color: Colors.white24);
-  }
-
-  /// Speed chips — compact toggle buttons
-  List<Widget> _speedButtons(Axis axis) {
-    const speeds = [0.25, 0.5, 1.0, 2.0, 3.0];
-    final spacing = axis == Axis.horizontal
-        ? const SizedBox(width: 4)
-        : const SizedBox(height: 4);
-
-    return [
-      if (axis == Axis.horizontal)
-        const Text(
-          'Speed',
-          style: TextStyle(color: Colors.white70, fontSize: 11),
-        ),
-      if (axis == Axis.horizontal) const SizedBox(width: 6),
-      for (int i = 0; i < speeds.length; i++) ...[
-        if (i > 0) spacing,
-        _SpeedChip(
-          label: '${speeds[i]}x',
-          onTap: () => widget.onSpeedChange(speeds[i]),
-        ),
-      ],
-    ];
-  }
-
-  /// Jump-back, play/pause, jump-forward buttons
-  List<Widget> _jumpButtons(Axis axis) {
-    final spacing = axis == Axis.horizontal
-        ? const SizedBox(width: 2)
-        : const SizedBox(height: 2);
-
-    return [
-      _JumpBtn(
-        icon: Icons.fast_rewind,
-        label: '30',
-        onTap: () => widget.onJumpBackward(const Duration(seconds: 30)),
-        axis: axis,
-      ),
-      spacing,
-      _JumpBtn(
-        icon: Icons.replay_10,
-        onTap: () => widget.onJumpBackward(const Duration(seconds: 10)),
-        axis: axis,
-      ),
-      spacing,
-      _JumpBtn(
-        icon: Icons.fast_rewind,
-        label: '3',
-        onTap: () => widget.onJumpBackward(const Duration(seconds: 3)),
-        axis: axis,
-      ),
-      spacing,
-      // Play / Pause
-      StreamBuilder<bool>(
-        stream: widget.player.stream.playing,
-        builder: (context, snapshot) {
-          final isPlaying = snapshot.data ?? false;
-          return IconButton(
-            onPressed: widget.onTogglePlayPause,
-            icon: Icon(
-              isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
-              color: Colors.white,
-              size: 28,
-            ),
-            tooltip: isPlaying ? 'Pause' : 'Play',
-            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-            padding: EdgeInsets.zero,
-          );
-        },
-      ),
-      spacing,
-      _JumpBtn(
-        icon: Icons.fast_forward,
-        label: '3',
-        labelFirst: true,
-        onTap: () => widget.onJumpForward(const Duration(seconds: 3)),
-        axis: axis,
-      ),
-      spacing,
-      _JumpBtn(
-        icon: Icons.forward_10,
-        onTap: () => widget.onJumpForward(const Duration(seconds: 10)),
-        axis: axis,
-      ),
-      spacing,
-      _JumpBtn(
-        icon: Icons.fast_forward,
-        label: '30',
-        labelFirst: true,
-        onTap: () => widget.onJumpForward(const Duration(seconds: 30)),
-        axis: axis,
-      ),
-    ];
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Small helper widgets
-// ---------------------------------------------------------------------------
-
-class _SpeedChip extends StatelessWidget {
-  final String label;
-  final VoidCallback onTap;
-
-  const _SpeedChip({required this.label, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(6),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: Colors.blue.withValues(alpha: 0.7),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(color: Colors.white, fontSize: 12),
-        ),
-      ),
-    );
-  }
-}
-
-class _JumpBtn extends StatelessWidget {
-  final IconData icon;
-  final String? label;
-  final bool labelFirst;
-  final VoidCallback onTap;
-  final Axis axis;
-
-  const _JumpBtn({
-    required this.icon,
-    required this.onTap,
-    required this.axis,
-    this.label,
-    this.labelFirst = false,
+class PlaybackControls extends StatelessWidget {
+  const PlaybackControls({
+    super.key,
+    required this.rate,
+    required this.playing,
+    required this.onSpeedChange,
+    required this.onJumpForward,
+    required this.onJumpBackward,
+    required this.onTogglePlayPause,
+    required this.onToggleMute,
+    this.onResetZoom,
+    this.settings = const AppSettings(),
+    this.dockEdge = PanelDockEdge.floating,
   });
+  final double rate;
+  final bool playing;
+  final ValueChanged<double> onSpeedChange;
+  final ValueChanged<Duration> onJumpForward;
+  final ValueChanged<Duration> onJumpBackward;
+  final VoidCallback onTogglePlayPause;
+  final VoidCallback onToggleMute;
+  final VoidCallback? onResetZoom;
+  final AppSettings settings;
+  final PanelDockEdge dockEdge;
 
   @override
   Widget build(BuildContext context) {
-    final iconW = Icon(icon, color: Colors.white, size: 18);
-    final labelW = label != null
-        ? Text(
-            label!,
-            style: const TextStyle(color: Colors.white, fontSize: 11),
-          )
-        : null;
-
-    final children = <Widget>[
-      if (labelFirst && labelW != null) labelW,
-      iconW,
-      if (!labelFirst && labelW != null) labelW,
-    ];
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(6),
-      child: Padding(
-        padding: const EdgeInsets.all(4),
-        child: axis == Axis.horizontal
-            ? Row(mainAxisSize: MainAxisSize.min, children: children)
-            : Column(mainAxisSize: MainAxisSize.min, children: children),
+    final controls = <Widget>[
+      _Control(
+        label: playing ? 'Pause' : 'Play',
+        icon: playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+        selected: true,
+        onPressed: onTogglePlayPause,
       ),
+      _Control(
+        label: 'Back 5s',
+        icon: Icons.replay_5_rounded,
+        onPressed: () => onJumpBackward(const Duration(seconds: 5)),
+      ),
+      _Control(
+        label: 'Slow',
+        detail: '${settings.slowPlaybackSpeed}x',
+        icon: Icons.slow_motion_video_rounded,
+        selected: rate == settings.slowPlaybackSpeed,
+        onPressed: () => onSpeedChange(settings.slowPlaybackSpeed),
+      ),
+      _Control(
+        label: 'Normal',
+        detail: '${settings.defaultPlaybackSpeed}x',
+        icon: Icons.play_circle_outline_rounded,
+        selected: rate == settings.defaultPlaybackSpeed,
+        onPressed: () => onSpeedChange(settings.defaultPlaybackSpeed),
+      ),
+      _Control(
+        label: 'Fast',
+        detail: '${settings.fastPlaySpeed}x',
+        icon: Icons.fast_forward_rounded,
+        selected: rate == settings.fastPlaySpeed,
+        onPressed: () => onSpeedChange(settings.fastPlaySpeed),
+      ),
+      PopupMenuButton<String>(
+        tooltip: 'More playback controls',
+        onSelected: (value) {
+          if (value.startsWith('rate:')) {
+            onSpeedChange(double.parse(value.substring(5)));
+          }
+          if (value.startsWith('back:')) {
+            onJumpBackward(Duration(seconds: int.parse(value.substring(5))));
+          }
+          if (value.startsWith('next:')) {
+            onJumpForward(Duration(seconds: int.parse(value.substring(5))));
+          }
+          if (value == 'zoom') onResetZoom?.call();
+          if (value == 'mute') {
+            onToggleMute();
+          }
+        },
+        itemBuilder: (_) => [
+          for (final seconds in [3, 10, 30])
+            PopupMenuItem(
+              value: 'back:$seconds',
+              child: Text('Back $seconds seconds'),
+            ),
+          for (final seconds in [3, 10, 30])
+            PopupMenuItem(
+              value: 'next:$seconds',
+              child: Text('Forward $seconds seconds'),
+            ),
+          const PopupMenuDivider(),
+          for (final speed in [0.25, 0.5, 1.0, 2.0, 3.0])
+            PopupMenuItem(value: 'rate:$speed', child: Text('Speed $speed x')),
+          const PopupMenuItem(value: 'mute', child: Text('Mute / unmute')),
+          if (onResetZoom != null)
+            const PopupMenuItem(value: 'zoom', child: Text('Reset zoom')),
+        ],
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+          child: const Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.more_horiz_rounded),
+              Text('More', style: TextStyle(fontSize: 12)),
+            ],
+          ),
+        ),
+      ),
+    ];
+    return ToolActionGrid(
+      title: 'Playback',
+      layout: layoutFor(settings),
+      children: controls,
     );
   }
+
+  static ToolsetLayout layoutFor(AppSettings settings) =>
+      ToolsetLayout.actions([
+        'Pause',
+        'Back 5s',
+        'Slow\n${settings.slowPlaybackSpeed}x',
+        'Normal\n${settings.defaultPlaybackSpeed}x',
+        'Fast\n${settings.fastPlaySpeed}x',
+        'More',
+      ], tileWidth: 64);
+}
+
+class _Control extends StatelessWidget {
+  const _Control({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+    this.selected = false,
+    this.detail,
+  });
+  final String label;
+  final String? detail;
+  final IconData icon;
+  final VoidCallback onPressed;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) => ToolActionButton(
+    label: detail == null ? label : '$label\n$detail',
+    tooltip: detail == null ? label : '$label $detail',
+    icon: icon,
+    selected: selected,
+    onPressed: onPressed,
+  );
 }

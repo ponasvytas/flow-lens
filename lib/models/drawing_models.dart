@@ -13,35 +13,55 @@ class DrawingPoint {
 }
 
 class DrawingStroke {
+  final Size? canvasSize;
   final List<DrawingPoint> points;
   final Color color;
   final double strokeWidth;
   final Path path;
 
-  DrawingStroke(List<DrawingPoint> points, this.color, this.strokeWidth)
-    : points = List<DrawingPoint>.unmodifiable(points),
-      path = buildDrawingPath(points);
+  DrawingStroke(
+    List<DrawingPoint> points,
+    this.color,
+    this.strokeWidth, {
+    this.canvasSize,
+  }) : points = List<DrawingPoint>.unmodifiable(points),
+       path = buildDrawingPath(points);
 }
 
 class LineShape {
+  final Size? canvasSize;
   final Offset start;
   final Offset end;
   final Color color;
   final double strokeWidth;
 
-  LineShape(this.start, this.end, this.color, this.strokeWidth);
+  LineShape(
+    this.start,
+    this.end,
+    this.color,
+    this.strokeWidth, {
+    this.canvasSize,
+  });
 }
 
 class ArrowShape {
+  final Size? canvasSize;
   final Offset start;
   final Offset end;
   final Color color;
   final double strokeWidth;
 
-  ArrowShape(this.start, this.end, this.color, this.strokeWidth);
+  ArrowShape(
+    this.start,
+    this.end,
+    this.color,
+    this.strokeWidth, {
+    this.canvasSize,
+  });
 }
 
 class LaserTrail {
+  final Size? canvasSize;
   final List<DrawingPoint> points;
   final Color color;
   final double strokeWidth;
@@ -51,8 +71,9 @@ class LaserTrail {
     List<DrawingPoint> points,
     this.color,
     this.strokeWidth,
-    this.startTime,
-  ) : points = List<DrawingPoint>.unmodifiable(points);
+    this.startTime, {
+    this.canvasSize,
+  }) : points = List<DrawingPoint>.unmodifiable(points);
 }
 
 Path buildDrawingPath(Iterable<DrawingPoint> points) {

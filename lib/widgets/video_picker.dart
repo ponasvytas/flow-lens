@@ -7,11 +7,13 @@ class VideoPicker extends StatefulWidget {
   final VoidCallback onPickVideo;
   final ValueChanged<String> onLoadUrl;
   final ValueChanged<SportProfile> onSportSelected;
+  final VoidCallback? onResume;
 
   const VideoPicker({
     required this.onPickVideo,
     required this.onLoadUrl,
     required this.onSportSelected,
+    this.onResume,
     super.key,
   });
 
@@ -44,11 +46,24 @@ class _VideoPickerState extends State<VideoPicker> {
 
   @override
   Widget build(BuildContext context) {
-    if (_selectedSport == null) {
-      return SportProfileSelector(onProfileSelected: _onSportSelected);
-    }
-
-    return _buildVideoSelector(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (widget.onResume != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 16, bottom: 8),
+            child: OutlinedButton.icon(
+              onPressed: widget.onResume,
+              icon: const Icon(Icons.arrow_back),
+              label: const Text('Resume analysis'),
+            ),
+          ),
+        if (_selectedSport == null)
+          SportProfileSelector(onProfileSelected: _onSportSelected)
+        else
+          _buildVideoSelector(context),
+      ],
+    );
   }
 
   Widget _buildVideoSelector(BuildContext context) {

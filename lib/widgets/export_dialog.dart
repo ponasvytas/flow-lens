@@ -139,16 +139,14 @@ class _ExportDialogState extends State<ExportDialog> {
     }).toList();
   }
 
-  String _categoryName(GameEvent event) {
-    final cat = widget.taxonomy?.getCategoryById(event.categoryId);
-    return cat?.name ?? event.categoryId;
-  }
+  String _categoryName(GameEvent event) => event.label;
 
   /// Resolve the specific event-type name (e.g. "Lost", "Goal Against").
   ///
   /// Mirrors EventsTableView: prefer the taxonomy event-type name, then fall
   /// back to the free-text detail, then the raw label.
   String _eventTypeName(GameEvent event) {
+    if (event.detail != null) return event.detail!;
     if (event.eventTypeId != null) {
       final eventType = widget.taxonomy?.getEventTypeById(event.eventTypeId!);
       if (eventType != null) return eventType.name;
@@ -168,7 +166,7 @@ class _ExportDialogState extends State<ExportDialog> {
           case EventGrade.neutral:
             return ' [=]';
           case null:
-            return '';
+            return ' [ungraded]';
         }
       case LabelImpactStyle.word:
         switch (grade) {
@@ -179,7 +177,7 @@ class _ExportDialogState extends State<ExportDialog> {
           case EventGrade.neutral:
             return ' (Neutral)';
           case null:
-            return '';
+            return ' (Ungraded)';
         }
       case LabelImpactStyle.color:
       case LabelImpactStyle.none:
@@ -216,7 +214,7 @@ class _ExportDialogState extends State<ExportDialog> {
       case EventGrade.neutral:
         return 'Neutral';
       case null:
-        return 'No impact';
+        return 'Ungraded';
     }
   }
 

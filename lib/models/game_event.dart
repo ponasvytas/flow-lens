@@ -9,6 +9,9 @@ enum EventGrade {
 
 class GameEvent {
   final String id;
+  final String? taxonomyRevision;
+  final String? definition;
+  final Map<String, String> context;
   final Duration timestamp;
   final EventGrade? grade;
   final String label; // e.g., "Breakout", "Wrist Shot", "Goal"
@@ -21,6 +24,9 @@ class GameEvent {
 
   GameEvent({
     required this.id,
+    this.taxonomyRevision,
+    this.definition,
+    Map<String, String> context = const {},
     required this.timestamp,
     this.grade,
     required this.label,
@@ -29,7 +35,10 @@ class GameEvent {
     required this.categoryId,
     this.eventTypeId,
     this.viewTransform,
-  });
+  }) : context = Map.unmodifiable(context);
+
+  bool get isComplete =>
+      eventTypeId?.isNotEmpty == true || detail?.trim().isNotEmpty == true;
 
   // Helper to determine color based on grade
   Color get color => switch (grade) {
@@ -42,6 +51,10 @@ class GameEvent {
   // CopyWith for immutability updates
   GameEvent copyWith({
     String? id,
+    String? taxonomyRevision,
+    String? definition,
+    Map<String, String>? context,
+    bool clearGrade = false,
     Duration? timestamp,
     EventGrade? grade,
     String? label,
@@ -53,8 +66,11 @@ class GameEvent {
   }) {
     return GameEvent(
       id: id ?? this.id,
+      taxonomyRevision: taxonomyRevision ?? this.taxonomyRevision,
+      definition: definition ?? this.definition,
+      context: context ?? this.context,
       timestamp: timestamp ?? this.timestamp,
-      grade: grade ?? this.grade,
+      grade: clearGrade ? null : grade ?? this.grade,
       label: label ?? this.label,
       detail: detail ?? this.detail,
       sportId: sportId ?? this.sportId,
@@ -68,6 +84,9 @@ class GameEvent {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      if (taxonomyRevision != null) 'taxonomyRevision': taxonomyRevision,
+      if (definition != null) 'definition': definition,
+      if (context.isNotEmpty) 'context': context,
       'timestamp': timestamp.inMilliseconds,
       'grade': grade?.name,
       'label': label,
@@ -83,6 +102,9 @@ class GameEvent {
   factory GameEvent.fromJson(Map<String, dynamic> json) {
     return GameEvent(
       id: json['id'] as String,
+      taxonomyRevision: json['taxonomyRevision'] as String?,
+      definition: json['definition'] as String?,
+      context: Map<String, String>.from(json['context'] as Map? ?? {}),
       timestamp: Duration(milliseconds: json['timestamp'] as int),
       grade: json['grade'] != null
           ? EventGrade.values.firstWhere(

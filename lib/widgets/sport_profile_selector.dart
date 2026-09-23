@@ -49,12 +49,13 @@ class SportProfileSelector extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       child: Container(
         width: 160,
-        height: 180,
+        constraints: const BoxConstraints(minHeight: 180),
+        padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
-          color: isEnabled ? Colors.white : Colors.grey.shade200,
+          color: isEnabled ? const Color(0xFF292237) : const Color(0xFF1C1827),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isEnabled ? const Color(0xFF753b8f) : Colors.grey.shade400,
+            color: isEnabled ? const Color(0xFFC4A5FA) : Colors.grey.shade400,
             width: 2,
           ),
           boxShadow: isEnabled
@@ -68,12 +69,13 @@ class SportProfileSelector extends StatelessWidget {
               : [],
         ),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               profile.iconData,
               size: 64,
-              color: isEnabled ? const Color(0xFF753b8f) : Colors.grey.shade400,
+              color: isEnabled ? const Color(0xFFC4A5FA) : Colors.grey.shade400,
             ),
             const SizedBox(height: 16),
             Text(
@@ -81,7 +83,7 @@ class SportProfileSelector extends StatelessWidget {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: isEnabled ? Colors.black87 : Colors.grey.shade500,
+                color: isEnabled ? Colors.white : Colors.grey.shade500,
               ),
               textAlign: TextAlign.center,
             ),
@@ -93,7 +95,7 @@ class SportProfileSelector extends StatelessWidget {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
+                  color: const Color(0xFF292237),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Text(

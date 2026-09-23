@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import '../controllers/tracking_controller.dart';
 import '../models/tracking_models.dart';
-import '../models/tracking_presets.dart';
+import '../models/sport_taxonomy.dart';
 import 'dockable_panel.dart';
+import 'tracking_hotkey_dialog.dart';
 
 /// Player tracking panel — shows subject cards with counter/timer rows.
 ///
@@ -15,6 +15,7 @@ import 'dockable_panel.dart';
 class PlayerTrackingPanel extends StatefulWidget {
   final TrackingController controller;
   final Player player;
+  final SportTaxonomy? taxonomy;
   final PanelDockEdge dockEdge;
   final VoidCallback? onSave;
   final VoidCallback? onLoad;
@@ -23,6 +24,7 @@ class PlayerTrackingPanel extends StatefulWidget {
   const PlayerTrackingPanel({
     required this.controller,
     required this.player,
+    this.taxonomy,
     this.dockEdge = PanelDockEdge.floating,
     this.onSave,
     this.onLoad,
@@ -587,20 +589,11 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
     String subjectId,
     String trackerId,
   ) {
-    showDialog(
+    showTrackingHotkeyDialog(
       context: context,
-      builder: (ctx) => _HotkeyDialog(
-        currentKey: ctrl.getHotkey(subjectId, trackerId),
-        onSet: (key) {
-          ctrl.setHotkey(subjectId, trackerId, key);
-          Navigator.of(ctx).pop();
-        },
-        onClear: () {
-          ctrl.removeHotkey(subjectId, trackerId);
-          Navigator.of(ctx).pop();
-        },
-        onCancel: () => Navigator.of(ctx).pop(),
-      ),
+      controller: ctrl,
+      subjectId: subjectId,
+      trackerId: trackerId,
     );
   }
 
@@ -612,6 +605,7 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
     showDialog(
       context: context,
       builder: (ctx) => _TrackerPickerDialog(
+        presets: widget.taxonomy?.trackingPresets ?? const [],
         currentTrackerIds: ctrl.trackers.map((t) => t.id).toSet(),
         onConfirm: (selected) {
           // Add newly selected, remove deselected
@@ -622,7 +616,9 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
             }
           }
           for (final id in currentIds) {
-            if (!selected.any((d) => d.id == id)) {
+            if ((widget.taxonomy?.trackingPresets.any((t) => t.id == id) ??
+                    false) &&
+                !selected.any((d) => d.id == id)) {
               ctrl.removeTracker(id);
             }
           }
@@ -852,141 +848,18 @@ class _PulsingDotState extends State<_PulsingDot>
 }
 
 // ===========================================================================
-// Hotkey assignment dialog
-// ===========================================================================
-
-class _HotkeyDialog extends StatefulWidget {
-  final String? currentKey;
-  final ValueChanged<String> onSet;
-  final VoidCallback onClear;
-  final VoidCallback onCancel;
-
-  const _HotkeyDialog({
-    this.currentKey,
-    required this.onSet,
-    required this.onClear,
-    required this.onCancel,
-  });
-
-  @override
-  State<_HotkeyDialog> createState() => _HotkeyDialogState();
-}
-
-class _HotkeyDialogState extends State<_HotkeyDialog> {
-  String? _captured;
-
-  @override
-  Widget build(BuildContext context) {
-    return Focus(
-      autofocus: true,
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent) {
-          final label = event.logicalKey.keyLabel;
-          if (label.isNotEmpty &&
-              event.logicalKey != LogicalKeyboardKey.escape) {
-            setState(() => _captured = label.toLowerCase());
-            return KeyEventResult.handled;
-          }
-          if (event.logicalKey == LogicalKeyboardKey.escape) {
-            widget.onCancel();
-            return KeyEventResult.handled;
-          }
-        }
-        return KeyEventResult.ignored;
-      },
-      child: AlertDialog(
-        backgroundColor: const Color(0xFF1E1E2E),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: const BorderSide(color: Colors.white12),
-        ),
-        title: const Text(
-          'Assign Hotkey',
-          style: TextStyle(color: Colors.white, fontSize: 14),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (widget.currentKey != null)
-              Text(
-                'Current: ${widget.currentKey!.toUpperCase()}',
-                style: const TextStyle(color: Colors.white38, fontSize: 12),
-              ),
-            const SizedBox(height: 12),
-            Container(
-              width: 60,
-              height: 50,
-              decoration: BoxDecoration(
-                color: Colors.black38,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: _captured != null ? Colors.blueAccent : Colors.white24,
-                  width: 2,
-                ),
-              ),
-              child: Center(
-                child: Text(
-                  _captured?.toUpperCase() ?? '?',
-                  style: TextStyle(
-                    color: _captured != null ? Colors.white : Colors.white24,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'monospace',
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Press any key...',
-              style: TextStyle(color: Colors.white38, fontSize: 11),
-            ),
-          ],
-        ),
-        actionsAlignment: MainAxisAlignment.spaceBetween,
-        actions: [
-          TextButton(
-            onPressed: widget.onClear,
-            child: const Text(
-              'Clear',
-              style: TextStyle(color: Colors.redAccent, fontSize: 12),
-            ),
-          ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextButton(
-                onPressed: widget.onCancel,
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(color: Colors.white38, fontSize: 12),
-                ),
-              ),
-              TextButton(
-                onPressed: _captured != null
-                    ? () => widget.onSet(_captured!)
-                    : null,
-                child: const Text('Assign', style: TextStyle(fontSize: 12)),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ===========================================================================
 // Tracker picker dialog (select from presets)
 // ===========================================================================
 
 class _TrackerPickerDialog extends StatefulWidget {
   final Set<String> currentTrackerIds;
+  final List<TrackingDefinition> presets;
   final void Function(List<TrackingDefinition> selected) onConfirm;
   final VoidCallback onCancel;
 
   const _TrackerPickerDialog({
     required this.currentTrackerIds,
+    required this.presets,
     required this.onConfirm,
     required this.onCancel,
   });
@@ -996,6 +869,10 @@ class _TrackerPickerDialog extends StatefulWidget {
 }
 
 class _TrackerPickerDialogState extends State<_TrackerPickerDialog> {
+  String _query = '';
+  bool _matches(TrackingDefinition t) =>
+      t.label.toLowerCase().contains(_query) ||
+      (t.definition?.toLowerCase().contains(_query) ?? false);
   late final Set<String> _selected;
 
   @override
@@ -1021,11 +898,31 @@ class _TrackerPickerDialogState extends State<_TrackerPickerDialog> {
         height: 400,
         child: ListView(
           children: [
+            TextField(
+              decoration: const InputDecoration(
+                labelText: 'Find tracker',
+                prefixIcon: Icon(Icons.search),
+              ),
+              onChanged: (value) =>
+                  setState(() => _query = value.toLowerCase()),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'Manual counts are separate from Record events. Record all opportunities before using rates.',
+              ),
+            ),
             _sectionHeader('Counters'),
-            for (final t in HockeyTrackingPresets.allCounters) _trackerTile(t),
+            for (final t in widget.presets.where(
+              (t) => t.kind == TrackerKind.counter && _matches(t),
+            ))
+              _trackerTile(t),
             const SizedBox(height: 8),
             _sectionHeader('Timers'),
-            for (final t in HockeyTrackingPresets.allTimers) _trackerTile(t),
+            for (final t in widget.presets.where(
+              (t) => t.kind == TrackerKind.timer && _matches(t),
+            ))
+              _trackerTile(t),
           ],
         ),
       ),
@@ -1039,7 +936,7 @@ class _TrackerPickerDialogState extends State<_TrackerPickerDialog> {
         ),
         TextButton(
           onPressed: () {
-            final selected = HockeyTrackingPresets.all
+            final selected = widget.presets
                 .where((t) => _selected.contains(t.id))
                 .toList();
             widget.onConfirm(selected);
@@ -1067,38 +964,41 @@ class _TrackerPickerDialogState extends State<_TrackerPickerDialog> {
 
   Widget _trackerTile(TrackingDefinition t) {
     final checked = _selected.contains(t.id);
-    return InkWell(
-      onTap: () => setState(() {
-        checked ? _selected.remove(t.id) : _selected.add(t.id);
-      }),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
-        child: Row(
-          children: [
-            Icon(
-              checked ? Icons.check_box : Icons.check_box_outline_blank,
-              size: 16,
-              color: checked ? Colors.blueAccent : Colors.white24,
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                t.label,
-                style: TextStyle(
-                  color: checked ? Colors.white : Colors.white54,
-                  fontSize: 12,
+    return Tooltip(
+      message: t.definition ?? t.label,
+      child: InkWell(
+        onTap: () => setState(() {
+          checked ? _selected.remove(t.id) : _selected.add(t.id);
+        }),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Row(
+            children: [
+              Icon(
+                checked ? Icons.check_box : Icons.check_box_outline_blank,
+                size: 16,
+                color: checked ? Colors.blueAccent : Colors.white24,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  t.label,
+                  style: TextStyle(
+                    color: checked ? Colors.white : Colors.white54,
+                    fontSize: 12,
+                  ),
                 ),
               ),
-            ),
-            if (t.kind == TrackerKind.timer)
-              Icon(
-                t.timerMode == TimerMode.hold
-                    ? Icons.touch_app
-                    : Icons.toggle_on,
-                size: 12,
-                color: Colors.white24,
-              ),
-          ],
+              if (t.kind == TrackerKind.timer)
+                Icon(
+                  t.timerMode == TimerMode.hold
+                      ? Icons.touch_app
+                      : Icons.toggle_on,
+                  size: 12,
+                  color: Colors.white24,
+                ),
+            ],
+          ),
         ),
       ),
     );

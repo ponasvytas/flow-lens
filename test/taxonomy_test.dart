@@ -18,17 +18,17 @@ void main() {
 
       expect(taxonomy.sportId, 'hockey');
       expect(taxonomy.name, 'Hockey');
-      expect(taxonomy.categories.length, 7);
+      expect(taxonomy.captureCategories.length, 12);
 
       final shotCategory = taxonomy.getCategoryById('shot');
       expect(shotCategory, isNotNull);
       expect(shotCategory!.name, 'Shot');
-      expect(shotCategory.eventTypes.length, 5);
+      expect(shotCategory.captureEventTypes.length, 5);
 
       final goalEvent = shotCategory.getEventTypeById('shot_goal');
       expect(goalEvent, isNotNull);
       expect(goalEvent!.name, 'Goal');
-      expect(goalEvent.defaultImpact?.name, 'positive');
+      expect(goalEvent.defaultImpact, isNull);
     });
 
     test('unknown iconKey/colorKey fall back safely', () {

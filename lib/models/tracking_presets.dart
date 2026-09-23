@@ -1,9 +1,7 @@
 import 'tracking_models.dart';
 
-/// Built-in hockey tracker definitions.
-///
-/// Users can pick from these when configuring a tracking session.
-/// Custom trackers use [TrackingDefinition] directly with [isBuiltIn] = false.
+/// Historical v1 tracker definitions retained for compatibility.
+/// New sessions use SportTaxonomy.trackingPresets from the sport asset.
 class HockeyTrackingPresets {
   HockeyTrackingPresets._();
 

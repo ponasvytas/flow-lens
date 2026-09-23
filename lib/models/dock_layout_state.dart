@@ -83,8 +83,8 @@ class DockEdgeExtents {
   const DockEdgeExtents({
     this.left = 280,
     this.right = 280,
-    this.top = 150,
-    this.bottom = 150,
+    this.top = 112,
+    this.bottom = 112,
   });
 
   double forEdge(PanelDockEdge edge) => switch (edge) {
@@ -126,8 +126,8 @@ class DockEdgeExtents {
       DockEdgeExtents(
         left: (json['left'] as num?)?.toDouble() ?? 280,
         right: (json['right'] as num?)?.toDouble() ?? 280,
-        top: (json['top'] as num?)?.toDouble() ?? 150,
-        bottom: (json['bottom'] as num?)?.toDouble() ?? 150,
+        top: (json['top'] as num?)?.toDouble() ?? 112,
+        bottom: (json['bottom'] as num?)?.toDouble() ?? 112,
       );
 }
 
@@ -135,12 +135,17 @@ class WorkflowDockState {
   final DockPresentationMode presentationMode;
   final DockEdgeExtents extents;
   final Map<PanelId, DockPanelState> panels;
+  final Map<String, List<double>>? _splits;
+
+  // Existing in-memory layouts can predate split support during hot reload.
+  Map<String, List<double>> get splits => _splits ?? const {};
 
   const WorkflowDockState({
     this.presentationMode = DockPresentationMode.overlay,
     this.extents = const DockEdgeExtents(),
     this.panels = const {},
-  });
+    Map<String, List<double>> splits = const {},
+  }) : _splits = splits;
 
   DockPanelState panel(PanelId id) => panels[id] ?? const DockPanelState();
 
@@ -148,10 +153,12 @@ class WorkflowDockState {
     DockPresentationMode? presentationMode,
     DockEdgeExtents? extents,
     Map<PanelId, DockPanelState>? panels,
+    Map<String, List<double>>? splits,
   }) => WorkflowDockState(
     presentationMode: presentationMode ?? this.presentationMode,
     extents: extents ?? this.extents,
     panels: panels ?? this.panels,
+    splits: splits ?? this.splits,
   );
 
   WorkflowDockState withPanel(PanelId id, DockPanelState state) => copyWith(
@@ -164,6 +171,7 @@ class WorkflowDockState {
     'panels': {
       for (final entry in panels.entries) entry.key.name: entry.value.toJson(),
     },
+    if (splits.isNotEmpty) 'splits': splits,
   };
 
   factory WorkflowDockState.fromJson(Map<String, Object?> json) {
@@ -172,7 +180,11 @@ class WorkflowDockState {
     if (rawPanels is Map) {
       for (final entry in rawPanels.entries) {
         final id = PanelId.values
-            .where((value) => value.name == entry.key)
+            .where(
+              (value) =>
+                  value.name ==
+                  (entry.key == 'eventButtons' ? 'quickEvents' : entry.key),
+            )
             .firstOrNull;
         if (id != null && entry.value is Map) {
           panels[id] = DockPanelState.fromJson(
@@ -182,6 +194,21 @@ class WorkflowDockState {
       }
     }
     final rawExtents = json['extents'];
+    final splits = <String, List<double>>{};
+    if (json['splits'] case final Map rawSplits) {
+      for (final entry in rawSplits.entries) {
+        final value = entry.value;
+        if (entry.key is! String || value is! List || value.length < 2) {
+          continue;
+        }
+        if (!value.every((v) => v is num && v.isFinite && v > 0)) continue;
+        final total = value.fold(0.0, (sum, v) => sum + (v as num).toDouble());
+        if (!total.isFinite) continue;
+        splits[entry.key as String] = List.unmodifiable(
+          value.map((v) => (v as num).toDouble() / total),
+        );
+      }
+    }
     return WorkflowDockState(
       presentationMode: DockPresentationMode.values.firstWhere(
         (value) => value.name == json['presentationMode'],
@@ -191,6 +218,7 @@ class WorkflowDockState {
           ? DockEdgeExtents.fromJson(Map<String, Object?>.from(rawExtents))
           : const DockEdgeExtents(),
       panels: Map<PanelId, DockPanelState>.unmodifiable(panels),
+      splits: Map.unmodifiable(splits),
     );
   }
 }
@@ -212,7 +240,7 @@ class DockLayoutState {
       );
 
   Map<String, Object?> toJson() => {
-    'version': 1,
+    'version': 2,
     'workflows': {
       for (final entry in workflows.entries)
         entry.key.name: entry.value.toJson(),

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import '../utils/app_log.dart';
 import '../models/app_mode.dart';
+import 'dockable_panel.dart' show kAppTitleBarHeight;
 
 /// Branded title bar for Flow Lens
 class BrandedTitleBar extends StatelessWidget {
+  final VoidCallback? onGoHome;
   final VoidCallback onShowShortcuts;
   final bool showShortcuts;
   final VoidCallback? onSaveEvents;
@@ -12,10 +13,13 @@ class BrandedTitleBar extends StatelessWidget {
   final VoidCallback? onShowSettings;
   final VoidCallback? onShowAccount;
   final VoidCallback? onShowCloudSessions;
+  final VoidCallback? onResetLayout;
   final bool isSignedIn;
   final bool hasPremium;
   final VoidCallback? onToggleDockedEvents;
   final bool showDockedEvents;
+  final VoidCallback? onShowTools;
+  final VoidCallback? onExitPresentation;
 
   // Mode switching
   final AppMode currentMode;
@@ -26,285 +30,185 @@ class BrandedTitleBar extends StatelessWidget {
     required this.showShortcuts,
     required this.currentMode,
     required this.onModeChanged,
+    this.onGoHome,
     this.onSaveEvents,
     this.onLoadEvents,
     this.onShowEventsTable,
     this.onShowSettings,
     this.onShowAccount,
     this.onShowCloudSessions,
+    this.onResetLayout,
     this.isSignedIn = false,
     this.hasPremium = false,
     this.onToggleDockedEvents,
     this.showDockedEvents = false,
+    this.onShowTools,
+    this.onExitPresentation,
     super.key,
   });
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            const Color(0xFF753b8f), // Your purple
-            const Color(0xFF9b5fb8), // Lighter purple
-          ],
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final compact =
+          constraints.maxWidth <
+          (onExitPresentation == null ? 800 : 1000) *
+              MediaQuery.textScalerOf(context).scale(14) /
+              14;
+      final actions = <(String, IconData, VoidCallback?)>[
+        if (compact) ('Tools', Icons.tune, onShowTools),
+        (
+          'Reset workspace layout',
+          Icons.dashboard_customize_outlined,
+          onResetLayout,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          // Logo
-          Image.asset(
-            'assets/logo.png',
-            height: 40,
-            width: 40,
-            fit: BoxFit.contain,
-            errorBuilder: (context, error, stackTrace) {
-              // Fallback if image doesn't load
-              AppLog.debug('Error loading logo: $error');
-              return Container(
-                height: 40,
-                width: 40,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Center(
-                  child: Text(
-                    'CF',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-          const SizedBox(width: 12),
-
-          // Brand Text
-          const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'FLOW LENS',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
+        ('Save events', Icons.save_alt, onSaveEvents),
+        ('Load events', Icons.upload_file, onLoadEvents),
+        ('Events table', Icons.table_chart_outlined, onShowEventsTable),
+        (
+          showDockedEvents ? 'Hide events list' : 'Events list',
+          Icons.view_sidebar_outlined,
+          onToggleDockedEvents,
+        ),
+        ('Settings', Icons.settings_outlined, onShowSettings),
+        (
+          isSignedIn ? 'Account' : 'Sign in',
+          Icons.person_outline,
+          onShowAccount,
+        ),
+        ('Cloud sessions', Icons.cloud_outlined, onShowCloudSessions),
+        ('Keyboard shortcuts', Icons.keyboard_outlined, onShowShortcuts),
+      ];
+      return Container(
+        height: kAppTitleBarHeight,
+        decoration: const BoxDecoration(
+          color: Color(0xFF251B35),
+          border: Border(bottom: BorderSide(color: Color(0xFF58416D))),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 48,
+              height: 48,
+              child: IconButton(
+                tooltip: 'Go to start page',
+                onPressed: onGoHome,
+                icon: const Icon(
+                  Icons.blur_on_rounded,
+                  color: Color(0xFFC4A5FA),
+                  size: 26,
                 ),
               ),
-              Text(
-                'by Coach Flow',
+            ),
+            if (!compact) ...[
+              const SizedBox(width: 10),
+              const Text(
+                'FLOW LENS',
                 style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 12,
-                  letterSpacing: 0.5,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.5,
                 ),
               ),
             ],
-          ),
-
-          const Spacer(),
-
-          // Mode tabs
-          _ModeTabs(currentMode: currentMode, onModeChanged: onModeChanged),
-
-          const Spacer(),
-
-          // Save/Load Actions
-          if (onSaveEvents != null)
-            IconButton(
-              onPressed: onSaveEvents,
-              tooltip: 'Save Events',
-              icon: const Icon(Icons.save_alt, color: Colors.white70),
-            ),
-          if (onLoadEvents != null)
-            IconButton(
-              onPressed: onLoadEvents,
-              tooltip: 'Load Events',
-              icon: const Icon(Icons.upload_file, color: Colors.white70),
-            ),
-          if (onShowEventsTable != null)
-            IconButton(
-              onPressed: onShowEventsTable,
-              tooltip: 'Events Table',
-              icon: const Icon(Icons.table_chart, color: Colors.white70),
-            ),
-          if (onToggleDockedEvents != null)
-            IconButton(
-              onPressed: onToggleDockedEvents,
-              tooltip: showDockedEvents
-                  ? 'Hide Events Panel'
-                  : 'Dock Events Panel',
-              icon: Icon(
-                showDockedEvents
-                    ? Icons.view_sidebar
-                    : Icons.view_sidebar_outlined,
-                color: showDockedEvents ? Colors.white : Colors.white70,
+            if (!compact) const Spacer(),
+            if (compact)
+              Expanded(
+                child: PopupMenuButton<AppMode>(
+                  tooltip: 'Change workflow',
+                  initialValue: currentMode,
+                  onSelected: onModeChanged,
+                  itemBuilder: (_) => [
+                    for (final mode in AppMode.values)
+                      PopupMenuItem(value: mode, child: Text(_label(mode))),
+                  ],
+                  child: Container(
+                    constraints: const BoxConstraints(minHeight: 48),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            _label(currentMode),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const Icon(Icons.expand_more),
+                      ],
+                    ),
+                  ),
+                ),
+              )
+            else ...[
+              for (final mode in AppMode.values)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 3),
+                  child: TextButton(
+                    onPressed: () => onModeChanged(mode),
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(76, 48),
+                      foregroundColor: mode == currentMode
+                          ? Colors.white
+                          : const Color(0xFFC0B6CD),
+                      backgroundColor: mode == currentMode
+                          ? const Color(0xFF63418A)
+                          : Colors.transparent,
+                    ),
+                    child: Text(_label(mode)),
+                  ),
+                ),
+            ],
+            if (!compact) const Spacer(),
+            if (onExitPresentation != null)
+              if (compact)
+                IconButton(
+                  tooltip: 'Exit presentation',
+                  onPressed: onExitPresentation,
+                  icon: const Icon(Icons.close_fullscreen),
+                )
+              else
+                TextButton.icon(
+                  onPressed: onExitPresentation,
+                  icon: const Icon(Icons.close_fullscreen),
+                  label: const Text('Exit presentation'),
+                ),
+            if (!compact)
+              TextButton.icon(
+                onPressed: onShowTools,
+                icon: const Icon(Icons.tune),
+                label: const Text('Tools'),
               ),
-            ),
-          if (onShowSettings != null)
-            IconButton(
-              onPressed: onShowSettings,
-              tooltip: 'Settings',
-              icon: const Icon(Icons.settings, color: Colors.white70),
-            ),
-          if (onShowAccount != null)
-            IconButton(
-              onPressed: onShowAccount,
-              tooltip: isSignedIn
-                  ? (hasPremium ? 'Premium account' : 'Account')
-                  : 'Sign in',
-              icon: Icon(
-                isSignedIn ? Icons.account_circle : Icons.person_outline,
-                color: hasPremium ? Colors.amber.shade300 : Colors.white70,
-              ),
-            ),
-          if (onShowCloudSessions != null)
-            IconButton(
-              onPressed: onShowCloudSessions,
-              tooltip: hasPremium ? 'Cloud sessions' : 'Premium cloud sessions',
-              icon: Icon(
-                hasPremium ? Icons.cloud_done : Icons.cloud_outlined,
-                color: hasPremium ? Colors.amber.shade300 : Colors.white70,
-              ),
-            ),
-
-          const SizedBox(width: 8),
-
-          // Shortcuts Toggle Button
-          IconButton(
-            onPressed: onShowShortcuts,
-            icon: Icon(
-              showShortcuts ? Icons.keyboard_hide : Icons.keyboard,
-              color: Colors.white,
-            ),
-            tooltip: showShortcuts ? 'Hide Shortcuts' : 'Show Shortcuts',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Mode tab strip
-// ---------------------------------------------------------------------------
-
-class _ModeTabs extends StatelessWidget {
-  final AppMode currentMode;
-  final ValueChanged<AppMode> onModeChanged;
-
-  const _ModeTabs({required this.currentMode, required this.onModeChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 32,
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.25),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      padding: const EdgeInsets.all(3),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: AppMode.values
-            .map(
-              (mode) => _ModeTab(
-                mode: mode,
-                isActive: mode == currentMode,
-                onTap: () => onModeChanged(mode),
-              ),
-            )
-            .toList(),
-      ),
-    );
-  }
-}
-
-class _ModeTab extends StatelessWidget {
-  final AppMode mode;
-  final bool isActive;
-  final VoidCallback onTap;
-
-  const _ModeTab({
-    required this.mode,
-    required this.isActive,
-    required this.onTap,
-  });
-
-  static String _label(AppMode mode) {
-    switch (mode) {
-      case AppMode.record:
-        return 'Record';
-      case AppMode.review:
-        return 'Review';
-      case AppMode.tracking:
-        return 'Track';
-    }
-  }
-
-  static IconData _icon(AppMode mode) {
-    switch (mode) {
-      case AppMode.record:
-        return Icons.fiber_manual_record;
-      case AppMode.review:
-        return Icons.search;
-      case AppMode.tracking:
-        return Icons.people;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        curve: Curves.easeInOut,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        decoration: BoxDecoration(
-          color: isActive
-              ? Colors.white.withValues(alpha: 0.18)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              _icon(mode),
-              size: 13,
-              color: isActive ? Colors.white : Colors.white54,
-            ),
-            const SizedBox(width: 5),
-            Text(
-              _label(mode),
-              style: TextStyle(
-                color: isActive ? Colors.white : Colors.white54,
-                fontSize: 12,
-                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                letterSpacing: 0.3,
-              ),
+            PopupMenuButton<int>(
+              tooltip: 'App menu',
+              icon: const Icon(Icons.more_horiz),
+              itemBuilder: (_) => [
+                for (var i = 0; i < actions.length; i++)
+                  PopupMenuItem(
+                    value: i,
+                    enabled: actions[i].$3 != null,
+                    child: Row(
+                      children: [
+                        Icon(actions[i].$2, size: 20),
+                        const SizedBox(width: 12),
+                        Text(actions[i].$1),
+                      ],
+                    ),
+                  ),
+              ],
+              onSelected: (index) => actions[index].$3?.call(),
             ),
           ],
         ),
-      ),
-    );
-  }
+      );
+    },
+  );
+
+  static String _label(AppMode mode) => switch (mode) {
+    AppMode.record => 'Record',
+    AppMode.review => 'Review',
+    AppMode.tracking => 'Track',
+  };
 }
