@@ -44,6 +44,7 @@ dependencies:
   web: ^1.1.1
   firebase_auth: ^6.5.7
   cloud_firestore: ^6.8.0
+  flutter_svg: ^2.3.0
 
 dev_dependencies:
   flutter_test:
@@ -70,7 +71,7 @@ flutter:
 
   # To add assets to your application, add an assets section, like this:
   assets:
-    - assets/logo.png
+    - assets/branding/logo.svg
     - assets/sports/
 
   # An image asset can refer to one or more resolution-specific "variants", see
@@ -102,17 +103,27 @@ flutter:
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "assets/logo.png"
+  image_path: "assets/logo-transparent.png"
+  image_path_android: "assets/branding/launcher.png"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/branding/android-foreground.png"
+  adaptive_icon_monochrome: "assets/branding/android-monochrome.png"
+  adaptive_icon_foreground_inset: 0 # Padding is baked into the foreground canvas.
+  image_path_ios: "assets/branding/launcher.png"
+  remove_alpha_ios: true
+  background_color_ios: "#FFFFFF"
+  image_path_ios_dark_transparent: "assets/branding/ios-dark.png"
+  image_path_ios_tinted_grayscale: "assets/branding/ios-tinted.png"
   min_sdk_android: 21 # android min sdk min:16, default 21
   web:
     generate: true
-    image_path: "assets/logo.png"
-    background_color: "#hex_code"
-    theme_color: "#hex_code"
+    image_path: "assets/logo-transparent.png"
+    background_color: "#ffffff"
+    theme_color: "#753B8F"
   windows:
     generate: true
-    image_path: "assets/logo.png"
-    icon_size: 48 # min:48, max:256, default: 48
+    image_path: "assets/logo-transparent.png"
+    icon_size: 256
   macos:
     generate: true
-    image_path: "assets/logo.png"
+    image_path: "assets/branding/macos.png"
