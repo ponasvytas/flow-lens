@@ -93,3 +93,5 @@ ui-debug.log
 
 # Visual audit captures may contain private video footage.
 /specs/visual-design-system/audit-screenshots/
+
+/tool/

@@ -1,4 +1,6 @@
+import '../utils/responsive_layout.dart';
 import 'package:flutter/material.dart';
+import 'adaptive_dialog.dart';
 import '../models/game_event.dart';
 import '../models/sport_taxonomy.dart';
 import '../controllers/events_controller.dart';
@@ -515,8 +517,9 @@ class _EventsTableViewState extends State<EventsTableView> {
 
   @override
   Widget build(BuildContext context) {
-    final isDesktop = MediaQuery.of(context).size.width > 600;
+    final isDesktop = usesDialogLayout(context);
     final events = _sortEvents(widget.controller.filteredEvents);
+    if (!isDesktop) return _buildPhoneEvents(events);
 
     final content = Column(
       children: [
@@ -759,6 +762,153 @@ class _EventsTableViewState extends State<EventsTableView> {
     }
   }
 
+  Widget _buildPhoneEvents(List<GameEvent> events) => Scaffold(
+    appBar: AppBar(
+      automaticallyImplyLeading: false,
+      title: const Text('Events'),
+      actions: [
+        IconButton(
+          onPressed: widget.onClose,
+          tooltip: 'Close',
+          icon: const Icon(Icons.close),
+        ),
+      ],
+    ),
+    body: SafeArea(
+      top: false,
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Checkbox(
+                value: _isAllSelected,
+                tristate: true,
+                onChanged: (_) => _toggleSelectAll(),
+              ),
+              Expanded(
+                child: Text(
+                  _selectedEventIds.isEmpty
+                      ? '${events.length} / ${widget.controller.totalEventCount}'
+                      : '${_selectedEventIds.length} selected',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              PopupMenuButton<String>(
+                tooltip: 'Filter events',
+                icon: Icon(
+                  widget.controller.filter.isActive
+                      ? Icons.filter_alt
+                      : Icons.filter_alt_outlined,
+                ),
+                onSelected: (value) {
+                  switch (value) {
+                    case 'category':
+                      _showCategoryFilter();
+                    case 'event':
+                      _showEventTypeFilter();
+                    case 'grade':
+                      _showImpactFilter();
+                    case 'context':
+                      _showContextFilter();
+                    case 'clear':
+                      widget.controller.clearFilter();
+                  }
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'category', child: Text('Category')),
+                  PopupMenuItem(value: 'event', child: Text('Event type')),
+                  PopupMenuItem(value: 'grade', child: Text('Grade')),
+                  PopupMenuItem(value: 'context', child: Text('Context')),
+                  PopupMenuItem(value: 'clear', child: Text('Clear filters')),
+                ],
+              ),
+              PopupMenuButton<_SortColumn>(
+                tooltip: 'Sort events',
+                icon: const Icon(Icons.sort),
+                onSelected: _setSort,
+                itemBuilder: (_) => [
+                  for (final column in _SortColumn.values)
+                    CheckedPopupMenuItem(
+                      value: column,
+                      checked: column == _sortColumn,
+                      child: Text(
+                        '${switch (column) {
+                          _SortColumn.time => 'Time',
+                          _SortColumn.category => 'Category',
+                          _SortColumn.event => 'Event',
+                          _SortColumn.impact => 'Grade',
+                        }}${column == _sortColumn ? (_sortAscending ? ' ↑' : ' ↓') : ''}',
+                      ),
+                    ),
+                ],
+              ),
+              PopupMenuButton<String>(
+                tooltip: 'Selected event actions',
+                enabled: _selectedEventIds.isNotEmpty,
+                onSelected: (value) {
+                  if (value == 'export') _exportSelected();
+                  if (value == 'delete') _confirmBulkDelete();
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                    value: 'export',
+                    child: Text('Export selected'),
+                  ),
+                  PopupMenuItem(
+                    value: 'delete',
+                    child: Text('Delete selected'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          Expanded(
+            child: events.isEmpty
+                ? Center(
+                    child: Text(
+                      widget.controller.filter.isActive
+                          ? 'No events match the current filters'
+                          : 'No events yet',
+                    ),
+                  )
+                : ListView.separated(
+                    itemCount: events.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final event = events[index];
+                      return ListTile(
+                        key: ValueKey('phone-event-${event.id}'),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                        ),
+                        selected: _selectedEventIds.contains(event.id),
+                        leading: Checkbox(
+                          value: _selectedEventIds.contains(event.id),
+                          onChanged: (_) => _toggleEventSelection(event.id),
+                        ),
+                        title: Text(
+                          '${_formatDuration(event.timestamp)} · ${event.label}\n${_getEventTypeName(event)}',
+                        ),
+                        subtitle: Text(
+                          _getImpactName(event.grade),
+                          style: TextStyle(color: _getImpactColor(event.grade)),
+                        ),
+                        trailing: IconButton(
+                          tooltip: 'Delete event',
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () => _confirmDelete(event),
+                        ),
+                        onTap: () => widget.onEventTap(event),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    ),
+  );
+
   Widget _buildHeaderCell(
     String label, {
     required int flex,
@@ -880,7 +1030,7 @@ class _ColumnFilterDialogState extends State<_ColumnFilterDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return AdaptiveDialog(
       title: Text(widget.title),
       content: SizedBox(
         width: 300,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/responsive_layout.dart';
 import '../controllers/settings_controller.dart';
 
 class SettingsView extends StatefulWidget {
@@ -45,7 +46,7 @@ class _SettingsViewState extends State<SettingsView> {
 
   @override
   Widget build(BuildContext context) {
-    final isDesktop = MediaQuery.of(context).size.width > 600;
+    final isDesktop = usesDialogLayout(context);
 
     final content = Column(
       mainAxisSize: MainAxisSize.min,
@@ -101,11 +102,12 @@ class _SettingsViewState extends State<SettingsView> {
         children: [
           const Icon(Icons.settings, size: 28),
           const SizedBox(width: 12),
-          const Text(
-            'Settings',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          const Expanded(
+            child: Text(
+              'Settings',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
           ),
-          const Spacer(),
           IconButton(
             icon: const Icon(Icons.close),
             onPressed: () => Navigator.of(context).pop(),
@@ -157,11 +159,12 @@ class _SettingsViewState extends State<SettingsView> {
       children: [
         Row(
           children: [
-            const Text(
-              'Default playback speed',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            const Expanded(
+              child: Text(
+                'Default playback speed',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
             ),
-            const Spacer(),
             Text(
               '${_defaultPlaybackSpeed.toStringAsFixed(2)}x',
               style: TextStyle(
@@ -234,11 +237,12 @@ class _SettingsViewState extends State<SettingsView> {
       children: [
         Row(
           children: [
-            const Text(
-              'Slow playback speed',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            const Expanded(
+              child: Text(
+                'Slow playback speed',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
             ),
-            const Spacer(),
             Text(
               '${_slowPlaybackSpeed.toStringAsFixed(2)}x',
               style: TextStyle(
@@ -310,11 +314,12 @@ class _SettingsViewState extends State<SettingsView> {
       children: [
         Row(
           children: [
-            const Text(
-              'Fast play speed',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            const Expanded(
+              child: Text(
+                'Fast play speed',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
             ),
-            const Spacer(),
             Text(
               '${_fastPlaySpeed.toStringAsFixed(1)}x',
               style: TextStyle(
@@ -386,11 +391,12 @@ class _SettingsViewState extends State<SettingsView> {
       children: [
         Row(
           children: [
-            const Text(
-              'Lead-in (seconds)',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            const Expanded(
+              child: Text(
+                'Lead-in (seconds)',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
             ),
-            const Spacer(),
             Text(
               '${_leadInSeconds}s',
               style: TextStyle(
@@ -432,11 +438,12 @@ class _SettingsViewState extends State<SettingsView> {
       children: [
         Row(
           children: [
-            const Text(
-              'Lead-out (seconds)',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            const Expanded(
+              child: Text(
+                'Lead-out (seconds)',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
             ),
-            const Spacer(),
             Text(
               '${_leadOutSeconds}s',
               style: TextStyle(
@@ -473,8 +480,10 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   Widget _buildActionButtons(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.end,
+    return Wrap(
+      alignment: WrapAlignment.end,
+      spacing: 16,
+      runSpacing: 8,
       children: [
         TextButton(
           onPressed: () async {
@@ -483,7 +492,6 @@ class _SettingsViewState extends State<SettingsView> {
           },
           child: const Text('Reset to Defaults'),
         ),
-        const SizedBox(width: 16),
         ElevatedButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Close'),

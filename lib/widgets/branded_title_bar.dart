@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/app_mode.dart';
+import '../utils/responsive_layout.dart';
 import 'dockable_panel.dart' show kAppTitleBarHeight;
 
 /// Branded title bar for Flow Lens
@@ -51,17 +52,19 @@ class BrandedTitleBar extends StatelessWidget {
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       final compact =
+          usesPhoneLayout(context) ||
           constraints.maxWidth <
-          (onExitPresentation == null ? 800 : 1000) *
-              MediaQuery.textScalerOf(context).scale(14) /
-              14;
+              (onExitPresentation == null ? 800 : 1000) *
+                  MediaQuery.textScalerOf(context).scale(14) /
+                  14;
       final actions = <(String, IconData, VoidCallback?)>[
-        if (compact) ('Tools', Icons.tune, onShowTools),
-        (
-          'Reset workspace layout',
-          Icons.dashboard_customize_outlined,
-          onResetLayout,
-        ),
+        if (compact && onShowTools != null) ('Tools', Icons.tune, onShowTools),
+        if (onResetLayout != null)
+          (
+            'Reset workspace layout',
+            Icons.dashboard_customize_outlined,
+            onResetLayout,
+          ),
         ('Save events', Icons.save_alt, onSaveEvents),
         ('Load events', Icons.upload_file, onLoadEvents),
         ('Events table', Icons.table_chart_outlined, onShowEventsTable),

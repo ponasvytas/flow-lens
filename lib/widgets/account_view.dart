@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/responsive_layout.dart';
 
 import '../controllers/account_controller.dart';
 import '../models/app_entitlement.dart';
@@ -28,7 +29,7 @@ class _AccountViewState extends State<AccountView> {
 
   @override
   Widget build(BuildContext context) {
-    final isDesktop = MediaQuery.sizeOf(context).width > 600;
+    final isDesktop = usesDialogLayout(context);
     final content = ListenableBuilder(
       listenable: widget.controller,
       builder: (context, _) => Column(

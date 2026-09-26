@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../controllers/ui_controller.dart';
 import '../models/app_mode.dart';
+import '../utils/responsive_layout.dart';
 import 'dockable_panel.dart';
 import 'tool_action_grid.dart';
 import 'dock_split.dart';
@@ -130,12 +131,14 @@ class DockLayout extends StatefulWidget {
   final List<DockPanelEntry> panels;
   final Widget child;
   final bool adaptive;
+  final Widget? phoneFeedback;
 
   const DockLayout({
     required this.uiController,
     required this.panels,
     this.child = const SizedBox.expand(),
     this.adaptive = false,
+    this.phoneFeedback,
     super.key,
   });
 
@@ -151,6 +154,119 @@ class _DockLayoutState extends State<DockLayout> {
   DockEdgeExtents? _resizingExtents;
   PanelId? _compactActive;
   Set<PanelId> _compactVisible = {};
+  final Map<AppMode, PanelId> _phoneActive = {};
+  bool _phoneToolsHidden = false;
+  final GlobalKey _videoKey = GlobalKey();
+
+  Widget get _video => KeyedSubtree(
+    key: _videoKey,
+    child: SizedBox.expand(child: widget.child),
+  );
+
+  Widget _buildPhone(Size size) {
+    // Phone selection and hiding never write desktop visibility or dock geometry.
+    final entries = widget.panels;
+    if (entries.isEmpty) return _video;
+    final mode = widget.uiController.currentMode;
+    final preferred = switch (mode) {
+      AppMode.record => PanelId.quickEvents,
+      AppMode.review => PanelId.eventNavigation,
+      AppMode.tracking => PanelId.playerTracking,
+    };
+    final selected =
+        entries
+            .where((entry) => entry.id == (_phoneActive[mode] ?? preferred))
+            .firstOrNull ??
+        entries.first;
+    final landscape = size.width > size.height && size.width >= 600;
+    final header = SizedBox(
+      height: 48,
+      child: Row(
+        children: [
+          const SizedBox(width: 8),
+          Expanded(
+            child: DropdownButton<PanelId>(
+              key: const ValueKey('phone-tool-selector'),
+              isExpanded: true,
+              value: selected.id,
+              underline: const SizedBox.shrink(),
+              items: [
+                for (final entry in entries)
+                  DropdownMenuItem(
+                    value: entry.id,
+                    child: Text(
+                      entry.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: (id) => setState(() {
+                if (id != null) _phoneActive[mode] = id;
+                _phoneToolsHidden = false;
+              }),
+            ),
+          ),
+          IconButton(
+            tooltip: _phoneToolsHidden ? 'Show tools' : 'Hide tools',
+            onPressed: () =>
+                setState(() => _phoneToolsHidden = !_phoneToolsHidden),
+            icon: Icon(
+              _phoneToolsHidden ? Icons.expand_less : Icons.expand_more,
+            ),
+          ),
+        ],
+      ),
+    );
+    final content = selected.builder(PanelDockEdge.bottom);
+    final panel = Material(
+      key: const ValueKey('phone-tools'),
+      color: const Color(0xFF1C1827),
+      child: Column(
+        children: [
+          header,
+          if (!_phoneToolsHidden)
+            Expanded(
+              child: selected.id == PanelId.eventsList
+                  ? content
+                  : SingleChildScrollView(
+                      key: ValueKey('phone-scroll-${selected.id.name}'),
+                      child: content,
+                    ),
+            ),
+          if (widget.phoneFeedback != null) widget.phoneFeedback!,
+        ],
+      ),
+    );
+    if (_phoneToolsHidden) {
+      return Column(
+        children: [
+          Expanded(child: _video),
+          panel,
+        ],
+      );
+    }
+    if (landscape) {
+      return Row(
+        children: [
+          Expanded(child: _video),
+          SizedBox(
+            width: (size.width * 0.36).clamp(240.0, 320.0),
+            child: panel,
+          ),
+        ],
+      );
+    }
+    return Column(
+      children: [
+        SizedBox(
+          height: math.min(size.width * 9 / 16, size.height * 0.45),
+          child: _video,
+        ),
+        Expanded(child: panel),
+      ],
+    );
+  }
 
   @override
   void didUpdateWidget(DockLayout oldWidget) {
@@ -172,6 +288,9 @@ class _DockLayoutState extends State<DockLayout> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = constraints.biggest;
+        if (widget.adaptive && usesPhoneLayout(context)) {
+          return _buildPhone(size);
+        }
         if (widget.adaptive && usesCompactDockLayout(size)) {
           final entries =
               widget.panels
@@ -218,7 +337,7 @@ class _DockLayoutState extends State<DockLayout> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(child: widget.child),
+              Expanded(child: _video),
               if (entries.isNotEmpty)
                 SizedBox(
                   height: math.min(requestedHeight, size.height * 0.6),
@@ -364,10 +483,7 @@ class _DockLayoutState extends State<DockLayout> {
         return Stack(
           clipBehavior: Clip.hardEdge,
           children: [
-            Positioned.fromRect(
-              rect: geometry.contentRect,
-              child: widget.child,
-            ),
+            Positioned.fromRect(rect: geometry.contentRect, child: _video),
             if (geometry.topRect case final rect?)
               _buildDockRegion(
                 PanelDockEdge.top,
