@@ -265,7 +265,7 @@ class _DockPanelState extends State<DockPanel>
           if (_isHorizontal) return _buildInlineControls(constraints);
           final content = SizeTransition(
             sizeFactor: _collapseAnimation,
-            alignment: Alignment.topCenter,
+            axisAlignment: -1,
             child: widget.scrollContent
                 ? SingleChildScrollView(child: widget.child)
                 : widget.child,

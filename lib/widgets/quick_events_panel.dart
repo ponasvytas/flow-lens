@@ -617,7 +617,7 @@ class _QuickEventsEditorState extends State<QuickEventsEditor> {
                         physics: const NeverScrollableScrollPhysics(),
                         buildDefaultDragHandles: false,
                         itemCount: items.length,
-                        onReorderItem: (oldIndex, newIndex) {
+                        onReorder: (oldIndex, newIndex) {
                           _undo = items;
                           ctrl.move(oldIndex, newIndex);
                         },
