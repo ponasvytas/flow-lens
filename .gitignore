@@ -94,4 +94,6 @@ ui-debug.log
 # Visual audit captures may contain private video footage.
 /specs/visual-design-system/audit-screenshots/
 
-/tool/
+/tool/*
+!/tool/update_branding.py
+!/tool/BRANDING.md

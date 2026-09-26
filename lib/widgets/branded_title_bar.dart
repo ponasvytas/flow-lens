@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/app_mode.dart';
 import '../utils/responsive_layout.dart';
+import 'flow_logo.dart';
 import 'dockable_panel.dart' show kAppTitleBarHeight;
 
 /// Branded title bar for Flow Lens
@@ -97,11 +98,7 @@ class BrandedTitleBar extends StatelessWidget {
               child: IconButton(
                 tooltip: 'Go to start page',
                 onPressed: onGoHome,
-                icon: const Icon(
-                  Icons.blur_on_rounded,
-                  color: Color(0xFFC4A5FA),
-                  size: 26,
-                ),
+                icon: const FlowLogo(color: Color(0xFFC4A5FA), size: 30),
               ),
             ),
             if (!compact) ...[
