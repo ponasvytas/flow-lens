@@ -133,6 +133,16 @@ class _SettingsViewState extends State<SettingsView> {
         _buildSlowPlaybackSpeedControl(),
         const SizedBox(height: 24),
         _buildFastPlaySpeedControl(),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Sticky fast play on touch'),
+          subtitle: const Text(
+            'Keep fast play on after a tap. When off, hold Fast and release '
+            'to restore the previous speed. The F key always uses hold.',
+          ),
+          value: widget.controller.settings.stickyFastPlayOnTouch,
+          onChanged: widget.controller.setStickyFastPlayOnTouch,
+        ),
         const SizedBox(height: 24),
         _buildLeadInControl(),
         const SizedBox(height: 24),
@@ -317,7 +327,7 @@ class _SettingsViewState extends State<SettingsView> {
         ),
         const SizedBox(height: 4),
         const Text(
-          "Speed when holding 'F' key",
+          "Speed for the Fast button and holding the 'F' key",
           style: TextStyle(fontSize: 12, color: Colors.grey),
         ),
         const SizedBox(height: 8),
@@ -342,6 +352,7 @@ class _SettingsViewState extends State<SettingsView> {
             _buildQuickPickButton(2.0),
             _buildQuickPickButton(3.0),
             _buildQuickPickButton(5.0),
+            _buildQuickPickButton(7.0),
             _buildQuickPickButton(8.0),
           ],
         ),

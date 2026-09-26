@@ -1,13 +1,14 @@
 class AppSettings {
   final int schemaVersion;
   final double fastPlaySpeed;
+  final bool stickyFastPlayOnTouch;
   final double slowPlaybackSpeed;
   final double defaultPlaybackSpeed;
   final Duration leadIn;
   final Duration leadOut;
 
   static const int currentSchemaVersion = 1;
-  static const double defaultFastPlaySpeed = 3.0;
+  static const double defaultFastPlaySpeed = 7.0;
   static const double defaultSlowPlaybackSpeed = 0.5;
   static const double defaultDefaultPlaybackSpeed = 1.0;
   static const Duration defaultLeadIn = Duration(seconds: 10);
@@ -16,6 +17,7 @@ class AppSettings {
   const AppSettings({
     this.schemaVersion = currentSchemaVersion,
     this.fastPlaySpeed = defaultFastPlaySpeed,
+    this.stickyFastPlayOnTouch = false,
     this.slowPlaybackSpeed = defaultSlowPlaybackSpeed,
     this.defaultPlaybackSpeed = defaultDefaultPlaybackSpeed,
     this.leadIn = defaultLeadIn,
@@ -30,6 +32,7 @@ class AppSettings {
     return {
       'schemaVersion': schemaVersion,
       'fastPlaySpeed': fastPlaySpeed,
+      'stickyFastPlayOnTouch': stickyFastPlayOnTouch,
       'slowPlaybackSpeed': slowPlaybackSpeed,
       'defaultPlaybackSpeed': defaultPlaybackSpeed,
       'leadInSeconds': leadIn.inSeconds,
@@ -42,6 +45,7 @@ class AppSettings {
       schemaVersion: map['schemaVersion'] as int? ?? currentSchemaVersion,
       fastPlaySpeed:
           (map['fastPlaySpeed'] as num?)?.toDouble() ?? defaultFastPlaySpeed,
+      stickyFastPlayOnTouch: map['stickyFastPlayOnTouch'] as bool? ?? false,
       slowPlaybackSpeed:
           (map['slowPlaybackSpeed'] as num?)?.toDouble() ??
           defaultSlowPlaybackSpeed,
@@ -60,6 +64,7 @@ class AppSettings {
   AppSettings copyWith({
     int? schemaVersion,
     double? fastPlaySpeed,
+    bool? stickyFastPlayOnTouch,
     double? slowPlaybackSpeed,
     double? defaultPlaybackSpeed,
     Duration? leadIn,
@@ -68,6 +73,8 @@ class AppSettings {
     return AppSettings(
       schemaVersion: schemaVersion ?? this.schemaVersion,
       fastPlaySpeed: fastPlaySpeed ?? this.fastPlaySpeed,
+      stickyFastPlayOnTouch:
+          stickyFastPlayOnTouch ?? this.stickyFastPlayOnTouch,
       slowPlaybackSpeed: slowPlaybackSpeed ?? this.slowPlaybackSpeed,
       defaultPlaybackSpeed: defaultPlaybackSpeed ?? this.defaultPlaybackSpeed,
       leadIn: leadIn ?? this.leadIn,
@@ -81,6 +88,7 @@ class AppSettings {
     return other is AppSettings &&
         other.schemaVersion == schemaVersion &&
         other.fastPlaySpeed == fastPlaySpeed &&
+        other.stickyFastPlayOnTouch == stickyFastPlayOnTouch &&
         other.slowPlaybackSpeed == slowPlaybackSpeed &&
         other.defaultPlaybackSpeed == defaultPlaybackSpeed &&
         other.leadIn == leadIn &&
@@ -92,6 +100,7 @@ class AppSettings {
     return Object.hash(
       schemaVersion,
       fastPlaySpeed,
+      stickyFastPlayOnTouch,
       slowPlaybackSpeed,
       defaultPlaybackSpeed,
       leadIn,
