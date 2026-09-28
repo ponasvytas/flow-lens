@@ -2,11 +2,22 @@ import 'package:flutter/material.dart';
 
 abstract final class FlowTheme {
   static const background = Color(0xFF100E17);
+  static const videoStage = Color(0xFF08090D);
   static const panel = Color(0xFF1C1827);
   static const raised = Color(0xFF292237);
+  static const header = Color(0xFF251B35);
   static const border = Color(0xFF453953);
+  static const controlBorder = Color(0xFF705F82);
   static const accent = Color(0xFFC4A5FA);
+  static const onAccent = Color(0xFF27123F);
+  static const selected = Color(0xFF63418A);
+  static const text = Color(0xFFF5EFFB);
   static const muted = Color(0xFFC0B6CD);
+  static const positive = Color(0xFF6ED7AE);
+  static const negative = Color(0xFFFF8A8A);
+  static const neutral = Color(0xFFBCC3D0);
+  static const warning = Color(0xFFFFD07A);
+  static const warningSurface = Color(0xFF3A2D19);
 
   static ThemeData get dark {
     final scheme =
@@ -16,10 +27,15 @@ abstract final class FlowTheme {
         ).copyWith(
           surface: panel,
           primary: accent,
-          onPrimary: const Color(0xFF27123F),
-          onSurface: const Color(0xFFF5EFFB),
+          onPrimary: onAccent,
+          primaryContainer: selected,
+          onPrimaryContainer: text,
+          onSurface: text,
           onSurfaceVariant: muted,
-          outline: border,
+          outline: controlBorder,
+          outlineVariant: border,
+          error: negative,
+          onError: background,
         );
     return ThemeData(
       useMaterial3: true,
@@ -28,6 +44,7 @@ abstract final class FlowTheme {
       materialTapTargetSize: MaterialTapTargetSize.padded,
       visualDensity: VisualDensity.standard,
       dividerColor: border,
+      focusColor: accent,
       tooltipTheme: const TooltipThemeData(
         waitDuration: Duration(milliseconds: 500),
       ),

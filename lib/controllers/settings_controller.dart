@@ -42,6 +42,10 @@ class SettingsController extends ChangeNotifier {
     await _saveSettings(_settings.copyWith(fastPlaySpeed: speed));
   }
 
+  Future<void> setStickyFastPlayOnTouch(bool enabled) async {
+    await _saveSettings(_settings.copyWith(stickyFastPlayOnTouch: enabled));
+  }
+
   Future<void> setDefaultPlaybackSpeed(double speed) async {
     if (speed < 0.5 || speed > 3.0) {
       throw ArgumentError('Default playback speed must be between 0.5 and 3.0');

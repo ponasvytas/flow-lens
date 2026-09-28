@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/responsive_layout.dart';
 
 import '../models/cloud_sessions.dart';
 import '../services/event_session_repository.dart';
@@ -89,7 +90,7 @@ class _CloudSessionsViewState extends State<CloudSessionsView> {
       ],
     );
 
-    if (MediaQuery.sizeOf(context).width > 700) {
+    if (usesDialogLayout(context, minWidth: 700)) {
       return Dialog(child: SizedBox(width: 760, height: 640, child: content));
     }
     return Scaffold(body: SafeArea(child: content));

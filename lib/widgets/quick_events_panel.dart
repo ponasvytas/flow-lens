@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'adaptive_dialog.dart';
 import '../controllers/quick_events_controller.dart';
 import '../models/quick_event.dart';
 import '../models/game_event.dart';
 import '../models/sport_taxonomy.dart';
 import '../theme/flow_theme.dart';
+import '../utils/responsive_layout.dart';
 import 'event_context_editor.dart';
 import 'tool_action_grid.dart';
 import 'package:flutter/foundation.dart' show mapEquals;
@@ -68,50 +70,103 @@ class QuickEventsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: controller,
-    builder: (context, _) => ToolActionGrid(
-      title: 'Quick events',
-      layout: layoutFor(controller, taxonomy),
-      children: [
-        for (final item in controller.items)
-          ToolActionButton(
-            key: ValueKey('quick-${item.id}'),
-            label: actionLabel(item, taxonomy),
-            icon:
-                taxonomy.getCategoryById(item.categoryId)?.getIcon() ??
-                Icons.help_outline,
-            color: taxonomy.getCategoryById(item.categoryId)?.getColor(),
-            onPressed:
-                taxonomy
-                        .getCategoryById(item.categoryId)
-                        ?.getEventTypeById(item.eventTypeId) ==
-                    null
-                ? null
-                : () => onRecord(item),
+    builder: (context, _) => usesPhoneLayout(context)
+        ? Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final item in controller.items)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: OutlinedButton.icon(
+                      key: ValueKey('quick-${item.id}'),
+                      style: OutlinedButton.styleFrom(
+                        alignment: Alignment.centerLeft,
+                        minimumSize: const Size(48, 64),
+                        padding: const EdgeInsets.all(12),
+                      ),
+                      icon: Icon(
+                        taxonomy.getCategoryById(item.categoryId)?.getIcon() ??
+                            Icons.help_outline,
+                      ),
+                      label: Text(actionLabel(item, taxonomy)),
+                      onPressed:
+                          taxonomy
+                                  .getCategoryById(item.categoryId)
+                                  ?.getEventTypeById(item.eventTypeId) ==
+                              null
+                          ? null
+                          : () => onRecord(item),
+                    ),
+                  ),
+                OutlinedButton.icon(
+                  onPressed: onAllEvents,
+                  icon: const Icon(Icons.apps),
+                  label: const Text('All events'),
+                ),
+                TextButton.icon(
+                  onPressed: controller.ready
+                      ? () => _openEditor(context)
+                      : null,
+                  icon: const Icon(Icons.tune),
+                  label: const Text('Edit menu'),
+                ),
+                if (controller.error != null)
+                  TextButton.icon(
+                    onPressed: controller.ready
+                        ? controller.retrySave
+                        : controller.load,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry save'),
+                  ),
+              ],
+            ),
+          )
+        : ToolActionGrid(
+            title: 'Quick events',
+            layout: layoutFor(controller, taxonomy),
+            children: [
+              for (final item in controller.items)
+                ToolActionButton(
+                  key: ValueKey('quick-${item.id}'),
+                  label: actionLabel(item, taxonomy),
+                  icon:
+                      taxonomy.getCategoryById(item.categoryId)?.getIcon() ??
+                      Icons.help_outline,
+                  color: taxonomy.getCategoryById(item.categoryId)?.getColor(),
+                  onPressed:
+                      taxonomy
+                              .getCategoryById(item.categoryId)
+                              ?.getEventTypeById(item.eventTypeId) ==
+                          null
+                      ? null
+                      : () => onRecord(item),
+                ),
+              ToolActionButton(
+                label: 'Edit menu',
+                dismissPalette: true,
+                tooltip: 'Edit quick menu',
+                icon: Icons.tune,
+                onPressed: controller.ready ? () => _openEditor(context) : null,
+              ),
+              ToolActionButton(
+                label: 'All events',
+                dismissPalette: true,
+                icon: Icons.apps,
+                onPressed: onAllEvents,
+              ),
+              if (controller.error != null)
+                ToolActionButton(
+                  label: 'Retry save',
+                  tooltip: controller.error,
+                  icon: Icons.refresh,
+                  onPressed: controller.ready
+                      ? controller.retrySave
+                      : controller.load,
+                ),
+            ],
           ),
-        ToolActionButton(
-          label: 'Edit menu',
-          dismissPalette: true,
-          tooltip: 'Edit quick menu',
-          icon: Icons.tune,
-          onPressed: controller.ready ? () => _openEditor(context) : null,
-        ),
-        ToolActionButton(
-          label: 'All events',
-          dismissPalette: true,
-          icon: Icons.apps,
-          onPressed: onAllEvents,
-        ),
-        if (controller.error != null)
-          ToolActionButton(
-            label: 'Retry save',
-            tooltip: controller.error,
-            icon: Icons.refresh,
-            onPressed: controller.ready
-                ? controller.retrySave
-                : controller.load,
-          ),
-      ],
-    ),
   );
 }
 
@@ -122,9 +177,9 @@ class _GradeLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, icon, color) = switch (grade) {
-      EventGrade.positive => ('Positive', Icons.thumb_up, Colors.greenAccent),
-      EventGrade.neutral => ('Neutral', Icons.remove, FlowTheme.muted),
-      EventGrade.negative => ('Negative', Icons.thumb_down, Colors.redAccent),
+      EventGrade.positive => ('Positive', Icons.thumb_up, FlowTheme.positive),
+      EventGrade.neutral => ('Neutral', Icons.remove, FlowTheme.neutral),
+      EventGrade.negative => ('Negative', Icons.thumb_down, FlowTheme.negative),
       null => ('Ungraded', Icons.radio_button_unchecked, FlowTheme.muted),
     };
     return Row(
@@ -170,7 +225,7 @@ class _QuickEventPickerState extends State<_QuickEventPicker> {
   Widget build(BuildContext context) {
     final category = _category;
     final type = _type;
-    return AlertDialog(
+    return AdaptiveDialog(
       title: Text(
         type != null
             ? '3. Choose grade'
@@ -368,7 +423,7 @@ class _QuickEventsEditorState extends State<QuickEventsEditor> {
     final text = TextEditingController(text: initial);
     final result = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => AdaptiveDialog(
         title: Text(title),
         content: TextField(
           controller: text,
@@ -407,7 +462,7 @@ class _QuickEventsEditorState extends State<QuickEventsEditor> {
     final result = await showDialog<QuickEvent>(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setLocalState) => AlertDialog(
+        builder: (context, setLocalState) => AdaptiveDialog(
           title: Text(quickEventLabel(item, widget.taxonomy)),
           content: SingleChildScrollView(
             child: Column(
@@ -510,6 +565,8 @@ class _QuickEventsEditorState extends State<QuickEventsEditor> {
                     const Expanded(
                       child: Text(
                         'Edit quick menu',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.w600,
@@ -560,7 +617,7 @@ class _QuickEventsEditorState extends State<QuickEventsEditor> {
                         physics: const NeverScrollableScrollPhysics(),
                         buildDefaultDragHandles: false,
                         itemCount: items.length,
-                        onReorderItem: (oldIndex, newIndex) {
+                        onReorder: (oldIndex, newIndex) {
                           _undo = items;
                           ctrl.move(oldIndex, newIndex);
                         },
@@ -747,16 +804,17 @@ class _QuickEventsEditorState extends State<QuickEventsEditor> {
                   ),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Done'),
+              if (!usesPhoneLayout(context))
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Done'),
+                    ),
                   ),
                 ),
-              ),
             ],
           );
         },

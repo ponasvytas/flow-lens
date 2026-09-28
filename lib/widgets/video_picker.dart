@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/sport_profile.dart';
+import '../theme/flow_theme.dart';
 import 'sport_profile_selector.dart';
 
 /// Initial video loading screen with sport selection and file picker
@@ -78,14 +79,14 @@ class _VideoPickerState extends State<VideoPicker> {
             Row(
               children: [
                 IconButton(
-                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  icon: const Icon(Icons.arrow_back, color: FlowTheme.text),
                   onPressed: _onBackToSportSelection,
                   tooltip: 'Change sport',
                 ),
                 const SizedBox(width: 8),
                 Icon(
                   _selectedSport!.iconData,
-                  color: const Color(0xFF753b8f),
+                  color: FlowTheme.accent,
                   size: 32,
                 ),
                 const SizedBox(width: 12),
@@ -94,7 +95,7 @@ class _VideoPickerState extends State<VideoPicker> {
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: FlowTheme.text,
                   ),
                 ),
               ],
@@ -111,32 +112,32 @@ class _VideoPickerState extends State<VideoPicker> {
             const SizedBox(height: 32),
             const Row(
               children: [
-                Expanded(child: Divider(color: Colors.white24)),
+                Expanded(child: Divider(color: FlowTheme.border)),
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16),
-                  child: Text("OR", style: TextStyle(color: Colors.white54)),
+                  child: Text("OR", style: TextStyle(color: FlowTheme.muted)),
                 ),
-                Expanded(child: Divider(color: Colors.white24)),
+                Expanded(child: Divider(color: FlowTheme.border)),
               ],
             ),
             const SizedBox(height: 32),
             TextField(
               controller: _urlController,
-              style: const TextStyle(color: Colors.white),
+              style: const TextStyle(color: FlowTheme.text),
               decoration: InputDecoration(
                 labelText: 'Video URL',
                 hintText: 'https://example.com/video.mp4',
-                labelStyle: const TextStyle(color: Colors.white70),
-                hintStyle: const TextStyle(color: Colors.white30),
+                labelStyle: const TextStyle(color: FlowTheme.muted),
+                hintStyle: const TextStyle(color: FlowTheme.muted),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Colors.white24),
+                  borderSide: const BorderSide(color: FlowTheme.controlBorder),
                 ),
                 suffixIcon: IconButton(
-                  icon: const Icon(Icons.arrow_forward, color: Colors.white),
+                  icon: const Icon(Icons.arrow_forward, color: FlowTheme.text),
                   onPressed: () {
                     if (_urlController.text.isNotEmpty) {
                       widget.onLoadUrl(_urlController.text);

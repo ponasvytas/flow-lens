@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../controllers/events_controller.dart';
 import '../models/game_event.dart';
 import '../models/events_filter.dart';
+import '../utils/responsive_layout.dart';
 
 /// Panel shown in Review mode for navigating filtered events sequentially.
 ///
@@ -90,12 +91,15 @@ class EventNavigationPanel extends StatelessWidget {
               ),
 
               // Counter
-              Text(
-                positionLabel,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
+              Flexible(
+                child: Text(
+                  positionLabel,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
 
@@ -112,10 +116,21 @@ class EventNavigationPanel extends StatelessWidget {
           const SizedBox(height: 8),
 
           // Filter summary chip
-          GestureDetector(
-            onTap: onOpenEventsTable,
-            child: _FilterSummary(filter: controller.filter, total: total),
-          ),
+          if (usesPhoneLayout(context))
+            OutlinedButton.icon(
+              onPressed: onOpenEventsTable,
+              icon: const Icon(Icons.list_alt),
+              label: Text(
+                controller.filter.isActive
+                    ? 'Filtered events ($total)'
+                    : 'All events ($total)',
+              ),
+            )
+          else
+            GestureDetector(
+              onTap: onOpenEventsTable,
+              child: _FilterSummary(filter: controller.filter, total: total),
+            ),
         ],
       ),
     );
@@ -206,9 +221,11 @@ class _FilterSummary extends StatelessWidget {
             color: Colors.white70,
           ),
           const SizedBox(width: 5),
-          Text(
-            label,
-            style: const TextStyle(color: Colors.white70, fontSize: 11),
+          Flexible(
+            child: Text(
+              label,
+              style: const TextStyle(color: Colors.white70, fontSize: 11),
+            ),
           ),
           const SizedBox(width: 4),
           const Icon(Icons.open_in_new, size: 11, color: Colors.white38),

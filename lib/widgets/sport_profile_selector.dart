@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/sport_profile.dart';
+import '../theme/flow_theme.dart';
 
 class SportProfileSelector extends StatelessWidget {
   final Function(SportProfile) onProfileSelected;
@@ -15,7 +16,7 @@ class SportProfileSelector extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.sports, size: 80, color: Color(0xFF753b8f)),
+            const Icon(Icons.sports, size: 80, color: FlowTheme.accent),
             const SizedBox(height: 24),
             const Text(
               'Select Sport',
@@ -24,7 +25,7 @@ class SportProfileSelector extends StatelessWidget {
             const SizedBox(height: 12),
             const Text(
               'Choose which sport you want to analyze',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
+              style: TextStyle(fontSize: 16, color: FlowTheme.muted),
             ),
             const SizedBox(height: 48),
             Wrap(
@@ -52,10 +53,10 @@ class SportProfileSelector extends StatelessWidget {
         constraints: const BoxConstraints(minHeight: 180),
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
-          color: isEnabled ? const Color(0xFF292237) : const Color(0xFF1C1827),
+          color: isEnabled ? FlowTheme.raised : FlowTheme.panel,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isEnabled ? const Color(0xFFC4A5FA) : Colors.grey.shade400,
+            color: isEnabled ? FlowTheme.accent : FlowTheme.border,
             width: 2,
           ),
           boxShadow: isEnabled
@@ -75,7 +76,7 @@ class SportProfileSelector extends StatelessWidget {
             Icon(
               profile.iconData,
               size: 64,
-              color: isEnabled ? const Color(0xFFC4A5FA) : Colors.grey.shade400,
+              color: isEnabled ? FlowTheme.accent : FlowTheme.muted,
             ),
             const SizedBox(height: 16),
             Text(
@@ -83,7 +84,7 @@ class SportProfileSelector extends StatelessWidget {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: isEnabled ? Colors.white : Colors.grey.shade500,
+                color: isEnabled ? FlowTheme.text : FlowTheme.muted,
               ),
               textAlign: TextAlign.center,
             ),
@@ -95,14 +96,14 @@ class SportProfileSelector extends StatelessWidget {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF292237),
+                  color: FlowTheme.raised,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Text(
                   'Coming Soon',
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.grey,
+                    color: FlowTheme.muted,
                     fontWeight: FontWeight.w500,
                   ),
                 ),

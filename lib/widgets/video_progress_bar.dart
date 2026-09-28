@@ -4,6 +4,8 @@ import 'package:media_kit/media_kit.dart';
 import '../models/game_event.dart';
 import '../controllers/scrub_seek_coordinator.dart';
 import '../utils/perf.dart';
+import '../utils/responsive_layout.dart';
+import '../theme/flow_theme.dart';
 import 'event_timeline.dart';
 
 class VideoProgressBar extends StatefulWidget {
@@ -13,6 +15,7 @@ class VideoProgressBar extends StatefulWidget {
   final VoidCallback onPlayPause;
   final ValueChanged<double> onSpeedChange;
   final VoidCallback? onScrubStart;
+  final VoidCallback? onJumpBackward;
 
   const VideoProgressBar({
     super.key,
@@ -22,6 +25,7 @@ class VideoProgressBar extends StatefulWidget {
     required this.onPlayPause,
     required this.onSpeedChange,
     this.onScrubStart,
+    this.onJumpBackward,
   });
 
   @override
@@ -58,8 +62,8 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
     );
     return Positioned(
       bottom: 10,
-      left: 20,
-      right: 20,
+      left: usesPhoneLayout(context) ? 4 : 20,
+      right: usesPhoneLayout(context) ? 4 : 20,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: Colors.black.withValues(alpha: 0.5),
@@ -85,6 +89,9 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                     muted: level == 0,
                     seekBar: seekBar,
                     onPlayPause: widget.onPlayPause,
+                    onJumpBackward: usesPhoneLayout(context)
+                        ? widget.onJumpBackward
+                        : null,
                     onSpeedChange: widget.onSpeedChange,
                     onMute: () =>
                         widget.player.setVolume(level > 0 ? 0 : _audibleVolume),
@@ -107,6 +114,7 @@ class VideoTransportBar extends StatelessWidget {
   final Widget seekBar;
   final VoidCallback onPlayPause;
   final VoidCallback onMute;
+  final VoidCallback? onJumpBackward;
   final ValueChanged<double> onSpeedChange;
   const VideoTransportBar({
     super.key,
@@ -117,6 +125,7 @@ class VideoTransportBar extends StatelessWidget {
     required this.onPlayPause,
     required this.onMute,
     required this.onSpeedChange,
+    this.onJumpBackward,
   });
 
   static const speeds = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
@@ -143,6 +152,16 @@ class VideoTransportBar extends StatelessWidget {
             ),
           ),
           Expanded(child: seekBar),
+          if (onJumpBackward != null)
+            SizedBox(
+              width: 48,
+              height: 48,
+              child: IconButton(
+                tooltip: 'Back 5 seconds',
+                onPressed: onJumpBackward,
+                icon: const Icon(Icons.replay_5),
+              ),
+            ),
           SizedBox(
             width: math.max(48, width),
             height: 48,
@@ -274,8 +293,8 @@ class VideoSeekTrack extends StatelessWidget {
                           key: const ValueKey('video-seek-slider'),
                           padding: EdgeInsets.zero,
                           value: value,
-                          activeColor: Colors.blue,
-                          inactiveColor: Colors.grey.shade700,
+                          activeColor: FlowTheme.accent,
+                          inactiveColor: FlowTheme.raised,
                           semanticFormatterCallback: (_) =>
                               '${formatVideoTime(position)} of ${formatVideoTime(duration)}',
                           onChangeStart: duration > Duration.zero

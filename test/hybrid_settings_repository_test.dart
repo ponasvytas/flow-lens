@@ -13,6 +13,30 @@ import 'package:flow_lens/services/settings_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+    'sticky touch fast play defaults off and persists through settings',
+    () async {
+      expect(
+        AppSettings.fromMap({'fastPlaySpeed': 5}).stickyFastPlayOnTouch,
+        isFalse,
+      );
+      final repository = _MemorySettingsRepository(const AppSettings());
+      final controller = SettingsController(repository);
+      addTearDown(controller.dispose);
+      await controller.setStickyFastPlayOnTouch(true);
+      expect(
+        AppSettings.fromMap(repository.value.toMap()).stickyFastPlayOnTouch,
+        isTrue,
+      );
+      expect(
+        controller.settings.copyWith(fastPlaySpeed: 6).stickyFastPlayOnTouch,
+        isTrue,
+      );
+      await controller.resetToDefaults();
+      expect(repository.value.stickyFastPlayOnTouch, isFalse);
+    },
+  );
+
   const localSettings = AppSettings(fastPlaySpeed: 2.0);
   const cloudSettings = AppSettings(fastPlaySpeed: 6.0);
 

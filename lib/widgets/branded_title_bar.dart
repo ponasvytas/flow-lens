@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../models/app_mode.dart';
+import '../utils/responsive_layout.dart';
+import '../theme/flow_theme.dart';
+import 'flow_logo.dart';
 import 'dockable_panel.dart' show kAppTitleBarHeight;
 
 /// Branded title bar for Flow Lens
@@ -51,17 +54,19 @@ class BrandedTitleBar extends StatelessWidget {
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       final compact =
+          usesPhoneLayout(context) ||
           constraints.maxWidth <
-          (onExitPresentation == null ? 800 : 1000) *
-              MediaQuery.textScalerOf(context).scale(14) /
-              14;
+              (onExitPresentation == null ? 800 : 1000) *
+                  MediaQuery.textScalerOf(context).scale(14) /
+                  14;
       final actions = <(String, IconData, VoidCallback?)>[
-        if (compact) ('Tools', Icons.tune, onShowTools),
-        (
-          'Reset workspace layout',
-          Icons.dashboard_customize_outlined,
-          onResetLayout,
-        ),
+        if (compact && onShowTools != null) ('Tools', Icons.tune, onShowTools),
+        if (onResetLayout != null)
+          (
+            'Reset workspace layout',
+            Icons.dashboard_customize_outlined,
+            onResetLayout,
+          ),
         ('Save events', Icons.save_alt, onSaveEvents),
         ('Load events', Icons.upload_file, onLoadEvents),
         ('Events table', Icons.table_chart_outlined, onShowEventsTable),
@@ -82,8 +87,8 @@ class BrandedTitleBar extends StatelessWidget {
       return Container(
         height: kAppTitleBarHeight,
         decoration: const BoxDecoration(
-          color: Color(0xFF251B35),
-          border: Border(bottom: BorderSide(color: Color(0xFF58416D))),
+          color: FlowTheme.header,
+          border: Border(bottom: BorderSide(color: FlowTheme.border)),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: Row(
@@ -94,11 +99,7 @@ class BrandedTitleBar extends StatelessWidget {
               child: IconButton(
                 tooltip: 'Go to start page',
                 onPressed: onGoHome,
-                icon: const Icon(
-                  Icons.blur_on_rounded,
-                  color: Color(0xFFC4A5FA),
-                  size: 26,
-                ),
+                icon: const FlowLogo(color: FlowTheme.accent, size: 30),
               ),
             ),
             if (!compact) ...[
@@ -151,10 +152,10 @@ class BrandedTitleBar extends StatelessWidget {
                     style: TextButton.styleFrom(
                       minimumSize: const Size(76, 48),
                       foregroundColor: mode == currentMode
-                          ? Colors.white
-                          : const Color(0xFFC0B6CD),
+                          ? FlowTheme.text
+                          : FlowTheme.muted,
                       backgroundColor: mode == currentMode
-                          ? const Color(0xFF63418A)
+                          ? FlowTheme.selected
                           : Colors.transparent,
                     ),
                     child: Text(_label(mode)),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/app_mode.dart';
 import '../models/dock_layout_state.dart';
+import '../theme/flow_theme.dart';
 
 export '../models/dock_layout_state.dart';
 
@@ -118,10 +119,10 @@ class _DockPanelState extends State<DockPanel>
 
     showMenu<Object>(
       context: context,
-      color: const Color(0xFF1E1E2E),
+      color: FlowTheme.raised,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
-        side: const BorderSide(color: Colors.white12),
+        side: const BorderSide(color: FlowTheme.controlBorder),
       ),
       position: RelativeRect.fromLTRB(
         topLeft.dx,
@@ -216,20 +217,20 @@ class _DockPanelState extends State<DockPanel>
           Icon(
             icon,
             size: 16,
-            color: isActive ? const Color(0xFF9b5fb8) : Colors.white60,
+            color: isActive ? FlowTheme.accent : FlowTheme.muted,
           ),
           const SizedBox(width: 10),
           Text(
             label,
             style: TextStyle(
               fontSize: 12,
-              color: isActive ? const Color(0xFF9b5fb8) : Colors.white70,
+              color: isActive ? FlowTheme.accent : FlowTheme.muted,
               fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
             ),
           ),
           if (isActive) ...[
             const Spacer(),
-            const Icon(Icons.check, size: 12, color: Color(0xFF9b5fb8)),
+            const Icon(Icons.check, size: 12, color: FlowTheme.accent),
           ],
         ],
       ),
@@ -249,9 +250,9 @@ class _DockPanelState extends State<DockPanel>
     Widget panel = Container(
       constraints: widget.constraints,
       decoration: BoxDecoration(
-        color: const Color(0xFF1C1827),
+        color: FlowTheme.panel,
         borderRadius: BorderRadius.circular(kPanelCornerRadius),
-        border: Border.all(color: const Color(0xFF453953), width: 1),
+        border: Border.all(color: FlowTheme.border, width: 1),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.4),
@@ -265,7 +266,7 @@ class _DockPanelState extends State<DockPanel>
           if (_isHorizontal) return _buildInlineControls(constraints);
           final content = SizeTransition(
             sizeFactor: _collapseAnimation,
-            alignment: Alignment.topCenter,
+            axisAlignment: -1,
             child: widget.scrollContent
                 ? SingleChildScrollView(child: widget.child)
                 : widget.child,
@@ -373,7 +374,7 @@ class _DockPanelState extends State<DockPanel>
           widget.title,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
-            color: Color(0xFFC0B6CD),
+            color: FlowTheme.muted,
             fontSize: 13,
             fontWeight: FontWeight.w600,
           ),
@@ -392,7 +393,7 @@ class _DockPanelState extends State<DockPanel>
       icon: Icon(
         _isHorizontal ? widget.icon : Icons.more_horiz,
         size: 20,
-        color: const Color(0xFFC4A5FA),
+        color: FlowTheme.accent,
       ),
     ),
   );

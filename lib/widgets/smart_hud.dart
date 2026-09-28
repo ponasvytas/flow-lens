@@ -3,6 +3,7 @@ import 'dart:async';
 import '../models/game_event.dart';
 import '../models/sport_taxonomy.dart';
 import '../controllers/event_entry_controller.dart';
+import '../theme/flow_theme.dart';
 import 'event_entry_pager.dart';
 import 'event_context_editor.dart';
 
@@ -122,9 +123,9 @@ class _SmartHUDState extends State<SmartHUD>
         width: 380,
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.black87,
+          color: FlowTheme.background,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white24),
+          border: Border.all(color: FlowTheme.border),
           boxShadow: [
             BoxShadow(
               color: Colors.black45,
@@ -180,21 +181,21 @@ class _SmartHUDState extends State<SmartHUD>
                               _buildGradeButton(
                                 EventGrade.positive,
                                 Icons.thumb_up,
-                                Colors.green,
+                                FlowTheme.positive,
                                 1,
                               ),
                               const SizedBox(width: 4),
                               _buildGradeButton(
                                 EventGrade.neutral,
                                 Icons.remove,
-                                Colors.grey,
+                                FlowTheme.neutral,
                                 2,
                               ),
                               const SizedBox(width: 4),
                               _buildGradeButton(
                                 EventGrade.negative,
                                 Icons.thumb_down,
-                                Colors.red,
+                                FlowTheme.negative,
                                 3,
                               ),
                               const SizedBox(width: 4),
@@ -226,16 +227,20 @@ class _SmartHUDState extends State<SmartHUD>
                                   alignment: Alignment.center,
                                   padding: const EdgeInsets.all(6),
                                   decoration: BoxDecoration(
-                                    color: Colors.red.withValues(alpha: 0.2),
+                                    color: FlowTheme.negative.withValues(
+                                      alpha: 0.2,
+                                    ),
                                     borderRadius: BorderRadius.circular(4),
                                     border: Border.all(
-                                      color: Colors.red.withValues(alpha: 0.5),
+                                      color: FlowTheme.negative.withValues(
+                                        alpha: 0.5,
+                                      ),
                                     ),
                                   ),
                                   child: const Icon(
                                     Icons.delete_outline,
                                     size: 22,
-                                    color: Colors.redAccent,
+                                    color: FlowTheme.negative,
                                   ),
                                 ),
                               ),
@@ -370,7 +375,9 @@ class _SmartHUDState extends State<SmartHUD>
         padding: const EdgeInsets.all(6),
         decoration: BoxDecoration(
           color: isSelected ? color : Colors.transparent,
-          border: Border.all(color: isSelected ? color : Colors.white38),
+          border: Border.all(
+            color: isSelected ? color : FlowTheme.controlBorder,
+          ),
           borderRadius: BorderRadius.circular(4),
         ),
         child: Stack(
@@ -379,7 +386,7 @@ class _SmartHUDState extends State<SmartHUD>
             Icon(
               icon,
               size: 22,
-              color: isSelected ? Colors.white : Colors.white70,
+              color: isSelected ? FlowTheme.background : FlowTheme.muted,
             ),
             // Number badge in top-right corner
             if (widget.showGradeNumbers)
@@ -390,7 +397,7 @@ class _SmartHUDState extends State<SmartHUD>
                   width: 16,
                   height: 16,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF63418A),
+                    color: FlowTheme.selected,
                     shape: BoxShape.circle,
                     border: Border.all(color: Colors.white, width: 1),
                   ),
@@ -398,7 +405,7 @@ class _SmartHUDState extends State<SmartHUD>
                     child: Text(
                       number.toString(),
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: FlowTheme.text,
                         fontSize: 9,
                         fontWeight: FontWeight.bold,
                       ),
@@ -440,16 +447,16 @@ class _SmartHUDState extends State<SmartHUD>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
               decoration: BoxDecoration(
-                color: isSelected ? const Color(0xFF63418A) : Colors.white10,
+                color: isSelected ? FlowTheme.selected : FlowTheme.raised,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: isSelected ? const Color(0xFF63418A) : Colors.white24,
+                  color: isSelected ? FlowTheme.accent : FlowTheme.border,
                 ),
               ),
               child: Text(
                 eventType.name,
                 style: TextStyle(
-                  color: isSelected ? Colors.white : Colors.white70,
+                  color: isSelected ? FlowTheme.text : FlowTheme.muted,
                   fontSize: 12,
                 ),
               ),
@@ -463,7 +470,7 @@ class _SmartHUDState extends State<SmartHUD>
                   width: 18,
                   height: 18,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF63418A),
+                    color: FlowTheme.selected,
                     shape: BoxShape.circle,
                     border: Border.all(color: Colors.white, width: 1),
                   ),
@@ -471,7 +478,7 @@ class _SmartHUDState extends State<SmartHUD>
                     child: Text(
                       '${index + 1}',
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: FlowTheme.text,
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
                       ),

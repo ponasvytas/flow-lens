@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import '../utils/responsive_layout.dart';
 import '../controllers/settings_controller.dart';
+import '../theme/flow_theme.dart';
 
 class SettingsView extends StatefulWidget {
   final SettingsController controller;
@@ -45,7 +47,7 @@ class _SettingsViewState extends State<SettingsView> {
 
   @override
   Widget build(BuildContext context) {
-    final isDesktop = MediaQuery.of(context).size.width > 600;
+    final isDesktop = usesDialogLayout(context);
 
     final content = Column(
       mainAxisSize: MainAxisSize.min,
@@ -64,10 +66,13 @@ class _SettingsViewState extends State<SettingsView> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.amber.shade50,
+                      color: FlowTheme.warningSurface,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Text(error),
+                    child: Text(
+                      error,
+                      style: const TextStyle(color: FlowTheme.warning),
+                    ),
                   ),
                   const SizedBox(height: 20),
                 ],
@@ -101,11 +106,12 @@ class _SettingsViewState extends State<SettingsView> {
         children: [
           const Icon(Icons.settings, size: 28),
           const SizedBox(width: 12),
-          const Text(
-            'Settings',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          const Expanded(
+            child: Text(
+              'Settings',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
           ),
-          const Spacer(),
           IconButton(
             icon: const Icon(Icons.close),
             onPressed: () => Navigator.of(context).pop(),
@@ -124,7 +130,7 @@ class _SettingsViewState extends State<SettingsView> {
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
-            color: Colors.blue.shade700,
+            color: FlowTheme.accent,
           ),
         ),
         const SizedBox(height: 16),
@@ -133,6 +139,16 @@ class _SettingsViewState extends State<SettingsView> {
         _buildSlowPlaybackSpeedControl(),
         const SizedBox(height: 24),
         _buildFastPlaySpeedControl(),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Sticky fast play on touch'),
+          subtitle: const Text(
+            'Keep fast play on after a tap. When off, hold Fast and release '
+            'to restore the previous speed. The F key always uses hold.',
+          ),
+          value: widget.controller.settings.stickyFastPlayOnTouch,
+          onChanged: widget.controller.setStickyFastPlayOnTouch,
+        ),
         const SizedBox(height: 24),
         _buildLeadInControl(),
         const SizedBox(height: 24),
@@ -147,17 +163,18 @@ class _SettingsViewState extends State<SettingsView> {
       children: [
         Row(
           children: [
-            const Text(
-              'Default playback speed',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            const Expanded(
+              child: Text(
+                'Default playback speed',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
             ),
-            const Spacer(),
             Text(
               '${_defaultPlaybackSpeed.toStringAsFixed(2)}x',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: Colors.blue.shade700,
+                color: FlowTheme.accent,
               ),
             ),
           ],
@@ -165,7 +182,7 @@ class _SettingsViewState extends State<SettingsView> {
         const SizedBox(height: 4),
         const Text(
           "Initial playback speed when video loads (press 'D' key)",
-          style: TextStyle(fontSize: 12, color: Colors.grey),
+          style: TextStyle(fontSize: 12, color: FlowTheme.muted),
         ),
         const SizedBox(height: 8),
         Slider(
@@ -208,9 +225,9 @@ class _SettingsViewState extends State<SettingsView> {
         widget.controller.setDefaultPlaybackSpeed(speed);
       },
       style: OutlinedButton.styleFrom(
-        backgroundColor: isSelected ? Colors.blue.shade50 : null,
+        backgroundColor: isSelected ? FlowTheme.selected : null,
         side: BorderSide(
-          color: isSelected ? Colors.blue : Colors.grey,
+          color: isSelected ? FlowTheme.accent : FlowTheme.controlBorder,
           width: isSelected ? 2 : 1,
         ),
       ),
@@ -224,17 +241,18 @@ class _SettingsViewState extends State<SettingsView> {
       children: [
         Row(
           children: [
-            const Text(
-              'Slow playback speed',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            const Expanded(
+              child: Text(
+                'Slow playback speed',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
             ),
-            const Spacer(),
             Text(
               '${_slowPlaybackSpeed.toStringAsFixed(2)}x',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: Colors.blue.shade700,
+                color: FlowTheme.accent,
               ),
             ),
           ],
@@ -242,7 +260,7 @@ class _SettingsViewState extends State<SettingsView> {
         const SizedBox(height: 4),
         const Text(
           "Speed when pressing 'S' key",
-          style: TextStyle(fontSize: 12, color: Colors.grey),
+          style: TextStyle(fontSize: 12, color: FlowTheme.muted),
         ),
         const SizedBox(height: 8),
         Slider(
@@ -284,9 +302,9 @@ class _SettingsViewState extends State<SettingsView> {
         widget.controller.setSlowPlaybackSpeed(speed);
       },
       style: OutlinedButton.styleFrom(
-        backgroundColor: isSelected ? Colors.blue.shade50 : null,
+        backgroundColor: isSelected ? FlowTheme.selected : null,
         side: BorderSide(
-          color: isSelected ? Colors.blue : Colors.grey,
+          color: isSelected ? FlowTheme.accent : FlowTheme.controlBorder,
           width: isSelected ? 2 : 1,
         ),
       ),
@@ -300,25 +318,26 @@ class _SettingsViewState extends State<SettingsView> {
       children: [
         Row(
           children: [
-            const Text(
-              'Fast play speed',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            const Expanded(
+              child: Text(
+                'Fast play speed',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
             ),
-            const Spacer(),
             Text(
               '${_fastPlaySpeed.toStringAsFixed(1)}x',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: Colors.blue.shade700,
+                color: FlowTheme.accent,
               ),
             ),
           ],
         ),
         const SizedBox(height: 4),
         const Text(
-          "Speed when holding 'F' key",
-          style: TextStyle(fontSize: 12, color: Colors.grey),
+          "Speed for the Fast button and holding the 'F' key",
+          style: TextStyle(fontSize: 12, color: FlowTheme.muted),
         ),
         const SizedBox(height: 8),
         Slider(
@@ -342,6 +361,7 @@ class _SettingsViewState extends State<SettingsView> {
             _buildQuickPickButton(2.0),
             _buildQuickPickButton(3.0),
             _buildQuickPickButton(5.0),
+            _buildQuickPickButton(7.0),
             _buildQuickPickButton(8.0),
           ],
         ),
@@ -359,9 +379,9 @@ class _SettingsViewState extends State<SettingsView> {
         widget.controller.setFastPlaySpeed(speed);
       },
       style: OutlinedButton.styleFrom(
-        backgroundColor: isSelected ? Colors.blue.shade50 : null,
+        backgroundColor: isSelected ? FlowTheme.selected : null,
         side: BorderSide(
-          color: isSelected ? Colors.blue : Colors.grey,
+          color: isSelected ? FlowTheme.accent : FlowTheme.controlBorder,
           width: isSelected ? 2 : 1,
         ),
       ),
@@ -375,17 +395,18 @@ class _SettingsViewState extends State<SettingsView> {
       children: [
         Row(
           children: [
-            const Text(
-              'Lead-in (seconds)',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            const Expanded(
+              child: Text(
+                'Lead-in (seconds)',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
             ),
-            const Spacer(),
             Text(
               '${_leadInSeconds}s',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: Colors.blue.shade700,
+                color: FlowTheme.accent,
               ),
             ),
           ],
@@ -393,7 +414,7 @@ class _SettingsViewState extends State<SettingsView> {
         const SizedBox(height: 4),
         const Text(
           'Jump before event timestamp when selecting',
-          style: TextStyle(fontSize: 12, color: Colors.grey),
+          style: TextStyle(fontSize: 12, color: FlowTheme.muted),
         ),
         const SizedBox(height: 8),
         Slider(
@@ -421,17 +442,18 @@ class _SettingsViewState extends State<SettingsView> {
       children: [
         Row(
           children: [
-            const Text(
-              'Lead-out (seconds)',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            const Expanded(
+              child: Text(
+                'Lead-out (seconds)',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
             ),
-            const Spacer(),
             Text(
               '${_leadOutSeconds}s',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: Colors.blue.shade700,
+                color: FlowTheme.accent,
               ),
             ),
           ],
@@ -439,7 +461,7 @@ class _SettingsViewState extends State<SettingsView> {
         const SizedBox(height: 4),
         const Text(
           'Reserved for future event playback mode',
-          style: TextStyle(fontSize: 12, color: Colors.grey),
+          style: TextStyle(fontSize: 12, color: FlowTheme.muted),
         ),
         const SizedBox(height: 8),
         Slider(
@@ -462,8 +484,10 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   Widget _buildActionButtons(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.end,
+    return Wrap(
+      alignment: WrapAlignment.end,
+      spacing: 16,
+      runSpacing: 8,
       children: [
         TextButton(
           onPressed: () async {
@@ -472,7 +496,6 @@ class _SettingsViewState extends State<SettingsView> {
           },
           child: const Text('Reset to Defaults'),
         ),
-        const SizedBox(width: 16),
         ElevatedButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Close'),

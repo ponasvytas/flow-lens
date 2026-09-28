@@ -9,6 +9,8 @@ abstract class SettingsRepository {
 class SharedPreferencesSettingsRepository implements SettingsRepository {
   static const String _keySchemaVersion = 'settings_schemaVersion';
   static const String _keyFastPlaySpeed = 'settings_fastPlaySpeed';
+  static const String _keyStickyFastPlayOnTouch =
+      'settings_stickyFastPlayOnTouch';
   static const String _keySlowPlaybackSpeed = 'settings_slowPlaybackSpeed';
   static const String _keyDefaultPlaybackSpeed =
       'settings_defaultPlaybackSpeed';
@@ -33,6 +35,7 @@ class SharedPreferencesSettingsRepository implements SettingsRepository {
     return AppSettings(
       schemaVersion: schemaVersion,
       fastPlaySpeed: fastPlaySpeed ?? AppSettings.defaultFastPlaySpeed,
+      stickyFastPlayOnTouch: prefs.getBool(_keyStickyFastPlayOnTouch) ?? false,
       slowPlaybackSpeed:
           slowPlaybackSpeed ?? AppSettings.defaultSlowPlaybackSpeed,
       defaultPlaybackSpeed:
@@ -52,6 +55,10 @@ class SharedPreferencesSettingsRepository implements SettingsRepository {
 
     await prefs.setInt(_keySchemaVersion, settings.schemaVersion);
     await prefs.setDouble(_keyFastPlaySpeed, settings.fastPlaySpeed);
+    await prefs.setBool(
+      _keyStickyFastPlayOnTouch,
+      settings.stickyFastPlayOnTouch,
+    );
     await prefs.setDouble(_keySlowPlaybackSpeed, settings.slowPlaybackSpeed);
     await prefs.setDouble(
       _keyDefaultPlaybackSpeed,

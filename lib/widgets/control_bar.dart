@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import '../models/app_settings.dart';
@@ -101,12 +102,10 @@ class PlaybackControls extends StatelessWidget {
         selected: rate == settings.defaultPlaybackSpeed,
         onPressed: () => onSpeedChange(settings.defaultPlaybackSpeed),
       ),
-      _Control(
-        label: 'Fast',
-        detail: '${settings.fastPlaySpeed}x',
-        icon: Icons.fast_forward_rounded,
-        selected: rate == settings.fastPlaySpeed,
-        onPressed: () => onSpeedChange(settings.fastPlaySpeed),
+      _FastPlaybackControl(
+        rate: rate,
+        settings: settings,
+        onSpeedChange: onSpeedChange,
       ),
       PopupMenuButton<String>(
         tooltip: 'More playback controls',
@@ -172,6 +171,90 @@ class PlaybackControls extends StatelessWidget {
         'Fast\n${settings.fastPlaySpeed}x',
         'More',
       ], tileWidth: 64);
+}
+
+class _FastPlaybackControl extends StatefulWidget {
+  const _FastPlaybackControl({
+    required this.rate,
+    required this.settings,
+    required this.onSpeedChange,
+  });
+
+  final double rate;
+  final AppSettings settings;
+  final ValueChanged<double> onSpeedChange;
+
+  @override
+  State<_FastPlaybackControl> createState() => _FastPlaybackControlState();
+}
+
+class _FastPlaybackControlState extends State<_FastPlaybackControl>
+    with WidgetsBindingObserver {
+  int? _heldPointer;
+  double? _previousRate;
+  bool _suppressTap = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  void _restoreSpeed() {
+    final previousRate = _previousRate;
+    _heldPointer = null;
+    _previousRate = null;
+    if (previousRate != null) widget.onSpeedChange(previousRate);
+  }
+
+  void _onPointerDown(PointerDownEvent event) {
+    if (_heldPointer != null) return;
+    final isTouch =
+        event.kind == PointerDeviceKind.touch ||
+        event.kind == PointerDeviceKind.stylus;
+    _suppressTap = isTouch && !widget.settings.stickyFastPlayOnTouch;
+    if (!_suppressTap) return;
+    _heldPointer = event.pointer;
+    _previousRate = widget.rate;
+    widget.onSpeedChange(widget.settings.fastPlaySpeed);
+  }
+
+  void _onPointerEnd(PointerEvent event) {
+    if (event.pointer != _heldPointer) return;
+    _restoreSpeed();
+    // The button's tap callback follows pointer-up in the same event dispatch.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _heldPointer == null) _suppressTap = false;
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) _restoreSpeed();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _restoreSpeed();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Listener(
+    onPointerDown: _onPointerDown,
+    onPointerUp: _onPointerEnd,
+    onPointerCancel: _onPointerEnd,
+    child: _Control(
+      label: 'Fast',
+      detail: '${widget.settings.fastPlaySpeed}x',
+      icon: Icons.fast_forward_rounded,
+      selected: widget.rate == widget.settings.fastPlaySpeed,
+      onPressed: () {
+        if (!_suppressTap) widget.onSpeedChange(widget.settings.fastPlaySpeed);
+      },
+    ),
+  );
 }
 
 class _Control extends StatelessWidget {

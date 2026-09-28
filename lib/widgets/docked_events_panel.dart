@@ -101,9 +101,9 @@ class _DockedEventsPanelState extends State<DockedEventsPanel> {
 
   Color _getGradeColor(EventGrade? grade) {
     return switch (grade) {
-      EventGrade.positive => Colors.greenAccent,
-      EventGrade.negative => Colors.redAccent,
-      EventGrade.neutral => FlowTheme.muted,
+      EventGrade.positive => FlowTheme.positive,
+      EventGrade.negative => FlowTheme.negative,
+      EventGrade.neutral => FlowTheme.neutral,
       null => FlowTheme.muted,
     };
   }

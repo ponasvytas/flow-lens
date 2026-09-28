@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'utils/responsive_layout.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 import 'dart:math' as math;
@@ -831,7 +832,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
       return;
     }
 
-    final isDesktop = MediaQuery.of(context).size.width > 600;
+    final isDesktop = usesDialogLayout(context);
 
     if (isDesktop) {
       showDialog(
@@ -868,7 +869,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   }
 
   void _showSettings() {
-    final isDesktop = MediaQuery.of(context).size.width > 600;
+    final isDesktop = usesDialogLayout(context);
 
     if (isDesktop) {
       showDialog(
@@ -885,7 +886,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   }
 
   void _showAccount() {
-    final isDesktop = MediaQuery.of(context).size.width > 600;
+    final isDesktop = usesDialogLayout(context);
     if (isDesktop) {
       showDialog(
         context: context,
@@ -942,7 +943,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
         }
       },
     );
-    if (MediaQuery.sizeOf(context).width > 700) {
+    if (usesDialogLayout(context, minWidth: 700)) {
       showDialog(context: context, builder: (_) => view);
     } else {
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => view));
@@ -1270,7 +1271,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                           style: TextStyle(fontSize: 20),
                         ),
                       ),
-                      if (_uiController.currentMode == AppMode.record)
+                      if (_uiController.currentMode == AppMode.record &&
+                          !usesPhoneLayout(context))
                         IconButton(
                           tooltip: 'Keep Categories open',
                           icon: const Icon(Icons.push_pin_outlined),
@@ -1442,6 +1444,33 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
       },
     );
   }
+
+  Widget _buildCaptureFeedback() => ListenableBuilder(
+    listenable: Listenable.merge([
+      _lastQuickEvent,
+      _altKey,
+      _eventsController,
+      _drawing,
+      _uiController,
+    ]),
+    builder: (context, _) => CaptureStatusBar(
+      draft: _uiController.currentMode == AppMode.record ? _altKey.draft : null,
+      lastEvent: _uiController.currentMode == AppMode.record
+          ? _lastQuickEvent.value
+          : null,
+      onResume: _showFullEventMenu,
+      onCancel: _dismissHUD,
+      onEdit: () {
+        final event = _lastQuickEvent.value;
+        if (event != null) _altKey.beginDraft(event);
+        _showFullEventMenu();
+      },
+      onUndo: () {
+        final event = _lastQuickEvent.value;
+        if (event != null) _deleteEvent(event);
+      },
+    ),
+  );
 
   List<DockPanelEntry> _buildDockPanels(BuildContext context) =>
       [
@@ -2002,7 +2031,11 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
         return KeyEventResult.ignored;
       },
       child: Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor: FlowTheme.videoStage,
+        // Editors handle keyboard insets; keep the phone video workspace stable
+        // underneath them, especially in short landscape windows.
+        resizeToAvoidBottomInset:
+            !(_workspaceVisible && usesPhoneLayout(context)),
         body: SafeArea(
           child: LayoutBuilder(
             builder: (context, screenConstraints) => Row(
@@ -2023,12 +2056,17 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                           right: 0,
                           child: BrandedTitleBar(
                             onGoHome: _goHome,
-                            onShowTools: _workspaceVisible ? _showTools : null,
+                            onShowTools:
+                                _workspaceVisible && !usesPhoneLayout(context)
+                                ? _showTools
+                                : null,
                             onExitPresentation:
                                 _workspaceVisible && _uiController.isPresenting
                                 ? _uiController.togglePresentation
                                 : null,
-                            onResetLayout: _uiController.resetLayout,
+                            onResetLayout: usesPhoneLayout(context)
+                                ? null
+                                : _uiController.resetLayout,
                             onShowShortcuts: _toggleShortcutsPanel,
                             showShortcuts: _showShortcuts,
                             currentMode: _uiController.currentMode,
@@ -2047,9 +2085,12 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                             hasPremium:
                                 _accountController.capabilities.canSyncSettings,
                             onToggleDockedEvents: hasVideoLoaded
-                                ? _toggleDockedEvents
+                                ? usesPhoneLayout(context)
+                                      ? _showEventsTable
+                                      : _toggleDockedEvents
                                 : null,
-                            showDockedEvents: _showDockedEvents,
+                            showDockedEvents:
+                                !usesPhoneLayout(context) && _showDockedEvents,
                           ),
                         ),
                       ),
@@ -2123,6 +2164,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                             ),
                             child: DockLayout(
                               adaptive: true,
+                              phoneFeedback: _buildCaptureFeedback(),
                               uiController: _uiController,
                               panels: _buildDockPanels(context),
                               child: _buildVideoSurface(),
@@ -2144,14 +2186,16 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                             final edge = _uiController.dockEdge(
                               PanelId.categories,
                             );
-                            final compact = usesCompactDockLayout(
-                              Size(
-                                screenConstraints.maxWidth,
-                                screenConstraints.maxHeight -
-                                    kAppTitleBarHeight -
-                                    kProgressBarReserve,
-                              ),
+                            final workspaceSize = Size(
+                              screenConstraints.maxWidth,
+                              screenConstraints.maxHeight -
+                                  kAppTitleBarHeight -
+                                  kProgressBarReserve,
                             );
+                            final compact = usesCompactDockLayout(
+                              workspaceSize,
+                            );
+                            final sideTools = usesSideToolLayout(workspaceSize);
                             final inline =
                                 _uiController.panelVisible(
                                   PanelId.categories,
@@ -2159,9 +2203,10 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                                 !_uiController.panelCollapsed(
                                   PanelId.categories,
                                 ) &&
-                                !compact &&
-                                edge != PanelDockEdge.top &&
-                                edge != PanelDockEdge.bottom;
+                                (sideTools ||
+                                    (!compact &&
+                                        edge != PanelDockEdge.top &&
+                                        edge != PanelDockEdge.bottom));
                             final hasEntry =
                                 _altKey.draft != null || _altKey.isEntryActive;
                             if (_taxonomy == null ||
@@ -2219,40 +2264,12 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                           },
                         ),
 
-                      if (_workspaceVisible)
+                      if (_workspaceVisible && !usesPhoneLayout(context))
                         Positioned(
                           bottom: 70,
                           left: 8,
                           right: 8,
-                          child: ListenableBuilder(
-                            listenable: Listenable.merge([
-                              _lastQuickEvent,
-                              _altKey,
-                              _eventsController,
-                              _drawing,
-                              _uiController,
-                            ]),
-                            builder: (context, _) => CaptureStatusBar(
-                              draft: _uiController.currentMode == AppMode.record
-                                  ? _altKey.draft
-                                  : null,
-                              lastEvent:
-                                  _uiController.currentMode == AppMode.record
-                                  ? _lastQuickEvent.value
-                                  : null,
-                              onResume: _showFullEventMenu,
-                              onCancel: _dismissHUD,
-                              onEdit: () {
-                                final event = _lastQuickEvent.value;
-                                if (event != null) _altKey.beginDraft(event);
-                                _showFullEventMenu();
-                              },
-                              onUndo: () {
-                                final event = _lastQuickEvent.value;
-                                if (event != null) _deleteEvent(event);
-                              },
-                            ),
-                          ),
+                          child: _buildCaptureFeedback(),
                         ),
 
                       // LAYER 6: Video Progress Bar
@@ -2266,6 +2283,8 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                             events: _eventsController.filteredEvents,
                             onEventTap: _navigateToEvent,
                             onScrubStart: _eventPreview.cancel,
+                            onJumpBackward: () =>
+                                _jumpBackward(const Duration(seconds: 5)),
                           ),
                         ),
 

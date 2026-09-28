@@ -258,8 +258,12 @@ void main() {
       );
       await tester.tap(find.text('Slow\n0.25x'));
       expect(rate, 0.25);
-      await tester.tap(find.text('Fast\n4.0x'));
+      final fastPress = await tester.startGesture(
+        tester.getCenter(find.text('Fast\n4.0x')),
+      );
       expect(rate, 4);
+      await fastPress.up();
+      expect(rate, 1.25);
       await tester.tap(find.text('Back 5s'));
       expect(back, const Duration(seconds: 5));
       expect(
@@ -383,9 +387,13 @@ void main() {
           final expand = find.byKey(
             const ValueKey('expand-actions-Quick events'),
           );
-          expect(expand, findsOneWidget);
-          await tester.tap(expand);
-          await tester.pumpAndSettle();
+          if (size.shortestSide < 600) {
+            expect(expand, findsNothing);
+          } else {
+            expect(expand, findsOneWidget);
+            await tester.tap(expand);
+            await tester.pumpAndSettle();
+          }
           expect(find.byType(QuickEventsPanel), findsOneWidget);
           await tester.ensureVisible(find.text('All events'));
           await tester.tap(find.text('All events'));
