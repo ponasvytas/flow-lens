@@ -240,4 +240,169 @@ void main() {
 
     expect(controller.dockPresentationMode, DockPresentationMode.squeeze);
   });
+
+  for (final size in [
+    const Size(1024, 768),
+    const Size(1180, 820),
+    const Size(1280, 500),
+  ]) {
+    testWidgets('side tools preserve video space at $size', (tester) async {
+      await tester.binding.setSurfaceSize(size);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final controller = UIController()..initializeRecommendedLayouts();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                const SizedBox(height: 56),
+                Expanded(
+                  child: DockLayout(
+                    adaptive: true,
+                    uiController: controller,
+                    panels: [
+                      DockPanelEntry(
+                        id: PanelId.playbackControls,
+                        title: 'Playback',
+                        icon: Icons.play_arrow,
+                        defaultFloatingPosition: Offset.zero,
+                        builder: (_) => const Text('Playback actions'),
+                      ),
+                      DockPanelEntry(
+                        id: PanelId.quickEvents,
+                        title: 'Quick events',
+                        icon: Icons.bolt,
+                        defaultFloatingPosition: Offset.zero,
+                        builder: (_) => const Text('Event actions'),
+                      ),
+                    ],
+                    child: const ColoredBox(
+                      key: ValueKey('video'),
+                      color: Colors.black,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 70),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('side-tool-selector')), findsOneWidget);
+      expect(find.text('Event actions'), findsOneWidget);
+      expect(
+        tester.getSize(find.byKey(const ValueKey('video'))).width,
+        greaterThanOrEqualTo(size.width * 0.68),
+      );
+      await tester.tap(find.byKey(const ValueKey('side-tool-selector')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Playback').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Playback actions'), findsOneWidget);
+      expect(controller.dockEdge(PanelId.playbackControls), PanelDockEdge.left);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      controller.dispose();
+    });
+  }
+
+  testWidgets('wide docks retain at least half the workspace for video', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = UIController()
+      ..initializeRecommendedLayouts()
+      ..setDockEdge(PanelId.quickEvents, PanelDockEdge.right)
+      ..setDockExtent(PanelDockEdge.left, 620)
+      ..setDockExtent(PanelDockEdge.right, 620);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: DockLayout(
+            adaptive: true,
+            uiController: controller,
+            panels: [
+              for (final id in [PanelId.playbackControls, PanelId.quickEvents])
+                DockPanelEntry(
+                  id: id,
+                  title: id.name,
+                  icon: Icons.widgets,
+                  defaultFloatingPosition: Offset.zero,
+                  builder: (_) => Text(id.name),
+                ),
+            ],
+            child: const ColoredBox(
+              key: ValueKey('video'),
+              color: Colors.black,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.getSize(find.byKey(const ValueKey('video'))).width, 720);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    controller.dispose();
+  });
+
+  for (final size in [
+    const Size(1920, 1080),
+    const Size(1280, 720),
+    const Size(820, 1180),
+    const Size(768, 1024),
+  ]) {
+    testWidgets('workspace and tools fit $size', (tester) async {
+      await tester.binding.setSurfaceSize(size);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final controller = UIController()..initializeRecommendedLayouts();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                const SizedBox(height: 56),
+                Expanded(
+                  child: DockLayout(
+                    adaptive: true,
+                    uiController: controller,
+                    panels: [
+                      for (final id in [
+                        PanelId.playbackControls,
+                        PanelId.quickEvents,
+                      ])
+                        DockPanelEntry(
+                          id: id,
+                          title: id.name,
+                          icon: Icons.widgets,
+                          defaultFloatingPosition: Offset.zero,
+                          builder: (_) => Text('${id.name} actions'),
+                        ),
+                    ],
+                    child: const ColoredBox(
+                      key: ValueKey('video'),
+                      color: Colors.black,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 70),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final video = tester.getSize(find.byKey(const ValueKey('video')));
+      if (size.width >= 1200) {
+        expect(video.width, greaterThanOrEqualTo(size.width * 0.5));
+      } else {
+        expect(video.height, greaterThanOrEqualTo((size.height - 126) * 0.4));
+      }
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      controller.dispose();
+    });
+  }
 }

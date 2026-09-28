@@ -2031,7 +2031,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
         return KeyEventResult.ignored;
       },
       child: Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor: FlowTheme.videoStage,
         // Editors handle keyboard insets; keep the phone video workspace stable
         // underneath them, especially in short landscape windows.
         resizeToAvoidBottomInset:
@@ -2186,14 +2186,16 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                             final edge = _uiController.dockEdge(
                               PanelId.categories,
                             );
-                            final compact = usesCompactDockLayout(
-                              Size(
-                                screenConstraints.maxWidth,
-                                screenConstraints.maxHeight -
-                                    kAppTitleBarHeight -
-                                    kProgressBarReserve,
-                              ),
+                            final workspaceSize = Size(
+                              screenConstraints.maxWidth,
+                              screenConstraints.maxHeight -
+                                  kAppTitleBarHeight -
+                                  kProgressBarReserve,
                             );
+                            final compact = usesCompactDockLayout(
+                              workspaceSize,
+                            );
+                            final sideTools = usesSideToolLayout(workspaceSize);
                             final inline =
                                 _uiController.panelVisible(
                                   PanelId.categories,
@@ -2201,9 +2203,10 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                                 !_uiController.panelCollapsed(
                                   PanelId.categories,
                                 ) &&
-                                !compact &&
-                                edge != PanelDockEdge.top &&
-                                edge != PanelDockEdge.bottom;
+                                (sideTools ||
+                                    (!compact &&
+                                        edge != PanelDockEdge.top &&
+                                        edge != PanelDockEdge.bottom));
                             final hasEntry =
                                 _altKey.draft != null || _altKey.isEntryActive;
                             if (_taxonomy == null ||

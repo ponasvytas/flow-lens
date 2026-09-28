@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/game_event.dart';
 import '../models/sport_taxonomy.dart';
 import '../utils/perf.dart';
+import '../theme/flow_theme.dart';
 
 class EventTimeline extends StatelessWidget {
   final List<GameEvent> events;
@@ -96,16 +97,22 @@ class EventTimelinePainter extends CustomPainter {
       final fraction =
           event.timestamp.inMicroseconds / totalDuration.inMicroseconds;
       final center = Offset(size.width * fraction.clamp(0.0, 1.0), centerY);
-      canvas.drawCircle(center, 7, Paint()..color = Colors.white);
+      final gradeColor = switch (event.grade) {
+        EventGrade.positive => FlowTheme.positive,
+        EventGrade.negative => FlowTheme.negative,
+        EventGrade.neutral => FlowTheme.neutral,
+        null => FlowTheme.muted,
+      };
+      canvas.drawCircle(center, 7, Paint()..color = FlowTheme.videoStage);
       canvas.drawCircle(
         center,
         6,
         Paint()
-          ..color = event.color
+          ..color = gradeColor
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2,
       );
-      canvas.drawCircle(center, 2, Paint()..color = event.color);
+      canvas.drawCircle(center, 2, Paint()..color = gradeColor);
     }
   }
 

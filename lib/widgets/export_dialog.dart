@@ -8,6 +8,7 @@ import '../models/sport_taxonomy.dart';
 import '../services/export/export_models.dart';
 import '../services/export/export_service.dart';
 import '../services/export/export_config_store.dart';
+import '../theme/flow_theme.dart';
 
 class ExportDialog extends StatefulWidget {
   final List<GameEvent> selectedEvents;
@@ -321,24 +322,27 @@ class _ExportDialogState extends State<ExportDialog> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
                 decoration: const BoxDecoration(
-                  color: Color(0xFF753b8f),
+                  color: FlowTheme.header,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(4)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.movie_creation, color: Colors.white),
+                    const Icon(Icons.movie_creation, color: FlowTheme.accent),
                     const SizedBox(width: 8),
-                    Text(
-                      'Export ${widget.selectedEvents.length} Event(s)',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                    Expanded(
+                      child: Text(
+                        'Export ${widget.selectedEvents.length} Event(s)',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: FlowTheme.text,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
-                    const Spacer(),
                     IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white70),
+                      icon: const Icon(Icons.close, color: FlowTheme.muted),
                       onPressed: isExporting
                           ? null
                           : () => Navigator.of(context).pop(),
@@ -351,16 +355,19 @@ class _ExportDialogState extends State<ExportDialog> {
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
-                  color: Colors.orange.shade100,
+                  color: FlowTheme.warningSurface,
                   child: const Row(
                     children: [
-                      Icon(Icons.warning_amber, color: Colors.orange),
+                      Icon(Icons.warning_amber, color: FlowTheme.warning),
                       SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'FFmpeg not found on your system PATH. '
                           'Install FFmpeg to enable video export.',
-                          style: TextStyle(fontSize: 13),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: FlowTheme.warning,
+                          ),
                         ),
                       ),
                     ],
@@ -496,7 +503,10 @@ class _ExportDialogState extends State<ExportDialog> {
                           const SizedBox(height: 8),
                           const Text(
                             'Or enable per-event:',
-                            style: TextStyle(fontSize: 13, color: Colors.grey),
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: FlowTheme.muted,
+                            ),
                           ),
                           const SizedBox(height: 4),
                           ...widget.selectedEvents.map((event) {
@@ -678,7 +688,10 @@ class _ExportDialogState extends State<ExportDialog> {
                           const SizedBox(height: 8),
                           const Text(
                             'Or enable per-event:',
-                            style: TextStyle(fontSize: 13, color: Colors.grey),
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: FlowTheme.muted,
+                            ),
                           ),
                           const SizedBox(height: 4),
                           ...widget.selectedEvents.map((event) {
@@ -718,13 +731,15 @@ class _ExportDialogState extends State<ExportDialog> {
                         const SizedBox(height: 8),
 
                         // Format
-                        Row(
+                        Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 8,
+                          runSpacing: 8,
                           children: [
                             const Text(
                               'Format: ',
                               style: TextStyle(fontWeight: FontWeight.w500),
                             ),
-                            const SizedBox(width: 8),
                             SegmentedButton<String>(
                               segments: const [
                                 ButtonSegment(value: 'mp4', label: Text('MP4')),
@@ -747,21 +762,22 @@ class _ExportDialogState extends State<ExportDialog> {
                 // Action buttons
                 Container(
                   padding: const EdgeInsets.all(12),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
+                  child: Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 8,
+                    runSpacing: 8,
                     children: [
                       TextButton(
                         onPressed: () => Navigator.of(context).pop(),
                         child: const Text('Cancel'),
                       ),
-                      const SizedBox(width: 8),
                       ElevatedButton.icon(
                         onPressed: _ffmpegAvailable ? _startExport : null,
                         icon: const Icon(Icons.file_download),
                         label: const Text('Export Video'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF753b8f),
-                          foregroundColor: Colors.white,
+                          backgroundColor: FlowTheme.accent,
+                          foregroundColor: FlowTheme.onAccent,
                         ),
                       ),
                     ],
@@ -816,8 +832,8 @@ class _ExportDialogState extends State<ExportDialog> {
         if (isRunning) ...[
           LinearProgressIndicator(
             value: p.overallProgress > 0 ? p.overallProgress : null,
-            backgroundColor: Colors.grey[300],
-            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF753b8f)),
+            backgroundColor: FlowTheme.raised,
+            valueColor: const AlwaysStoppedAnimation<Color>(FlowTheme.accent),
           ),
           const SizedBox(height: 16),
         ],
@@ -831,25 +847,28 @@ class _ExportDialogState extends State<ExportDialog> {
               : Icons.movie_creation,
           size: 48,
           color: isDone
-              ? Colors.green
+              ? FlowTheme.positive
               : isFailed
-              ? Colors.red
+              ? FlowTheme.negative
               : isCancelled
-              ? Colors.orange
-              : const Color(0xFF753b8f),
+              ? FlowTheme.warning
+              : FlowTheme.accent,
         ),
         const SizedBox(height: 12),
         Text(
           p.message,
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 14, color: isFailed ? Colors.red : null),
+          style: TextStyle(
+            fontSize: 14,
+            color: isFailed ? FlowTheme.negative : null,
+          ),
         ),
         if (p.errorMessage != null) ...[
           const SizedBox(height: 8),
           SelectableText(
             p.errorMessage!,
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 13, color: Colors.red),
+            style: const TextStyle(fontSize: 13, color: FlowTheme.negative),
           ),
         ],
         const SizedBox(height: 16),
@@ -876,13 +895,16 @@ class _ExportDialogState extends State<ExportDialog> {
                   Icon(
                     _showLog ? Icons.expand_less : Icons.expand_more,
                     size: 18,
-                    color: Colors.grey,
+                    color: FlowTheme.muted,
                   ),
                   Text(
                     _showLog
                         ? 'Hide Log'
                         : 'Show Log (${p.logLines.length} lines)',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: FlowTheme.muted,
+                    ),
                   ),
                 ],
               ),
@@ -895,7 +917,7 @@ class _ExportDialogState extends State<ExportDialog> {
                 label: const Text('Copy Log', style: TextStyle(fontSize: 12)),
                 style: TextButton.styleFrom(
                   visualDensity: VisualDensity.compact,
-                  foregroundColor: Colors.grey,
+                  foregroundColor: FlowTheme.muted,
                 ),
               ),
             ],
@@ -906,7 +928,7 @@ class _ExportDialogState extends State<ExportDialog> {
             height: 180,
             margin: const EdgeInsets.only(top: 8),
             decoration: BoxDecoration(
-              color: const Color(0xFF1E1E1E),
+              color: FlowTheme.videoStage,
               borderRadius: BorderRadius.circular(6),
             ),
             child: ListView.builder(
@@ -921,7 +943,7 @@ class _ExportDialogState extends State<ExportDialog> {
                   style: const TextStyle(
                     fontSize: 11,
                     fontFamily: 'monospace',
-                    color: Color(0xFFCCCCCC),
+                    color: FlowTheme.neutral,
                     height: 1.4,
                   ),
                 );

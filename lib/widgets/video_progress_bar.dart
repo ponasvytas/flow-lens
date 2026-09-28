@@ -5,6 +5,7 @@ import '../models/game_event.dart';
 import '../controllers/scrub_seek_coordinator.dart';
 import '../utils/perf.dart';
 import '../utils/responsive_layout.dart';
+import '../theme/flow_theme.dart';
 import 'event_timeline.dart';
 
 class VideoProgressBar extends StatefulWidget {
@@ -292,8 +293,8 @@ class VideoSeekTrack extends StatelessWidget {
                           key: const ValueKey('video-seek-slider'),
                           padding: EdgeInsets.zero,
                           value: value,
-                          activeColor: Colors.blue,
-                          inactiveColor: Colors.grey.shade700,
+                          activeColor: FlowTheme.accent,
+                          inactiveColor: FlowTheme.raised,
                           semanticFormatterCallback: (_) =>
                               '${formatVideoTime(position)} of ${formatVideoTime(duration)}',
                           onChangeStart: duration > Duration.zero

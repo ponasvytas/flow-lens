@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../controllers/ui_controller.dart';
 import '../models/app_mode.dart';
 import '../utils/responsive_layout.dart';
+import '../theme/flow_theme.dart';
 import 'dockable_panel.dart';
 import 'tool_action_grid.dart';
 import 'dock_split.dart';
@@ -17,6 +18,12 @@ const double kDockMinCenterHeight = 220;
 
 bool usesCompactDockLayout(Size size) =>
     size.width < 900 || size.width < size.height || size.height < 440;
+
+bool usesSideToolLayout(Size size) =>
+    size.width >= 900 &&
+    size.height >= 320 &&
+    size.width > size.height &&
+    (size.width < 1200 || size.height < 440);
 
 class DockPanelEntry {
   final PanelId id;
@@ -65,17 +72,19 @@ DockGeometry resolveDockGeometry({
   required Set<PanelDockEdge> activeEdges,
   required DockEdgeExtents extents,
   required DockPresentationMode presentationMode,
+  double minimumCenterWidth = kDockMinCenterWidth,
+  double minimumCenterHeight = kDockMinCenterHeight,
 }) {
   final horizontal = _fitPair(
     total: size.width,
-    minimumCenter: kDockMinCenterWidth,
+    minimumCenter: minimumCenterWidth,
     first: activeEdges.contains(PanelDockEdge.left) ? extents.left : 0,
     second: activeEdges.contains(PanelDockEdge.right) ? extents.right : 0,
     minimumExtent: kDockMinSideExtent,
   );
   final vertical = _fitPair(
     total: size.height,
-    minimumCenter: kDockMinCenterHeight,
+    minimumCenter: minimumCenterHeight,
     first: activeEdges.contains(PanelDockEdge.top) ? extents.top : 0,
     second: activeEdges.contains(PanelDockEdge.bottom) ? extents.bottom : 0,
     minimumExtent: kDockMinHorizontalExtent,
@@ -163,6 +172,65 @@ class _DockLayoutState extends State<DockLayout> {
     child: SizedBox.expand(child: widget.child),
   );
 
+  Widget _buildSideTools(Size size) {
+    final entries = widget.panels
+        .where((entry) => widget.uiController.panelVisible(entry.id))
+        .toList();
+    if (entries.isEmpty) return _video;
+    final selected =
+        entries.where((entry) => entry.id == _compactActive).firstOrNull ??
+        entries
+            .where((entry) => entry.id != PanelId.playbackControls)
+            .firstOrNull ??
+        entries.first;
+    final content = selected.builder(PanelDockEdge.right);
+    return Row(
+      children: [
+        Expanded(child: _video),
+        SizedBox(
+          width: (size.width * 0.30).clamp(280.0, 360.0),
+          child: Material(
+            color: FlowTheme.panel,
+            child: Column(
+              children: [
+                SizedBox(
+                  height: 56,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: DropdownButton<PanelId>(
+                      key: const ValueKey('side-tool-selector'),
+                      isExpanded: true,
+                      value: selected.id,
+                      underline: const SizedBox.shrink(),
+                      items: [
+                        for (final entry in entries)
+                          DropdownMenuItem(
+                            value: entry.id,
+                            child: Text(
+                              entry.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                      onChanged: (id) => setState(() => _compactActive = id),
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: selected.fillSideDock
+                      ? content
+                      : SingleChildScrollView(child: content),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildPhone(Size size) {
     // Phone selection and hiding never write desktop visibility or dock geometry.
     final entries = widget.panels;
@@ -221,7 +289,7 @@ class _DockLayoutState extends State<DockLayout> {
     final content = selected.builder(PanelDockEdge.bottom);
     final panel = Material(
       key: const ValueKey('phone-tools'),
-      color: const Color(0xFF1C1827),
+      color: FlowTheme.panel,
       child: Column(
         children: [
           header,
@@ -291,6 +359,9 @@ class _DockLayoutState extends State<DockLayout> {
         if (widget.adaptive && usesPhoneLayout(context)) {
           return _buildPhone(size);
         }
+        if (widget.adaptive && usesSideToolLayout(size)) {
+          return _buildSideTools(size);
+        }
         if (widget.adaptive && usesCompactDockLayout(size)) {
           final entries =
               widget.panels
@@ -342,7 +413,7 @@ class _DockLayoutState extends State<DockLayout> {
                 SizedBox(
                   height: math.min(requestedHeight, size.height * 0.6),
                   child: Material(
-                    color: const Color(0xFF1C1827),
+                    color: FlowTheme.panel,
                     child: LayoutBuilder(
                       builder: (context, shelf) {
                         final shortShelf =
@@ -479,6 +550,12 @@ class _DockLayoutState extends State<DockLayout> {
           activeEdges: activeEdges,
           extents: extents,
           presentationMode: widget.uiController.dockPresentationMode,
+          minimumCenterWidth: widget.adaptive
+              ? math.max(kDockMinCenterWidth, size.width * 0.5)
+              : kDockMinCenterWidth,
+          minimumCenterHeight: widget.adaptive
+              ? math.max(kDockMinCenterHeight, size.height * 0.55)
+              : kDockMinCenterHeight,
         );
         return Stack(
           clipBehavior: Clip.hardEdge,
@@ -627,8 +704,8 @@ class _DockLayoutState extends State<DockLayout> {
       rect: rect,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: const Color(0xFF101016).withValues(alpha: 0.94),
-          border: Border.all(color: Colors.white12),
+          color: FlowTheme.background.withValues(alpha: 0.94),
+          border: Border.all(color: FlowTheme.border),
         ),
         child: Stack(
           children: [

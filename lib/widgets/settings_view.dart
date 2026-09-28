@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../utils/responsive_layout.dart';
 import '../controllers/settings_controller.dart';
+import '../theme/flow_theme.dart';
 
 class SettingsView extends StatefulWidget {
   final SettingsController controller;
@@ -65,10 +66,13 @@ class _SettingsViewState extends State<SettingsView> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.amber.shade50,
+                      color: FlowTheme.warningSurface,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Text(error),
+                    child: Text(
+                      error,
+                      style: const TextStyle(color: FlowTheme.warning),
+                    ),
                   ),
                   const SizedBox(height: 20),
                 ],
@@ -126,7 +130,7 @@ class _SettingsViewState extends State<SettingsView> {
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
-            color: Colors.blue.shade700,
+            color: FlowTheme.accent,
           ),
         ),
         const SizedBox(height: 16),
@@ -170,7 +174,7 @@ class _SettingsViewState extends State<SettingsView> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: Colors.blue.shade700,
+                color: FlowTheme.accent,
               ),
             ),
           ],
@@ -178,7 +182,7 @@ class _SettingsViewState extends State<SettingsView> {
         const SizedBox(height: 4),
         const Text(
           "Initial playback speed when video loads (press 'D' key)",
-          style: TextStyle(fontSize: 12, color: Colors.grey),
+          style: TextStyle(fontSize: 12, color: FlowTheme.muted),
         ),
         const SizedBox(height: 8),
         Slider(
@@ -221,9 +225,9 @@ class _SettingsViewState extends State<SettingsView> {
         widget.controller.setDefaultPlaybackSpeed(speed);
       },
       style: OutlinedButton.styleFrom(
-        backgroundColor: isSelected ? Colors.blue.shade50 : null,
+        backgroundColor: isSelected ? FlowTheme.selected : null,
         side: BorderSide(
-          color: isSelected ? Colors.blue : Colors.grey,
+          color: isSelected ? FlowTheme.accent : FlowTheme.controlBorder,
           width: isSelected ? 2 : 1,
         ),
       ),
@@ -248,7 +252,7 @@ class _SettingsViewState extends State<SettingsView> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: Colors.blue.shade700,
+                color: FlowTheme.accent,
               ),
             ),
           ],
@@ -256,7 +260,7 @@ class _SettingsViewState extends State<SettingsView> {
         const SizedBox(height: 4),
         const Text(
           "Speed when pressing 'S' key",
-          style: TextStyle(fontSize: 12, color: Colors.grey),
+          style: TextStyle(fontSize: 12, color: FlowTheme.muted),
         ),
         const SizedBox(height: 8),
         Slider(
@@ -298,9 +302,9 @@ class _SettingsViewState extends State<SettingsView> {
         widget.controller.setSlowPlaybackSpeed(speed);
       },
       style: OutlinedButton.styleFrom(
-        backgroundColor: isSelected ? Colors.blue.shade50 : null,
+        backgroundColor: isSelected ? FlowTheme.selected : null,
         side: BorderSide(
-          color: isSelected ? Colors.blue : Colors.grey,
+          color: isSelected ? FlowTheme.accent : FlowTheme.controlBorder,
           width: isSelected ? 2 : 1,
         ),
       ),
@@ -325,7 +329,7 @@ class _SettingsViewState extends State<SettingsView> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: Colors.blue.shade700,
+                color: FlowTheme.accent,
               ),
             ),
           ],
@@ -333,7 +337,7 @@ class _SettingsViewState extends State<SettingsView> {
         const SizedBox(height: 4),
         const Text(
           "Speed for the Fast button and holding the 'F' key",
-          style: TextStyle(fontSize: 12, color: Colors.grey),
+          style: TextStyle(fontSize: 12, color: FlowTheme.muted),
         ),
         const SizedBox(height: 8),
         Slider(
@@ -375,9 +379,9 @@ class _SettingsViewState extends State<SettingsView> {
         widget.controller.setFastPlaySpeed(speed);
       },
       style: OutlinedButton.styleFrom(
-        backgroundColor: isSelected ? Colors.blue.shade50 : null,
+        backgroundColor: isSelected ? FlowTheme.selected : null,
         side: BorderSide(
-          color: isSelected ? Colors.blue : Colors.grey,
+          color: isSelected ? FlowTheme.accent : FlowTheme.controlBorder,
           width: isSelected ? 2 : 1,
         ),
       ),
@@ -402,7 +406,7 @@ class _SettingsViewState extends State<SettingsView> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: Colors.blue.shade700,
+                color: FlowTheme.accent,
               ),
             ),
           ],
@@ -410,7 +414,7 @@ class _SettingsViewState extends State<SettingsView> {
         const SizedBox(height: 4),
         const Text(
           'Jump before event timestamp when selecting',
-          style: TextStyle(fontSize: 12, color: Colors.grey),
+          style: TextStyle(fontSize: 12, color: FlowTheme.muted),
         ),
         const SizedBox(height: 8),
         Slider(
@@ -449,7 +453,7 @@ class _SettingsViewState extends State<SettingsView> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: Colors.blue.shade700,
+                color: FlowTheme.accent,
               ),
             ),
           ],
@@ -457,7 +461,7 @@ class _SettingsViewState extends State<SettingsView> {
         const SizedBox(height: 4),
         const Text(
           'Reserved for future event playback mode',
-          style: TextStyle(fontSize: 12, color: Colors.grey),
+          style: TextStyle(fontSize: 12, color: FlowTheme.muted),
         ),
         const SizedBox(height: 8),
         Slider(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/app_mode.dart';
 import '../utils/responsive_layout.dart';
+import '../theme/flow_theme.dart';
 import 'flow_logo.dart';
 import 'dockable_panel.dart' show kAppTitleBarHeight;
 
@@ -86,8 +87,8 @@ class BrandedTitleBar extends StatelessWidget {
       return Container(
         height: kAppTitleBarHeight,
         decoration: const BoxDecoration(
-          color: Color(0xFF251B35),
-          border: Border(bottom: BorderSide(color: Color(0xFF58416D))),
+          color: FlowTheme.header,
+          border: Border(bottom: BorderSide(color: FlowTheme.border)),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: Row(
@@ -98,7 +99,7 @@ class BrandedTitleBar extends StatelessWidget {
               child: IconButton(
                 tooltip: 'Go to start page',
                 onPressed: onGoHome,
-                icon: const FlowLogo(color: Color(0xFFC4A5FA), size: 30),
+                icon: const FlowLogo(color: FlowTheme.accent, size: 30),
               ),
             ),
             if (!compact) ...[
@@ -151,10 +152,10 @@ class BrandedTitleBar extends StatelessWidget {
                     style: TextButton.styleFrom(
                       minimumSize: const Size(76, 48),
                       foregroundColor: mode == currentMode
-                          ? Colors.white
-                          : const Color(0xFFC0B6CD),
+                          ? FlowTheme.text
+                          : FlowTheme.muted,
                       backgroundColor: mode == currentMode
-                          ? const Color(0xFF63418A)
+                          ? FlowTheme.selected
                           : Colors.transparent,
                     ),
                     child: Text(_label(mode)),

@@ -171,9 +171,9 @@ class _EventsTableViewState extends State<EventsTableView> {
   Color _getImpactColor(EventGrade? grade) {
     if (grade == null) return FlowTheme.muted;
     return switch (grade) {
-      EventGrade.positive => Colors.greenAccent,
-      EventGrade.negative => Colors.redAccent,
-      EventGrade.neutral => FlowTheme.muted,
+      EventGrade.positive => FlowTheme.positive,
+      EventGrade.negative => FlowTheme.negative,
+      EventGrade.neutral => FlowTheme.neutral,
     };
   }
 
@@ -517,7 +517,7 @@ class _EventsTableViewState extends State<EventsTableView> {
 
   @override
   Widget build(BuildContext context) {
-    final isDesktop = usesDialogLayout(context);
+    final isDesktop = usesDialogLayout(context, minWidth: 900);
     final events = _sortEvents(widget.controller.filteredEvents);
     if (!isDesktop) return _buildPhoneEvents(events);
 

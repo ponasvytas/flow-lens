@@ -1,8 +1,10 @@
 # Minimal phone support
 
-Implemented for quick-event recording and event review. A window whose shorter
-side is below 600 logical pixels uses the phone workspace. Larger windows retain
-the existing tablet/desktop docking layouts.
+Implemented for quick-event recording and event review. A window uses the phone
+workspace when its width is below 600 logical pixels, or when its height is
+below 600 and its width is below 1024. Wider short windows keep the desktop or
+tablet workspace. Tablet landscape widths from 900 to 1199 use a single side
+tool panel so the video remains visible.
 
 - Portrait: video above one scrollable tool panel.
 - Landscape: video beside one scrollable tool panel.

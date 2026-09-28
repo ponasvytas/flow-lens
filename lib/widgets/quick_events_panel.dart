@@ -177,9 +177,9 @@ class _GradeLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, icon, color) = switch (grade) {
-      EventGrade.positive => ('Positive', Icons.thumb_up, Colors.greenAccent),
-      EventGrade.neutral => ('Neutral', Icons.remove, FlowTheme.muted),
-      EventGrade.negative => ('Negative', Icons.thumb_down, Colors.redAccent),
+      EventGrade.positive => ('Positive', Icons.thumb_up, FlowTheme.positive),
+      EventGrade.neutral => ('Neutral', Icons.remove, FlowTheme.neutral),
+      EventGrade.negative => ('Negative', Icons.thumb_down, FlowTheme.negative),
       null => ('Ungraded', Icons.radio_button_unchecked, FlowTheme.muted),
     };
     return Row(
