@@ -4,9 +4,14 @@ import 'package:media_kit/media_kit.dart';
 import '../controllers/tracking_controller.dart';
 import '../models/tracking_models.dart';
 import '../models/sport_taxonomy.dart';
+import '../theme/flow_theme.dart';
+import 'adaptive_dialog.dart';
 import 'add_player_dialog.dart';
 import 'dockable_panel.dart';
+import 'tool_action_grid.dart';
 import 'tracking_hotkey_dialog.dart';
+
+enum _TrackingSessionAction { save, load, export }
 
 /// Player tracking panel — shows subject cards with counter/timer rows.
 ///
@@ -43,6 +48,7 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
   final _numberController = TextEditingController();
   final _nameFocusNode = FocusNode();
   bool _showAddForm = false;
+  bool _nameError = false;
 
   // Flash feedback
   ({String subjectId, String trackerId})? _flashKey;
@@ -122,6 +128,7 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
       ),
     ),
     widget.controller.activeSubjectId,
+    widget.controller.events.length,
   );
 
   void _updateTimerSubscription() {
@@ -173,7 +180,7 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
               child: Text(
                 'No players added.\nTap + to add a player.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white38, fontSize: 11),
+                style: TextStyle(color: FlowTheme.muted, fontSize: 14),
               ),
             ),
 
@@ -210,61 +217,98 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
   // Toolbar
   // -------------------------------------------------------------------------
 
-  Widget _buildToolbar(TrackingController ctrl) {
-    return Wrap(
-      spacing: 4,
-      runSpacing: 4,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        // Add player button
-        _SmallIconBtn(
-          icon: Icons.person_add,
-          tooltip: 'Add player',
-          onTap: () {
-            if (Theme.of(context).platform == TargetPlatform.iOS) {
-              _showAddPlayerDialog(ctrl);
-            } else {
-              _toggleAddForm();
-            }
-          },
-        ),
-        // Config / add trackers
-        _SmallIconBtn(
-          icon: Icons.tune,
-          tooltip: 'Configure trackers',
-          onTap: () => _showTrackerPicker(ctrl),
-        ),
-        // Save
-        _SmallIconBtn(
-          icon: Icons.save_alt,
-          tooltip: 'Save session',
-          onTap: widget.onSave,
-        ),
-        // Load
-        _SmallIconBtn(
-          icon: Icons.upload_file,
-          tooltip: 'Load session',
-          onTap: widget.onLoad,
-        ),
-        // Export CSV
-        _SmallIconBtn(
-          icon: Icons.table_chart,
-          tooltip: 'Export CSV',
-          onTap: ctrl.events.isNotEmpty ? widget.onExportCsv : null,
-        ),
-        // Event count
-        Text(
-          '${ctrl.events.length} events',
-          style: const TextStyle(color: Colors.white30, fontSize: 10),
-        ),
-        // Undo
-        _SmallIconBtn(
-          icon: Icons.undo,
-          tooltip: 'Undo last',
-          onTap: ctrl.events.isNotEmpty ? () => ctrl.undoLastEvent() : null,
-        ),
-      ],
-    );
+  Widget _buildToolbar(TrackingController ctrl) => LayoutBuilder(
+    builder: (context, constraints) {
+      final compact = constraints.maxWidth < 320;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              if (compact)
+                _SmallIconBtn(
+                  icon: Icons.person_add_rounded,
+                  tooltip: 'Add player',
+                  onTap: () => _openAddPlayer(ctrl),
+                )
+              else
+                FilledButton.tonalIcon(
+                  onPressed: () => _openAddPlayer(ctrl),
+                  icon: const Icon(Icons.person_add_rounded),
+                  label: const Text('Add player'),
+                ),
+              if (compact)
+                _SmallIconBtn(
+                  icon: Icons.tune_rounded,
+                  tooltip: 'Configure trackers',
+                  onTap: () => _showTrackerPicker(ctrl),
+                )
+              else
+                OutlinedButton.icon(
+                  onPressed: () => _showTrackerPicker(ctrl),
+                  icon: const Icon(Icons.tune_rounded),
+                  label: const Text('Trackers'),
+                ),
+              PopupMenuButton<_TrackingSessionAction>(
+                tooltip: 'Session actions',
+                icon: const Icon(Icons.more_horiz_rounded),
+                onSelected: (action) {
+                  switch (action) {
+                    case _TrackingSessionAction.save:
+                      widget.onSave?.call();
+                    case _TrackingSessionAction.load:
+                      widget.onLoad?.call();
+                    case _TrackingSessionAction.export:
+                      widget.onExportCsv?.call();
+                  }
+                },
+                itemBuilder: (_) => [
+                  PopupMenuItem(
+                    value: _TrackingSessionAction.save,
+                    enabled: widget.onSave != null,
+                    child: const Text('Save session'),
+                  ),
+                  PopupMenuItem(
+                    value: _TrackingSessionAction.load,
+                    enabled: widget.onLoad != null,
+                    child: const Text('Load session'),
+                  ),
+                  PopupMenuItem(
+                    value: _TrackingSessionAction.export,
+                    enabled:
+                        ctrl.events.isNotEmpty && widget.onExportCsv != null,
+                    child: const Text('Export CSV'),
+                  ),
+                ],
+              ),
+              _SmallIconBtn(
+                icon: Icons.undo_rounded,
+                tooltip: 'Undo last tracking event',
+                onTap: ctrl.events.isNotEmpty
+                    ? () => ctrl.undoLastEvent()
+                    : null,
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${ctrl.events.length} tracking ${ctrl.events.length == 1 ? 'event' : 'events'}',
+            style: const TextStyle(color: FlowTheme.muted, fontSize: 12),
+          ),
+        ],
+      );
+    },
+  );
+
+  void _openAddPlayer(TrackingController ctrl) {
+    if (Theme.of(context).platform == TargetPlatform.iOS) {
+      _showAddPlayerDialog(ctrl);
+    } else {
+      _toggleAddForm();
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -309,7 +353,10 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
 
   void _closeAddForm() {
     _nameFocusNode.unfocus();
-    setState(() => _showAddForm = false);
+    setState(() {
+      _showAddForm = false;
+      _nameError = false;
+    });
   }
 
   Widget _buildAddForm(TrackingController ctrl) {
@@ -320,39 +367,46 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: Colors.white12),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            flex: 2,
-            child: _MiniTextField(
-              controller: _nameController,
-              hint: 'Name',
-              focusNode: _nameFocusNode,
-            ),
-          ),
-          const SizedBox(width: 4),
-          SizedBox(
-            width: 44,
-            child: _MiniTextField(controller: _numberController, hint: '#'),
-          ),
-          const SizedBox(width: 4),
-          _SmallIconBtn(
-            icon: Icons.check,
-            tooltip: 'Add',
-            color: Colors.greenAccent,
-            onTap: () {
-              final name = _nameController.text.trim();
-              if (name.isEmpty) return;
-              _addPlayer(ctrl, name, _numberController.text);
-              _nameController.clear();
-              _numberController.clear();
-              _closeAddForm();
+          _MiniTextField(
+            controller: _nameController,
+            label: 'Name',
+            focusNode: _nameFocusNode,
+            errorText: _nameError ? 'Enter a player name' : null,
+            onChanged: (_) {
+              if (_nameError) setState(() => _nameError = false);
             },
           ),
-          _SmallIconBtn(
-            icon: Icons.close,
-            tooltip: 'Cancel',
-            onTap: _closeAddForm,
+          const SizedBox(height: 8),
+          _MiniTextField(
+            controller: _numberController,
+            label: 'Number',
+            keyboardType: TextInputType.number,
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton(
+                onPressed: () {
+                  final name = _nameController.text.trim();
+                  if (name.isEmpty) {
+                    setState(() => _nameError = true);
+                    _nameFocusNode.requestFocus();
+                    return;
+                  }
+                  _addPlayer(ctrl, name, _numberController.text);
+                  _nameController.clear();
+                  _numberController.clear();
+                  _closeAddForm();
+                },
+                child: const Text('Add player'),
+              ),
+              TextButton(onPressed: _closeAddForm, child: const Text('Cancel')),
+            ],
           ),
         ],
       ),
@@ -383,82 +437,7 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Card header
-          GestureDetector(
-            onTap: () => setState(() {
-              isCollapsed
-                  ? _collapsedSubjects.remove(subject.id)
-                  : _collapsedSubjects.add(subject.id);
-            }),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-              decoration: BoxDecoration(
-                color: subjectColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(5),
-                  topRight: const Radius.circular(5),
-                  bottomLeft: isCollapsed
-                      ? const Radius.circular(5)
-                      : Radius.zero,
-                  bottomRight: isCollapsed
-                      ? const Radius.circular(5)
-                      : Radius.zero,
-                ),
-              ),
-              child: Row(
-                children: [
-                  // Color dot
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: subjectColor,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  // Number
-                  if (subject.number != null)
-                    Text(
-                      '#${subject.number} ',
-                      style: TextStyle(
-                        color: subjectColor.withValues(alpha: 0.8),
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  // Name
-                  Expanded(
-                    child: Text(
-                      subject.label,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  // Remove subject
-                  GestureDetector(
-                    onTap: () => ctrl.removeSubject(subject.id),
-                    child: const Padding(
-                      padding: EdgeInsets.all(2),
-                      child: Icon(Icons.close, size: 12, color: Colors.white30),
-                    ),
-                  ),
-                  // Collapse toggle
-                  Icon(
-                    isCollapsed
-                        ? Icons.keyboard_arrow_down
-                        : Icons.keyboard_arrow_up,
-                    size: 14,
-                    color: Colors.white38,
-                  ),
-                ],
-              ),
-            ),
-          ),
+          _buildSubjectHeader(subject, ctrl, isCollapsed, subjectColor),
 
           // Tracker rows
           if (!isCollapsed)
@@ -468,6 +447,100 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
         ],
       ),
     );
+  }
+
+  Widget _buildSubjectHeader(
+    TrackingSubject subject,
+    TrackingController ctrl,
+    bool isCollapsed,
+    Color subjectColor,
+  ) => LayoutBuilder(
+    builder: (context, constraints) {
+      final narrow = constraints.maxWidth < 200;
+      final collapse = IconButton(
+        tooltip: '${isCollapsed ? 'Expand' : 'Collapse'} ${subject.label}',
+        onPressed: () => setState(() {
+          isCollapsed
+              ? _collapsedSubjects.remove(subject.id)
+              : _collapsedSubjects.add(subject.id);
+        }),
+        icon: Icon(
+          isCollapsed ? Icons.expand_more_rounded : Icons.expand_less_rounded,
+          size: ToolsetLayout.glyph,
+        ),
+      );
+      final remove = IconButton(
+        tooltip: 'Remove ${subject.label}',
+        onPressed: () => _confirmRemoveSubject(ctrl, subject),
+        icon: const Icon(Icons.close_rounded, size: ToolsetLayout.glyph),
+      );
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          color: subjectColor.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(5),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                collapse,
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: subjectColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Tooltip(
+                    message: subject.label,
+                    child: Text(
+                      '${subject.number == null ? '' : '#${subject.number} '}${subject.label}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: FlowTheme.text,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                if (!narrow) remove,
+              ],
+            ),
+            if (narrow) Align(alignment: Alignment.centerRight, child: remove),
+          ],
+        ),
+      );
+    },
+  );
+
+  Future<void> _confirmRemoveSubject(
+    TrackingController ctrl,
+    TrackingSubject subject,
+  ) async {
+    final remove = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove player?'),
+        content: Text('Remove ${subject.label} from this tracking session?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (remove == true && mounted) ctrl.removeSubject(subject.id);
   }
 
   // -------------------------------------------------------------------------
@@ -507,48 +580,78 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
     String? hotkey,
   ) {
     final value = ctrl.getCounterValue(subject.id, tracker.id);
-    return Row(
-      children: [
-        _HotkeyBadge(
-          label: hotkey,
-          onTap: () => _promptHotkey(ctrl, subject.id, tracker.id),
-        ),
-        const SizedBox(width: 4),
-        Expanded(
-          child: Text(
-            tracker.label,
-            style: const TextStyle(color: Colors.white60, fontSize: 10),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        Text(
-          '$value',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(width: 2),
-        _TinyBtn(
-          icon: Icons.add,
-          onTap: () => ctrl.incrementCounter(
-            subjectId: subject.id,
-            trackerId: tracker.id,
-            timestamp: widget.player.state.position,
-          ),
-        ),
-        _TinyBtn(
-          icon: Icons.remove,
-          onTap: value > 0
-              ? () => ctrl.decrementCounter(
-                  subjectId: subject.id,
-                  trackerId: tracker.id,
-                  timestamp: widget.player.state.position,
-                )
-              : null,
-        ),
-      ],
+    final keyButton = _HotkeyBadge(
+      label: hotkey,
+      trackerLabel: tracker.label,
+      subjectLabel: subject.label,
+      onTap: () => _promptHotkey(ctrl, subject.id, tracker.id),
+    );
+    final add = _TinyBtn(
+      icon: Icons.add_rounded,
+      tooltip: 'Add ${tracker.label} for ${subject.label}',
+      onTap: () => ctrl.incrementCounter(
+        subjectId: subject.id,
+        trackerId: tracker.id,
+        timestamp: widget.player.state.position,
+      ),
+    );
+    final subtract = _TinyBtn(
+      icon: Icons.remove_rounded,
+      tooltip: 'Subtract ${tracker.label} for ${subject.label}',
+      onTap: value > 0
+          ? () => ctrl.decrementCounter(
+              subjectId: subject.id,
+              trackerId: tracker.id,
+              timestamp: widget.player.state.position,
+            )
+          : null,
+    );
+    final label = Tooltip(
+      message: tracker.label,
+      child: Text(
+        tracker.label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(color: FlowTheme.text, fontSize: 14),
+      ),
+    );
+    final count = Text(
+      '$value',
+      style: const TextStyle(
+        color: FlowTheme.text,
+        fontSize: 14,
+        fontWeight: FontWeight.bold,
+      ),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) => constraints.maxWidth < 280
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(child: label),
+                    count,
+                  ],
+                ),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [keyButton, add, subtract],
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                keyButton,
+                const SizedBox(width: 8),
+                Expanded(child: label),
+                count,
+                const SizedBox(width: 8),
+                add,
+                subtract,
+              ],
+            ),
     );
   }
 
@@ -571,53 +674,72 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
       }
     }
 
-    final modeIcon = tracker.timerMode == TimerMode.hold
-        ? Icons.touch_app
-        : Icons.toggle_on;
-
-    return Row(
-      children: [
-        _HotkeyBadge(
-          label: hotkey,
-          onTap: () => _promptHotkey(ctrl, subject.id, tracker.id),
-        ),
-        const SizedBox(width: 4),
-        Icon(modeIcon, size: 10, color: Colors.white24),
-        const SizedBox(width: 2),
-        Expanded(
-          child: Text(
-            tracker.label,
-            style: const TextStyle(color: Colors.white60, fontSize: 10),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        // Duration display
-        Text(
-          _formatDuration(display),
-          style: TextStyle(
-            color: running ? Colors.greenAccent : Colors.white,
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            fontFamily: 'monospace',
-          ),
-        ),
-        if (running)
-          const Padding(
-            padding: EdgeInsets.only(left: 3),
-            child: _PulsingDot(),
-          ),
-        const SizedBox(width: 2),
-        // Toggle button (for toggle-mode timers via click)
-        _TinyBtn(
-          icon: running ? Icons.stop : Icons.play_arrow,
-          color: running ? Colors.redAccent : Colors.greenAccent,
-          onTap: () => ctrl.toggleTimer(
-            subjectId: subject.id,
-            trackerId: tracker.id,
-            timestamp: widget.player.state.position,
-          ),
-        ),
-      ],
+    final keyButton = _HotkeyBadge(
+      label: hotkey,
+      trackerLabel: tracker.label,
+      subjectLabel: subject.label,
+      onTap: () => _promptHotkey(ctrl, subject.id, tracker.id),
+    );
+    final toggle = _TinyBtn(
+      icon: running ? Icons.stop_rounded : Icons.play_arrow_rounded,
+      tooltip:
+          '${running ? 'Stop' : 'Start'} ${tracker.label} for ${subject.label}',
+      color: running ? FlowTheme.negative : FlowTheme.positive,
+      onTap: () => ctrl.toggleTimer(
+        subjectId: subject.id,
+        trackerId: tracker.id,
+        timestamp: widget.player.state.position,
+      ),
+    );
+    final label = Tooltip(
+      message: tracker.label,
+      child: Text(
+        '${tracker.label} · ${tracker.timerMode == TimerMode.hold ? 'Hold' : 'Toggle'}',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(color: FlowTheme.text, fontSize: 14),
+      ),
+    );
+    final duration = Text(
+      _formatDuration(display),
+      style: TextStyle(
+        color: running ? FlowTheme.positive : FlowTheme.text,
+        fontSize: 14,
+        fontWeight: FontWeight.bold,
+        fontFamily: 'monospace',
+      ),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) => constraints.maxWidth < 260
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (constraints.maxWidth < 160) ...[
+                  label,
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: FittedBox(fit: BoxFit.scaleDown, child: duration),
+                  ),
+                ] else
+                  Row(
+                    children: [
+                      Expanded(child: label),
+                      duration,
+                    ],
+                  ),
+                Wrap(spacing: 8, runSpacing: 4, children: [keyButton, toggle]),
+              ],
+            )
+          : Row(
+              children: [
+                keyButton,
+                const SizedBox(width: 8),
+                Expanded(child: label),
+                duration,
+                const SizedBox(width: 8),
+                toggle,
+              ],
+            ),
     );
   }
 
@@ -689,9 +811,24 @@ class _SmallIconBtn extends StatelessWidget {
   final IconData icon;
   final String tooltip;
   final VoidCallback? onTap;
+
+  const _SmallIconBtn({required this.icon, required this.tooltip, this.onTap});
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    tooltip: tooltip,
+    onPressed: onTap,
+    icon: Icon(icon, size: ToolsetLayout.glyph),
+  );
+}
+
+class _TinyBtn extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onTap;
   final Color? color;
 
-  const _SmallIconBtn({
+  const _TinyBtn({
     required this.icon,
     required this.tooltip,
     this.onTap,
@@ -699,71 +836,32 @@ class _SmallIconBtn extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(22),
-        child: SizedBox.square(
-          dimension: 44,
-          child: Icon(
-            icon,
-            size: 16,
-            color: onTap != null ? (color ?? Colors.white54) : Colors.white12,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _TinyBtn extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback? onTap;
-  final Color? color;
-
-  const _TinyBtn({required this.icon, this.onTap, this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: icon == Icons.add
-          ? 'Increment'
-          : icon == Icons.remove
-          ? 'Decrement'
-          : icon == Icons.stop
-          ? 'Stop timer'
-          : 'Start timer',
-      child: Semantics(
-        button: true,
-        enabled: onTap != null,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(22),
-          child: SizedBox.square(
-            dimension: 44,
-            child: Icon(
-              icon,
-              size: 14,
-              color: onTap != null ? (color ?? Colors.white54) : Colors.white12,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => IconButton(
+    tooltip: tooltip,
+    onPressed: onTap,
+    icon: Icon(
+      icon,
+      size: ToolsetLayout.glyph,
+      color: onTap == null ? Theme.of(context).disabledColor : color,
+    ),
+  );
 }
 
 class _MiniTextField extends StatelessWidget {
   final TextEditingController controller;
-  final String hint;
+  final String label;
   final FocusNode? focusNode;
+  final String? errorText;
+  final ValueChanged<String>? onChanged;
+  final TextInputType? keyboardType;
 
   const _MiniTextField({
     required this.controller,
-    required this.hint,
+    required this.label,
     this.focusNode,
+    this.errorText,
+    this.onChanged,
+    this.keyboardType,
   });
 
   @override
@@ -771,23 +869,16 @@ class _MiniTextField extends StatelessWidget {
     return TextField(
       controller: controller,
       focusNode: focusNode,
-      style: const TextStyle(color: Colors.white, fontSize: 11),
+      keyboardType: keyboardType,
+      onChanged: onChanged,
+      style: const TextStyle(color: FlowTheme.text, fontSize: 16),
       decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: const TextStyle(color: Colors.white24, fontSize: 11),
+        labelText: label,
+        errorText: errorText,
         isDense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(4),
-          borderSide: const BorderSide(color: Colors.white12),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(4),
-          borderSide: const BorderSide(color: Colors.white12),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(4),
-          borderSide: const BorderSide(color: Colors.blueAccent),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 14,
         ),
       ),
     );
@@ -796,96 +887,37 @@ class _MiniTextField extends StatelessWidget {
 
 class _HotkeyBadge extends StatelessWidget {
   final String? label;
+  final String trackerLabel;
+  final String subjectLabel;
   final VoidCallback? onTap;
 
-  const _HotkeyBadge({this.label, this.onTap});
+  const _HotkeyBadge({
+    required this.trackerLabel,
+    required this.subjectLabel,
+    this.label,
+    this.onTap,
+  });
 
   @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: label == null ? 'Assign hotkey' : 'Change hotkey $label',
-      child: Semantics(
-        button: true,
-        label: label == null ? 'Assign hotkey' : 'Hotkey $label',
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(22),
-          child: SizedBox.square(
-            dimension: 44,
-            child: Center(
-              child: Container(
-                constraints: const BoxConstraints(minWidth: 20),
-                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-                decoration: BoxDecoration(
-                  color: label != null
-                      ? Colors.blueGrey.withValues(alpha: 0.4)
-                      : Colors.white.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(3),
-                  border: Border.all(
-                    color: label != null ? Colors.white24 : Colors.white10,
-                    width: 1,
-                  ),
-                ),
-                child: Text(
-                  label?.toUpperCase() ?? '·',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: label != null ? Colors.white70 : Colors.white12,
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'monospace',
-                  ),
-                ),
-              ),
-            ),
-          ),
+  Widget build(BuildContext context) => SizedBox.square(
+    dimension: 48,
+    child: Tooltip(
+      message: label == null
+          ? 'Assign hotkey for $trackerLabel, $subjectLabel'
+          : 'Change hotkey $label for $trackerLabel, $subjectLabel',
+      child: OutlinedButton(
+        onPressed: onTap,
+        style: OutlinedButton.styleFrom(
+          padding: EdgeInsets.zero,
+          minimumSize: const Size(48, 48),
+        ),
+        child: Text(
+          label?.toUpperCase() ?? 'Key',
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
         ),
       ),
-    );
-  }
-}
-
-/// Green pulsing dot for active timers.
-class _PulsingDot extends StatefulWidget {
-  const _PulsingDot();
-
-  @override
-  State<_PulsingDot> createState() => _PulsingDotState();
-}
-
-class _PulsingDotState extends State<_PulsingDot>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _anim;
-
-  @override
-  void initState() {
-    super.initState();
-    _anim = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _anim.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _anim,
-      child: Container(
-        width: 6,
-        height: 6,
-        decoration: const BoxDecoration(
-          color: Colors.greenAccent,
-          shape: BoxShape.circle,
-        ),
-      ),
-    );
-  }
+    ),
+  );
 }
 
 // ===========================================================================
@@ -924,18 +956,10 @@ class _TrackerPickerDialogState extends State<_TrackerPickerDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: const Color(0xFF1E1E2E),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Colors.white12),
-      ),
-      title: const Text(
-        'Select Trackers',
-        style: TextStyle(color: Colors.white, fontSize: 14),
-      ),
+    return AdaptiveDialog(
+      title: const Text('Select trackers'),
       content: SizedBox(
-        width: 300,
+        width: 420,
         height: 400,
         child: ListView(
           children: [
@@ -968,21 +992,15 @@ class _TrackerPickerDialogState extends State<_TrackerPickerDialog> {
         ),
       ),
       actions: [
-        TextButton(
-          onPressed: widget.onCancel,
-          child: const Text(
-            'Cancel',
-            style: TextStyle(color: Colors.white38, fontSize: 12),
-          ),
-        ),
-        TextButton(
+        TextButton(onPressed: widget.onCancel, child: const Text('Cancel')),
+        FilledButton(
           onPressed: () {
             final selected = widget.presets
                 .where((t) => _selected.contains(t.id))
                 .toList();
             widget.onConfirm(selected);
           },
-          child: const Text('Apply', style: TextStyle(fontSize: 12)),
+          child: const Text('Apply'),
         ),
       ],
     );
@@ -994,8 +1012,8 @@ class _TrackerPickerDialogState extends State<_TrackerPickerDialog> {
       child: Text(
         label,
         style: const TextStyle(
-          color: Colors.white54,
-          fontSize: 11,
+          color: FlowTheme.muted,
+          fontSize: 14,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.5,
         ),
@@ -1007,40 +1025,23 @@ class _TrackerPickerDialogState extends State<_TrackerPickerDialog> {
     final checked = _selected.contains(t.id);
     return Tooltip(
       message: t.definition ?? t.label,
-      child: InkWell(
-        onTap: () => setState(() {
-          checked ? _selected.remove(t.id) : _selected.add(t.id);
+      child: CheckboxListTile(
+        value: checked,
+        onChanged: (value) => setState(() {
+          if (value ?? false) {
+            _selected.add(t.id);
+          } else {
+            _selected.remove(t.id);
+          }
         }),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 3),
-          child: Row(
-            children: [
-              Icon(
-                checked ? Icons.check_box : Icons.check_box_outline_blank,
-                size: 16,
-                color: checked ? Colors.blueAccent : Colors.white24,
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  t.label,
-                  style: TextStyle(
-                    color: checked ? Colors.white : Colors.white54,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-              if (t.kind == TrackerKind.timer)
-                Icon(
-                  t.timerMode == TimerMode.hold
-                      ? Icons.touch_app
-                      : Icons.toggle_on,
-                  size: 12,
-                  color: Colors.white24,
-                ),
-            ],
-          ),
-        ),
+        controlAffinity: ListTileControlAffinity.leading,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+        title: Text(t.label),
+        subtitle: t.kind == TrackerKind.timer
+            ? Text(
+                t.timerMode == TimerMode.hold ? 'Hold timer' : 'Toggle timer',
+              )
+            : null,
       ),
     );
   }
