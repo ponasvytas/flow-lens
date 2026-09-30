@@ -1,14 +1,14 @@
 {
   "fill" : {
-    "automatic-gradient" : "display-p3:0.71426,0.77258,0.72110,1.00000",
+    "automatic-gradient" : "display-p3:0.97255,0.96471,1.00000,1.00000",
     "orientation" : {
       "start" : {
         "x" : 0.5,
-        "y" : 0
+        "y" : 1
       },
       "stop" : {
         "x" : 0.5,
-        "y" : 0.7
+        "y" : 0
       }
     }
   },
