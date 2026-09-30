@@ -144,6 +144,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
   // Player tracking
   TrackingController get _trackingController => _runtime.trackingController;
+  final GlobalKey _playerTrackingPanelKey = GlobalKey();
   TrackingImportExportService get _trackingImportExportService =>
       _runtime.trackingImportExportService;
   EventSessionRepository? get _eventSessionRepository =>
@@ -1639,6 +1640,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                 preferredHeight: 360,
               ),
               builder: (dockEdge) => PlayerTrackingPanel(
+                key: _playerTrackingPanelKey,
                 controller: _trackingController,
                 taxonomy: _taxonomy,
                 player: player,

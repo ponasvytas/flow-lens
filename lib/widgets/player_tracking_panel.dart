@@ -41,6 +41,7 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
   final Set<String> _collapsedSubjects = {};
   final _nameController = TextEditingController();
   final _numberController = TextEditingController();
+  final _nameFocusNode = FocusNode();
   bool _showAddForm = false;
 
   // Flash feedback
@@ -68,6 +69,7 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
     _flashTimer?.cancel();
     _nameController.dispose();
     _numberController.dispose();
+    _nameFocusNode.dispose();
     widget.controller.removeListener(_onControllerChange);
     super.dispose();
   }
@@ -222,7 +224,7 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
             if (Theme.of(context).platform == TargetPlatform.iOS) {
               _showAddPlayerDialog(ctrl);
             } else {
-              setState(() => _showAddForm = !_showAddForm);
+              _toggleAddForm();
             }
           },
         ),
@@ -292,6 +294,24 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
     );
   }
 
+  void _toggleAddForm() {
+    if (_showAddForm) {
+      _closeAddForm();
+      return;
+    }
+    setState(() => _showAddForm = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _showAddForm) {
+        _nameFocusNode.requestFocus();
+      }
+    });
+  }
+
+  void _closeAddForm() {
+    _nameFocusNode.unfocus();
+    setState(() => _showAddForm = false);
+  }
+
   Widget _buildAddForm(TrackingController ctrl) {
     return Container(
       padding: const EdgeInsets.all(6),
@@ -307,7 +327,7 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
             child: _MiniTextField(
               controller: _nameController,
               hint: 'Name',
-              autofocus: true,
+              focusNode: _nameFocusNode,
             ),
           ),
           const SizedBox(width: 4),
@@ -326,13 +346,13 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
               _addPlayer(ctrl, name, _numberController.text);
               _nameController.clear();
               _numberController.clear();
-              setState(() => _showAddForm = false);
+              _closeAddForm();
             },
           ),
           _SmallIconBtn(
             icon: Icons.close,
             tooltip: 'Cancel',
-            onTap: () => setState(() => _showAddForm = false),
+            onTap: _closeAddForm,
           ),
         ],
       ),
@@ -738,19 +758,19 @@ class _TinyBtn extends StatelessWidget {
 class _MiniTextField extends StatelessWidget {
   final TextEditingController controller;
   final String hint;
-  final bool autofocus;
+  final FocusNode? focusNode;
 
   const _MiniTextField({
     required this.controller,
     required this.hint,
-    this.autofocus = false,
+    this.focusNode,
   });
 
   @override
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
-      autofocus: autofocus,
+      focusNode: focusNode,
       style: const TextStyle(color: Colors.white, fontSize: 11),
       decoration: InputDecoration(
         hintText: hint,
