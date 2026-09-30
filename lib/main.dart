@@ -368,16 +368,15 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
       }
     } else {
       // Native platforms: Use file_picker with path
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.video,
-      );
+      final result = await FilePicker.pickFile(type: FileType.video);
 
       if (result != null) {
-        final String? path = result.files.single.path;
+        final path = result.path;
         if (path != null) {
+          final size = result.lengthSync() ?? await result.length();
           await _replaceVideoSource(
             path,
-            identity: '${result.files.single.name}:${result.files.single.size}',
+            identity: '${result.name}:${size ?? 0}',
           );
         } else {
           AppLog.debug("Error: No file path available");

@@ -8,10 +8,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flow_lens/controllers/ui_controller.dart';
 import 'package:flow_lens/controllers/quick_events_controller.dart';
 import 'package:flow_lens/models/app_mode.dart';
+import 'package:flow_lens/models/app_settings.dart';
 import 'package:flow_lens/models/game_event.dart';
 import 'package:flow_lens/models/quick_event.dart';
 import 'package:flow_lens/models/sport_taxonomy.dart';
 import 'package:flow_lens/widgets/capture_status_bar.dart';
+import 'package:flow_lens/widgets/control_bar.dart';
 import 'package:flow_lens/widgets/dock_layout.dart';
 import 'package:flow_lens/widgets/dockable_panel.dart';
 import 'package:flow_lens/widgets/event_buttons_panel.dart';
@@ -56,6 +58,85 @@ void main() {
   final taxonomy = SportTaxonomy.fromJson(
     jsonDecode(File('assets/sports/hockey.json').readAsStringSync()),
   );
+
+  testWidgets('Playback and Quick events tiles align in narrow sidebars', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final quick = QuickEventsController(_QuickRepository());
+    await quick.load();
+    quick.selectGame('sidebar', taxonomy);
+    for (final item in quick.suggestedPresets.first.items.take(3)) {
+      quick.add(item);
+    }
+    var width = 104.0;
+    late StateSetter update;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: FlowTheme.dark,
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              update = setState;
+              return Row(
+                children: [
+                  SizedBox(
+                    width: width,
+                    height: 800,
+                    child: PlaybackControls(
+                      rate: 1,
+                      playing: false,
+                      settings: const AppSettings(),
+                      onSpeedChange: (_) {},
+                      onJumpForward: (_) {},
+                      onJumpBackward: (_) {},
+                      onTogglePlayPause: () {},
+                      onToggleMute: () {},
+                    ),
+                  ),
+                  SizedBox(
+                    width: width,
+                    height: 800,
+                    child: QuickEventsPanel(
+                      controller: quick,
+                      taxonomy: taxonomy,
+                      onRecord: (_) {},
+                      onAllEvents: () {},
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    for (final nextWidth in [104.0, 160.0, 220.0, 280.0]) {
+      update(() => width = nextWidth);
+      await tester.pumpAndSettle();
+      final playbackTile = find
+          .descendant(
+            of: find.byType(PlaybackControls),
+            matching: find.byType(ToolActionButton),
+          )
+          .first;
+      final quickTile = find
+          .descendant(
+            of: find.byType(QuickEventsPanel),
+            matching: find.byType(ToolActionButton),
+          )
+          .first;
+      expect(
+        tester.getSize(playbackTile).width,
+        tester.getSize(quickTile).width,
+      );
+      expect(tester.takeException(), isNull);
+    }
+    await tester.pumpWidget(const SizedBox());
+    await quick.flushed;
+    quick.dispose();
+  });
 
   for (final edge in PanelDockEdge.values) {
     for (final scale in [1.0, 2.0]) {

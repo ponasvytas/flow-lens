@@ -8,6 +8,7 @@ class QuickEventsController extends ChangeNotifier {
   QuickEventsController(this.repository);
   final QuickEventsRepository repository;
   final Map<String, List<QuickEvent>> _menus = {};
+  final Map<String, bool> _showAllEventsActions = {};
   final List<QuickEventPreset> _presets = [];
   String? _gameKey;
   String? _sportId;
@@ -19,6 +20,7 @@ class QuickEventsController extends ChangeNotifier {
   int _sequence = 0;
 
   List<QuickEvent> get items => List.unmodifiable(_menus[_gameKey] ?? const []);
+  bool get showAllEventsAction => _showAllEventsActions[_gameKey] ?? false;
   List<QuickEventPreset> get presets =>
       List.unmodifiable(_presets.where((p) => p.sportId == _sportId));
 
@@ -41,6 +43,12 @@ class QuickEventsController extends ChangeNotifier {
           )
           .toList();
       _menus.addAll(parsed);
+      final actions = data['showAllEventsActions'] as Map? ?? {};
+      for (final entry in actions.entries) {
+        if (entry.key is String && entry.value is bool) {
+          _showAllEventsActions[entry.key as String] = entry.value as bool;
+        }
+      }
       _presets.addAll(presets);
       ready = true;
       error = null;
@@ -179,6 +187,13 @@ class QuickEventsController extends ChangeNotifier {
 
   void restoreItems(Iterable<QuickEvent> values) => _replace(values);
 
+  void setShowAllEventsAction(bool value) {
+    final key = _gameKey;
+    if (!ready || key == null || showAllEventsAction == value) return;
+    _showAllEventsActions[key] = value;
+    _persist();
+  }
+
   GameEvent? createEvent(
     QuickEvent item,
     SportTaxonomy taxonomy,
@@ -219,6 +234,7 @@ class QuickEventsController extends ChangeNotifier {
         (key, value) => MapEntry(key, value.map((e) => e.toJson()).toList()),
       ),
       'presets': _presets.map((p) => p.toJson()).toList(),
+      'showAllEventsActions': _showAllEventsActions,
     };
     _writes = _writes.then((_) async {
       try {

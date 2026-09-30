@@ -64,6 +64,7 @@ void main() {
         await quick.load();
         quick.selectGame('phone', taxonomy);
         quick.applyPreset(quick.suggestedPresets.first);
+        quick.setShowAllEventsAction(true);
         final savedLayout = jsonEncode(ui.layoutState.toJson());
         var playing = true;
         var rate = 1.0;

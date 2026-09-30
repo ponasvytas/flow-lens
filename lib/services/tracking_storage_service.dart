@@ -1,6 +1,5 @@
 import 'dart:convert';
 import '../utils/app_log.dart';
-import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import '../models/tracking_models.dart';
@@ -17,19 +16,14 @@ class TrackingImportExportService {
       ).convert(session.toJson());
 
       if (!kIsWeb) {
-        String? outputFile = await FilePicker.platform.saveFile(
+        final outputFile = await FilePicker.saveFile(
           dialogTitle: 'Save Tracking Session',
           fileName: 'tracking_${DateTime.now().millisecondsSinceEpoch}.json',
-          type: FileType.custom,
-          allowedExtensions: ['json'],
+          bytes: Uint8List.fromList(utf8.encode(jsonString)),
+          mimeType: 'application/json',
         );
 
         if (outputFile != null) {
-          if (!outputFile.endsWith('.json')) {
-            outputFile += '.json';
-          }
-          final file = File(outputFile);
-          await file.writeAsString(jsonString);
           AppLog.debug('Tracking session saved to $outputFile');
         }
       } else {
@@ -47,24 +41,13 @@ class TrackingImportExportService {
   /// Prompts user to load a tracking session from a JSON file.
   Future<TrackingSession?> loadSession() async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.pickFile(
         type: FileType.custom,
         allowedExtensions: ['json'],
       );
 
       if (result != null) {
-        String content;
-
-        if (kIsWeb) {
-          final bytes = result.files.single.bytes;
-          if (bytes == null) return null;
-          content = utf8.decode(bytes);
-        } else {
-          final path = result.files.single.path;
-          if (path == null) return null;
-          final file = File(path);
-          content = await file.readAsString();
-        }
+        final content = utf8.decode(await result.readAsBytes());
 
         final json = jsonDecode(content) as Map<String, dynamic>;
         return TrackingSession.fromJson(json);
@@ -139,19 +122,14 @@ class TrackingImportExportService {
       final csvString = buffer.toString();
 
       if (!kIsWeb) {
-        String? outputFile = await FilePicker.platform.saveFile(
+        final outputFile = await FilePicker.saveFile(
           dialogTitle: 'Export Tracking CSV',
           fileName: 'tracking_${DateTime.now().millisecondsSinceEpoch}.csv',
-          type: FileType.custom,
-          allowedExtensions: ['csv'],
+          bytes: Uint8List.fromList(utf8.encode(csvString)),
+          mimeType: 'text/csv',
         );
 
         if (outputFile != null) {
-          if (!outputFile.endsWith('.csv')) {
-            outputFile += '.csv';
-          }
-          final file = File(outputFile);
-          await file.writeAsString(csvString);
           AppLog.debug('Tracking CSV exported to $outputFile');
         }
       } else {

@@ -4,6 +4,7 @@ import 'package:media_kit/media_kit.dart';
 import '../controllers/tracking_controller.dart';
 import '../models/tracking_models.dart';
 import '../models/sport_taxonomy.dart';
+import 'add_player_dialog.dart';
 import 'dockable_panel.dart';
 import 'tracking_hotkey_dialog.dart';
 
@@ -217,7 +218,13 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
         _SmallIconBtn(
           icon: Icons.person_add,
           tooltip: 'Add player',
-          onTap: () => setState(() => _showAddForm = !_showAddForm),
+          onTap: () {
+            if (Theme.of(context).platform == TargetPlatform.iOS) {
+              _showAddPlayerDialog(ctrl);
+            } else {
+              setState(() => _showAddForm = !_showAddForm);
+            }
+          },
         ),
         // Config / add trackers
         _SmallIconBtn(
@@ -262,6 +269,29 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
   // Inline add player form
   // -------------------------------------------------------------------------
 
+  void _addPlayer(TrackingController ctrl, String name, String number) {
+    final trimmedName = name.trim();
+    if (trimmedName.isEmpty) return;
+    final trimmedNumber = number.trim();
+    ctrl.addSubjectWithSameTrackers(
+      TrackingSubject(
+        id: 'subj_${DateTime.now().microsecondsSinceEpoch}',
+        label: trimmedName,
+        number: trimmedNumber.isEmpty ? null : trimmedNumber,
+      ),
+      ctrl.subjects.isNotEmpty ? ctrl.subjects.first.id : null,
+    );
+  }
+
+  void _showAddPlayerDialog(TrackingController ctrl) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AddPlayerDialog(
+        onAdd: (name, number) => _addPlayer(ctrl, name, number),
+      ),
+    );
+  }
+
   Widget _buildAddForm(TrackingController ctrl) {
     return Container(
       padding: const EdgeInsets.all(6),
@@ -293,16 +323,7 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
             onTap: () {
               final name = _nameController.text.trim();
               if (name.isEmpty) return;
-              final number = _numberController.text.trim();
-              final id = 'subj_${DateTime.now().millisecondsSinceEpoch}';
-              ctrl.addSubjectWithSameTrackers(
-                TrackingSubject(
-                  id: id,
-                  label: name,
-                  number: number.isEmpty ? null : number,
-                ),
-                ctrl.subjects.isNotEmpty ? ctrl.subjects.first.id : null,
-              );
+              _addPlayer(ctrl, name, _numberController.text);
               _nameController.clear();
               _numberController.clear();
               setState(() => _showAddForm = false);

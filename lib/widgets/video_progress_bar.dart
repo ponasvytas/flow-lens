@@ -7,6 +7,7 @@ import '../utils/perf.dart';
 import '../utils/responsive_layout.dart';
 import '../theme/flow_theme.dart';
 import 'event_timeline.dart';
+import 'tool_action_grid.dart';
 
 class VideoProgressBar extends StatefulWidget {
   final Player player;
@@ -148,7 +149,10 @@ class VideoTransportBar extends StatelessWidget {
             child: IconButton(
               tooltip: playing ? 'Pause video' : 'Play video',
               onPressed: onPlayPause,
-              icon: Icon(playing ? Icons.pause : Icons.play_arrow, size: 24),
+              icon: Icon(
+                playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                size: ToolsetLayout.glyph,
+              ),
             ),
           ),
           Expanded(child: seekBar),
@@ -159,7 +163,10 @@ class VideoTransportBar extends StatelessWidget {
               child: IconButton(
                 tooltip: 'Back 5 seconds',
                 onPressed: onJumpBackward,
-                icon: const Icon(Icons.replay_5),
+                icon: const Icon(
+                  Icons.replay_5_rounded,
+                  size: ToolsetLayout.glyph,
+                ),
               ),
             ),
           SizedBox(
@@ -190,7 +197,10 @@ class VideoTransportBar extends StatelessWidget {
             child: IconButton(
               tooltip: muted ? 'Unmute video' : 'Mute video',
               onPressed: onMute,
-              icon: Icon(muted ? Icons.volume_off : Icons.volume_up, size: 22),
+              icon: Icon(
+                muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                size: ToolsetLayout.glyph,
+              ),
             ),
           ),
         ],

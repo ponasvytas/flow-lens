@@ -1,6 +1,5 @@
 import 'dart:convert';
 import '../utils/app_log.dart';
-import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import '../models/game_event.dart';
@@ -17,22 +16,14 @@ class EventImportExportService {
       final jsonString = jsonEncode(jsonList);
 
       if (!kIsWeb) {
-        // Desktop/Mobile: Pick a location to save
-        String? outputFile = await FilePicker.platform.saveFile(
+        final outputFile = await FilePicker.saveFile(
           dialogTitle: 'Save Events Timeline',
           fileName: 'events_${DateTime.now().millisecondsSinceEpoch}.json',
-          type: FileType.custom,
-          allowedExtensions: ['json'],
+          bytes: Uint8List.fromList(utf8.encode(jsonString)),
+          mimeType: 'application/json',
         );
 
         if (outputFile != null) {
-          // Ensure extension
-          if (!outputFile.endsWith('.json')) {
-            outputFile += '.json';
-          }
-
-          final file = File(outputFile);
-          await file.writeAsString(jsonString);
           AppLog.debug('Events saved to $outputFile');
         }
       } else {
@@ -50,24 +41,13 @@ class EventImportExportService {
   /// Prompts user to load events from a JSON file
   Future<List<GameEvent>> loadEvents() async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.pickFile(
         type: FileType.custom,
         allowedExtensions: ['json'],
       );
 
       if (result != null) {
-        String content;
-
-        if (kIsWeb) {
-          final bytes = result.files.single.bytes;
-          if (bytes == null) return [];
-          content = utf8.decode(bytes);
-        } else {
-          final path = result.files.single.path;
-          if (path == null) return [];
-          final file = File(path);
-          content = await file.readAsString();
-        }
+        final content = utf8.decode(await result.readAsBytes());
 
         final List<dynamic> jsonList = jsonDecode(content);
         return jsonList

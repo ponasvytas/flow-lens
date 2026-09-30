@@ -54,6 +54,46 @@ void main() {
     hotkey: 'k',
   );
 
+  testWidgets('full catalog shortcut is optional for each game', (
+    tester,
+  ) async {
+    final repo = MemoryQuickRepository();
+    final ctrl = QuickEventsController(repo);
+    await ctrl.load();
+    ctrl.selectGame('first', taxonomy);
+    expect(ctrl.showAllEventsAction, isFalse);
+    expect(
+      QuickEventsPanel.layoutFor(ctrl, taxonomy).labels,
+      isNot(contains('All events')),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: FlowTheme.dark,
+        home: Scaffold(
+          body: QuickEventsEditor(controller: ctrl, taxonomy: taxonomy),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Show All events shortcut'));
+    await tester.pump();
+    expect(ctrl.showAllEventsAction, isTrue);
+    expect(
+      QuickEventsPanel.layoutFor(ctrl, taxonomy).labels,
+      contains('All events'),
+    );
+    await tester.pumpWidget(const SizedBox());
+    await ctrl.flushed;
+    ctrl.dispose();
+
+    final restored = QuickEventsController(repo);
+    await restored.load();
+    restored.selectGame('first', taxonomy);
+    expect(restored.showAllEventsAction, isTrue);
+    restored.selectGame('second', taxonomy);
+    expect(restored.showAllEventsAction, isFalse);
+    restored.dispose();
+  });
+
   testWidgets('adding a shortcut follows hierarchy and confirms its grade', (
     tester,
   ) async {
@@ -146,6 +186,7 @@ void main() {
         ctrl.selectGame('orientation', taxonomy);
         ctrl.add(onNet);
         ctrl.add(wide);
+        ctrl.setShowAllEventsAction(true);
         final layout = UIController()
           ..setDockEdge(PanelId.quickEvents, edge)
           ..setDockExtent(PanelDockEdge.left, 240)
@@ -299,6 +340,7 @@ void main() {
               );
             }
           }
+          ctrl.setShowAllEventsAction(true);
           final controller = UIController()..initializeRecommendedLayouts();
           final boundaryKey = GlobalKey();
           var opened = false;
@@ -387,14 +429,11 @@ void main() {
           final expand = find.byKey(
             const ValueKey('expand-actions-Quick events'),
           );
-          if (size.shortestSide < 600) {
-            expect(expand, findsNothing);
-          } else {
-            expect(expand, findsOneWidget);
-            await tester.tap(expand);
-            await tester.pumpAndSettle();
-          }
+          expect(expand, findsNothing);
           expect(find.byType(QuickEventsPanel), findsOneWidget);
+          final lastItem = find.byKey(ValueKey('quick-${ctrl.items.last.id}'));
+          await tester.ensureVisible(lastItem);
+          expect(lastItem.hitTestable(), findsOneWidget);
           await tester.ensureVisible(find.text('All events'));
           await tester.tap(find.text('All events'));
           expect(opened, isTrue);

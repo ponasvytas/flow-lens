@@ -101,11 +101,13 @@ class ToolActionGrid extends StatefulWidget {
   final String title;
   final ToolsetLayout layout;
   final List<Widget> children;
+  final bool scrollOnOverflow;
   const ToolActionGrid({
     super.key,
     required this.title,
     required this.layout,
     required this.children,
+    this.scrollOnOverflow = false,
   });
 
   @override
@@ -173,7 +175,8 @@ class _ToolActionGridState extends State<ToolActionGrid> {
         MediaQuery.textScalerOf(context),
       );
       // A physically small viewport gets an explicit palette, never half a target.
-      if ((constraints.hasBoundedHeight &&
+      if ((!widget.scrollOnOverflow &&
+              constraints.hasBoundedHeight &&
               geometry.height > constraints.maxHeight + 0.5) ||
           constraints.maxWidth <
               ToolsetLayout.target + ToolsetLayout.padding * 2) {
@@ -190,7 +193,7 @@ class _ToolActionGridState extends State<ToolActionGrid> {
           ),
         );
       }
-      return Align(
+      final content = Align(
         alignment: Alignment.topLeft,
         child: Padding(
           padding: const EdgeInsets.all(ToolsetLayout.padding),
@@ -208,6 +211,9 @@ class _ToolActionGridState extends State<ToolActionGrid> {
           ),
         ),
       );
+      return widget.scrollOnOverflow
+          ? SingleChildScrollView(child: content)
+          : content;
     },
   );
 }

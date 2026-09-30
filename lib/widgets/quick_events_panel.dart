@@ -60,7 +60,7 @@ class QuickEventsPanel extends StatelessWidget {
     [
       for (final item in controller.items) actionLabel(item, taxonomy),
       'Edit menu',
-      'All events',
+      if (controller.showAllEventsAction) 'All events',
       if (controller.error != null) 'Retry save',
     ],
     tileWidth: 96,
@@ -100,11 +100,12 @@ class QuickEventsPanel extends StatelessWidget {
                           : () => onRecord(item),
                     ),
                   ),
-                OutlinedButton.icon(
-                  onPressed: onAllEvents,
-                  icon: const Icon(Icons.apps),
-                  label: const Text('All events'),
-                ),
+                if (controller.showAllEventsAction)
+                  OutlinedButton.icon(
+                    onPressed: onAllEvents,
+                    icon: const Icon(Icons.apps),
+                    label: const Text('All events'),
+                  ),
                 TextButton.icon(
                   onPressed: controller.ready
                       ? () => _openEditor(context)
@@ -126,6 +127,7 @@ class QuickEventsPanel extends StatelessWidget {
         : ToolActionGrid(
             title: 'Quick events',
             layout: layoutFor(controller, taxonomy),
+            scrollOnOverflow: vertical,
             children: [
               for (final item in controller.items)
                 ToolActionButton(
@@ -150,12 +152,13 @@ class QuickEventsPanel extends StatelessWidget {
                 icon: Icons.tune,
                 onPressed: controller.ready ? () => _openEditor(context) : null,
               ),
-              ToolActionButton(
-                label: 'All events',
-                dismissPalette: true,
-                icon: Icons.apps,
-                onPressed: onAllEvents,
-              ),
+              if (controller.showAllEventsAction)
+                ToolActionButton(
+                  label: 'All events',
+                  dismissPalette: true,
+                  icon: Icons.apps,
+                  onPressed: onAllEvents,
+                ),
               if (controller.error != null)
                 ToolActionButton(
                   label: 'Retry save',
@@ -611,13 +614,22 @@ class _QuickEventsEditorState extends State<QuickEventsEditor> {
                         icon: const Icon(Icons.add),
                         label: const Text('Add quick event'),
                       ),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Show All events shortcut'),
+                        subtitle: const Text('Open the full event catalog'),
+                        value: ctrl.showAllEventsAction,
+                        onChanged: ctrl.ready
+                            ? ctrl.setShowAllEventsAction
+                            : null,
+                      ),
                       const SizedBox(height: 8),
                       ReorderableListView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         buildDefaultDragHandles: false,
                         itemCount: items.length,
-                        onReorder: (oldIndex, newIndex) {
+                        onReorderItem: (oldIndex, newIndex) {
                           _undo = items;
                           ctrl.move(oldIndex, newIndex);
                         },

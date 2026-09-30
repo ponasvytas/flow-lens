@@ -162,15 +162,18 @@ class PlaybackControls extends StatelessWidget {
     );
   }
 
-  static ToolsetLayout layoutFor(AppSettings settings) =>
-      ToolsetLayout.actions([
-        'Pause',
-        'Back 5s',
-        'Slow\n${settings.slowPlaybackSpeed}x',
-        'Normal\n${settings.defaultPlaybackSpeed}x',
-        'Fast\n${settings.fastPlaySpeed}x',
-        'More',
-      ], tileWidth: 64);
+  static ToolsetLayout layoutFor(AppSettings settings) => ToolsetLayout.actions(
+    [
+      'Pause',
+      'Back 5s',
+      'Slow\n${settings.slowPlaybackSpeed}x',
+      'Normal\n${settings.defaultPlaybackSpeed}x',
+      'Fast\n${settings.fastPlaySpeed}x',
+      'More',
+    ],
+    tileWidth: 96,
+    minimumTileWidth: 80,
+  );
 }
 
 class _FastPlaybackControl extends StatefulWidget {

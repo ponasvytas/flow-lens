@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:file_selector/file_selector.dart';
 import '../models/game_event.dart';
 import '../models/sport_taxonomy.dart';
 import '../services/export/export_models.dart';
@@ -244,14 +244,16 @@ class _ExportDialogState extends State<ExportDialog> {
     // Pick output location
     String? outputPath;
     if (!kIsWeb) {
-      outputPath = await FilePicker.platform.saveFile(
-        dialogTitle: 'Save Exported Video',
-        fileName:
+      // Select a path without writing/truncating it; FFmpeg streams the output.
+      final location = await getSaveLocation(
+        suggestedName:
             'export_${DateTime.now().millisecondsSinceEpoch}.${_config.outputFormat}',
-        type: FileType.custom,
-        allowedExtensions: [_config.outputFormat],
+        acceptedTypeGroups: [
+          XTypeGroup(label: 'Video', extensions: [_config.outputFormat]),
+        ],
       );
-      if (outputPath == null) return;
+      if (location == null) return;
+      outputPath = location.path;
       if (!outputPath.endsWith('.${_config.outputFormat}')) {
         outputPath += '.${_config.outputFormat}';
       }
