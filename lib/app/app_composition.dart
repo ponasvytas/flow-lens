@@ -5,6 +5,7 @@ import '../controllers/account_controller.dart';
 import '../controllers/events_controller.dart';
 import '../controllers/settings_controller.dart';
 import '../controllers/tracking_controller.dart';
+import '../controllers/tracking_templates_controller.dart';
 import '../controllers/ui_controller.dart';
 import '../services/auth_repository.dart';
 import '../services/cloud_settings_store.dart';
@@ -19,6 +20,7 @@ import '../services/settings_repository.dart';
 import '../services/taxonomy_repository.dart';
 import '../services/tracking_import_export_service.dart';
 import '../services/tracking_session_repository.dart';
+import '../services/tracking_template_repository.dart';
 import 'app_capabilities.dart';
 
 /// Selects the implementations used by the application.
@@ -36,8 +38,10 @@ class AppComposition {
     required this.taxonomyRepository,
     required this.eventImportExportService,
     required this.trackingImportExportService,
+    TrackingTemplateRepository? trackingTemplateRepository,
     this.firestore,
-  });
+  }) : trackingTemplateRepository =
+           trackingTemplateRepository ?? LocalTrackingTemplateRepository();
 
   factory AppComposition.local() => AppComposition(
     authRepository: AnonymousAuthRepository(),
@@ -75,6 +79,7 @@ class AppComposition {
   final TaxonomyRepository taxonomyRepository;
   final EventImportExportService eventImportExportService;
   final TrackingImportExportService trackingImportExportService;
+  final TrackingTemplateRepository trackingTemplateRepository;
   final FirebaseFirestore? firestore;
 
   AppRuntime createRuntime() {
@@ -116,6 +121,9 @@ class AppComposition {
       ),
       uiController: UIController(dockLayoutRepository),
       trackingController: TrackingController(),
+      trackingTemplatesController: TrackingTemplatesController(
+        trackingTemplateRepository,
+      )..load(),
       taxonomyRepository: taxonomyRepository,
       eventImportExportService: eventImportExportService,
       trackingImportExportService: trackingImportExportService,
@@ -133,6 +141,7 @@ class AppRuntime {
     required this.settingsController,
     required this.uiController,
     required this.trackingController,
+    required this.trackingTemplatesController,
     required this.taxonomyRepository,
     required this.eventImportExportService,
     required this.trackingImportExportService,
@@ -145,6 +154,7 @@ class AppRuntime {
   final SettingsController settingsController;
   final UIController uiController;
   final TrackingController trackingController;
+  final TrackingTemplatesController trackingTemplatesController;
   final TaxonomyRepository taxonomyRepository;
   final EventImportExportService eventImportExportService;
   final TrackingImportExportService trackingImportExportService;
@@ -158,6 +168,7 @@ class AppRuntime {
     eventsController.dispose();
     settingsController.dispose();
     trackingController.dispose();
+    trackingTemplatesController.dispose();
     uiController.dispose();
   }
 }

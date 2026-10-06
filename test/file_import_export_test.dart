@@ -5,6 +5,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flow_lens/models/game_event.dart';
 import 'package:flow_lens/models/tracking_models.dart';
+import 'package:flow_lens/models/tracking_template.dart';
+import 'package:flow_lens/services/tracking_template_import_export_service.dart';
 import 'package:flow_lens/services/event_storage_service.dart';
 import 'package:flow_lens/services/tracking_storage_service.dart';
 
@@ -163,6 +165,64 @@ void main() {
     await trackingService.exportCsv(session);
     expect(picker.saves, 3);
   });
+
+  test(
+    'template file round-trip contains only portable configuration',
+    () async {
+      final template = TrackingTemplate(
+        id: 'passing',
+        sportId: 'hockey',
+        name: 'Passing',
+        trackers: session.trackers,
+      );
+      final service = TrackingTemplateImportExportService();
+      await service.exportTemplate(template);
+      picker.selected = _MemoryFile(picker.savedBytes!);
+      expect((await service.importTemplate())!.toJson(), template.toJson());
+      picker.selected = _MemoryFile(
+        Uint8List.fromList(utf8.encode(jsonEncode(session.toJson()))),
+      );
+      await expectLater(service.importTemplate(), throwsFormatException);
+    },
+  );
+
+  test(
+    'CSV escapes quotes and rejects reversed timer intervals consistently',
+    () async {
+      final timerSession = TrackingSession(
+        id: 'timer',
+        subjects: [const TrackingSubject(id: 'p', label: 'Player "A"')],
+        trackers: [
+          const TrackingDefinition(
+            id: 't',
+            label: 'Shift',
+            kind: TrackerKind.timer,
+          ),
+        ],
+        events: [
+          const TrackingEvent(
+            id: 'start',
+            timestamp: Duration(seconds: 8),
+            subjectId: 'p',
+            trackerId: 't',
+            action: TrackingAction.timerStart,
+          ),
+          const TrackingEvent(
+            id: 'stop',
+            timestamp: Duration(seconds: 2),
+            subjectId: 'p',
+            trackerId: 't',
+            action: TrackingAction.timerStop,
+          ),
+        ],
+      );
+      await TrackingImportExportService().exportCsv(timerSession);
+      final csv = utf8.decode(picker.savedBytes!);
+      expect(csv, contains('"Player ""A"""'));
+      expect(csv, isNot(contains('-6000')));
+      expect(csv, contains('timerStop,\n'));
+    },
+  );
 
   test('empty data does not open a save dialog', () async {
     await EventImportExportService().saveEvents([]);

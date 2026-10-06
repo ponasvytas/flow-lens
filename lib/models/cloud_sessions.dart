@@ -192,8 +192,15 @@ class TrackingSessionDraft {
   final VideoSourceMetadata sourceVideo;
 
   Map<String, dynamic> toContentMap() {
+    if ((session.sportId != null && session.sportId != sportId) ||
+        session.trackers.any((t) => t.sportId != sportId)) {
+      throw const FormatException(
+        'Tracking session sport does not match its cloud record.',
+      );
+    }
     final trackingData = Map<String, dynamic>.from(session.toJson())
-      ..remove('videoSource');
+      ..remove('videoSource')
+      ..remove('videoIdentity');
     return {
       'schemaVersion': 1,
       'title': title,

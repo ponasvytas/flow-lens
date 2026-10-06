@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'game_event.dart';
 import 'tracking_models.dart';
+import 'tracking_template.dart';
 
 class SportTaxonomy {
   final int schemaVersion;
@@ -8,6 +9,7 @@ class SportTaxonomy {
   final int contentVersion;
   final List<TaxonomyContextField> contextFields;
   final List<TrackingDefinition> trackingPresets;
+  final List<SportTrackingTemplate> trackingTemplates;
   final List<TaxonomyQuickPreset> quickPresets;
   final String sportId;
   final String name;
@@ -21,12 +23,14 @@ class SportTaxonomy {
     this.contentVersion = 1,
     List<TaxonomyContextField> contextFields = const [],
     List<TrackingDefinition> trackingPresets = const [],
+    List<SportTrackingTemplate> trackingTemplates = const [],
     List<TaxonomyQuickPreset> quickPresets = const [],
     required this.sportId,
     required this.name,
     required List<CategoryTaxonomy> categories,
   }) : contextFields = List.unmodifiable(contextFields),
        trackingPresets = List.unmodifiable(trackingPresets),
+       trackingTemplates = List.unmodifiable(trackingTemplates),
        quickPresets = List.unmodifiable(quickPresets),
        categories = List<CategoryTaxonomy>.unmodifiable(categories),
        _categoriesById = Map<String, CategoryTaxonomy>.unmodifiable(
@@ -55,6 +59,11 @@ class SportTaxonomy {
       trackingPresets: (json['trackingPresets'] as List? ?? [])
           .map((e) => TrackingDefinition.fromJson(Map<String, dynamic>.from(e)))
           .toList(),
+      trackingTemplates: (json['trackingTemplates'] as List? ?? [])
+          .map(
+            (e) => SportTrackingTemplate.fromJson(Map<String, dynamic>.from(e)),
+          )
+          .toList(),
       quickPresets: (json['quickPresets'] as List? ?? [])
           .map(
             (e) => TaxonomyQuickPreset.fromJson(Map<String, dynamic>.from(e)),
@@ -75,6 +84,7 @@ class SportTaxonomy {
       'contentVersion': contentVersion,
       'contextFields': contextFields.map((e) => e.toJson()).toList(),
       'trackingPresets': trackingPresets.map((e) => e.toJson()).toList(),
+      'trackingTemplates': trackingTemplates.map((e) => e.toJson()).toList(),
       'quickPresets': quickPresets.map((e) => e.toJson()).toList(),
       'sportId': sportId,
       'name': name,
@@ -166,6 +176,10 @@ class SportTaxonomy {
       throw FormatException('Duplicate tracking preset ID');
     }
     for (final tracker in trackingPresets) {
+      if (tracker.sportId != sportId ||
+          (tracker.kind == TrackerKind.counter && tracker.timerMode != null)) {
+        throw FormatException('Invalid sport or timer mode: ${tracker.id}');
+      }
       if (tracker.categoryId != null &&
           getCategoryById(tracker.categoryId!) == null) {
         throw FormatException('Unknown tracker category: ${tracker.id}');
@@ -177,6 +191,17 @@ class SportTaxonomy {
               null) {
         throw FormatException('Unknown tracker event: ${tracker.id}');
       }
+      if (tracker.eventTypeId != null &&
+          getEventTypeById(tracker.eventTypeId!)!.archived) {
+        throw FormatException('Archived tracker event: ${tracker.id}');
+      }
+    }
+    if (trackingTemplates.map((t) => t.id).toSet().length !=
+        trackingTemplates.length) {
+      throw const FormatException('Duplicate tracking template ID');
+    }
+    for (final template in trackingTemplates) {
+      template.resolve(sportId, trackingPresets).validate();
     }
   }
 }

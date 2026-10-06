@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import '../controllers/tracking_controller.dart';
+import '../controllers/tracking_templates_controller.dart';
 import '../models/tracking_models.dart';
 import '../models/sport_taxonomy.dart';
 import '../theme/flow_theme.dart';
@@ -10,8 +11,9 @@ import 'add_player_dialog.dart';
 import 'dockable_panel.dart';
 import 'tool_action_grid.dart';
 import 'tracking_hotkey_dialog.dart';
+import 'tracking_templates_dialog.dart';
 
-enum _TrackingSessionAction { save, load, export }
+enum _TrackingSessionAction { save, load, export, restoreSubjects }
 
 /// Player tracking panel — shows subject cards with counter/timer rows.
 ///
@@ -22,6 +24,7 @@ class PlayerTrackingPanel extends StatefulWidget {
   final TrackingController controller;
   final Player player;
   final SportTaxonomy? taxonomy;
+  final TrackingTemplatesController? templates;
   final PanelDockEdge dockEdge;
   final VoidCallback? onSave;
   final VoidCallback? onLoad;
@@ -31,6 +34,7 @@ class PlayerTrackingPanel extends StatefulWidget {
     required this.controller,
     required this.player,
     this.taxonomy,
+    this.templates,
     this.dockEdge = PanelDockEdge.floating,
     this.onSave,
     this.onLoad,
@@ -129,6 +133,11 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
     ),
     widget.controller.activeSubjectId,
     widget.controller.events.length,
+    Object.hashAll(
+      widget.controller.session.trackerSubjects.entries.map(
+        (e) => Object.hash(e.key, Object.hashAll(e.value)),
+      ),
+    ),
   );
 
   void _updateTimerSubscription() {
@@ -161,7 +170,6 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
   Widget build(BuildContext context) {
     final ctrl = widget.controller;
     final subjects = ctrl.subjects;
-    final trackers = ctrl.trackers;
 
     return Padding(
       padding: const EdgeInsets.all(8),
@@ -194,7 +202,11 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
                     if (i > 0) const SizedBox(width: 6),
                     SizedBox(
                       width: 220,
-                      child: _buildSubjectCard(subjects[i], trackers, ctrl),
+                      child: _buildSubjectCard(
+                        subjects[i],
+                        ctrl.trackersForSubject(subjects[i].id),
+                        ctrl,
+                      ),
                     ),
                   ],
                 ],
@@ -203,7 +215,11 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
           else
             for (int i = 0; i < subjects.length; i++) ...[
               if (i > 0) const SizedBox(height: 4),
-              _buildSubjectCard(subjects[i], trackers, ctrl),
+              _buildSubjectCard(
+                subjects[i],
+                ctrl.trackersForSubject(subjects[i].id),
+                ctrl,
+              ),
             ],
 
           // Inline add form
@@ -263,6 +279,8 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
                       widget.onLoad?.call();
                     case _TrackingSessionAction.export:
                       widget.onExportCsv?.call();
+                    case _TrackingSessionAction.restoreSubjects:
+                      ctrl.restoreSubjects();
                   }
                 },
                 itemBuilder: (_) => [
@@ -282,8 +300,26 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
                         ctrl.events.isNotEmpty && widget.onExportCsv != null,
                     child: const Text('Export CSV'),
                   ),
+                  if (ctrl.session.hiddenSubjectIds.isNotEmpty)
+                    const PopupMenuItem(
+                      value: _TrackingSessionAction.restoreSubjects,
+                      child: Text('Restore hidden subjects'),
+                    ),
                 ],
               ),
+              if (widget.taxonomy != null && widget.templates != null)
+                if (compact)
+                  _SmallIconBtn(
+                    icon: Icons.dashboard_customize_outlined,
+                    tooltip: 'Tracking templates',
+                    onTap: _showTemplates,
+                  )
+                else
+                  OutlinedButton.icon(
+                    onPressed: _showTemplates,
+                    icon: const Icon(Icons.dashboard_customize_outlined),
+                    label: const Text('Templates'),
+                  ),
               _SmallIconBtn(
                 icon: Icons.undo_rounded,
                 tooltip: 'Undo last tracking event',
@@ -309,6 +345,18 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
     } else {
       _toggleAddForm();
     }
+  }
+
+  void _showTemplates() {
+    showDialog<void>(
+      context: context,
+      builder: (_) => TrackingTemplatesDialog(
+        tracking: widget.controller,
+        library: widget.templates!,
+        taxonomy: widget.taxonomy!,
+        position: () => widget.player.state.position,
+      ),
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -527,7 +575,9 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Remove player?'),
-        content: Text('Remove ${subject.label} from this tracking session?'),
+        content: Text(
+          'Hide ${subject.label}? Recorded observations stay in the session.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -540,7 +590,9 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
         ],
       ),
     );
-    if (remove == true && mounted) ctrl.removeSubject(subject.id);
+    if (remove == true && mounted) {
+      ctrl.removeSubject(subject.id, timestamp: widget.player.state.position);
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -680,17 +732,39 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
       subjectLabel: subject.label,
       onTap: () => _promptHotkey(ctrl, subject.id, tracker.id),
     );
-    final toggle = _TinyBtn(
-      icon: running ? Icons.stop_rounded : Icons.play_arrow_rounded,
-      tooltip:
-          '${running ? 'Stop' : 'Start'} ${tracker.label} for ${subject.label}',
-      color: running ? FlowTheme.negative : FlowTheme.positive,
-      onTap: () => ctrl.toggleTimer(
-        subjectId: subject.id,
-        trackerId: tracker.id,
-        timestamp: widget.player.state.position,
-      ),
-    );
+    final timerButton = tracker.timerMode == TimerMode.hold
+        ? _HoldTimerBtn(
+            key: ValueKey('${subject.id}:${tracker.id}'),
+            running: running,
+            trackerLabel: tracker.label,
+            subjectLabel: subject.label,
+            onPress: () => ctrl.startTimer(
+              subjectId: subject.id,
+              trackerId: tracker.id,
+              timestamp: widget.player.state.position,
+            ),
+            onRelease: () => ctrl.stopTimer(
+              subjectId: subject.id,
+              trackerId: tracker.id,
+              timestamp: widget.player.state.position,
+            ),
+            onActivate: () => ctrl.toggleTimer(
+              subjectId: subject.id,
+              trackerId: tracker.id,
+              timestamp: widget.player.state.position,
+            ),
+          )
+        : _TinyBtn(
+            icon: running ? Icons.stop_rounded : Icons.play_arrow_rounded,
+            tooltip:
+                '${running ? 'Stop' : 'Start'} ${tracker.label} for ${subject.label}',
+            color: running ? FlowTheme.negative : FlowTheme.positive,
+            onTap: () => ctrl.toggleTimer(
+              subjectId: subject.id,
+              trackerId: tracker.id,
+              timestamp: widget.player.state.position,
+            ),
+          );
     final label = Tooltip(
       message: tracker.label,
       child: Text(
@@ -727,7 +801,11 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
                       duration,
                     ],
                   ),
-                Wrap(spacing: 8, runSpacing: 4, children: [keyButton, toggle]),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [keyButton, timerButton],
+                ),
               ],
             )
           : Row(
@@ -737,7 +815,7 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
                 Expanded(child: label),
                 duration,
                 const SizedBox(width: 8),
-                toggle,
+                timerButton,
               ],
             ),
     );
@@ -768,23 +846,19 @@ class _PlayerTrackingPanelState extends State<PlayerTrackingPanel> {
     showDialog(
       context: context,
       builder: (ctx) => _TrackerPickerDialog(
-        presets: widget.taxonomy?.trackingPresets ?? const [],
+        presets: {
+          for (final t
+              in widget.taxonomy?.trackingPresets ?? <TrackingDefinition>[])
+            t.id: t,
+          for (final t in ctrl.session.trackers) t.id: t,
+        }.values.toList(),
+        taxonomy: widget.taxonomy,
         currentTrackerIds: ctrl.trackers.map((t) => t.id).toSet(),
         onConfirm: (selected) {
-          // Add newly selected, remove deselected
-          final currentIds = ctrl.trackers.map((t) => t.id).toSet();
-          for (final def in selected) {
-            if (!currentIds.contains(def.id)) {
-              ctrl.addTracker(def);
-            }
-          }
-          for (final id in currentIds) {
-            if ((widget.taxonomy?.trackingPresets.any((t) => t.id == id) ??
-                    false) &&
-                !selected.any((d) => d.id == id)) {
-              ctrl.removeTracker(id);
-            }
-          }
+          ctrl.configureTrackers(
+            selected,
+            timestamp: widget.player.state.position,
+          );
           Navigator.of(ctx).pop();
         },
         onCancel: () => Navigator.of(ctx).pop(),
@@ -845,6 +919,80 @@ class _TinyBtn extends StatelessWidget {
       color: onTap == null ? Theme.of(context).disabledColor : color,
     ),
   );
+}
+
+class _HoldTimerBtn extends StatefulWidget {
+  final bool running;
+  final String trackerLabel;
+  final String subjectLabel;
+  final VoidCallback onPress;
+  final VoidCallback onRelease;
+  final VoidCallback onActivate;
+
+  const _HoldTimerBtn({
+    required this.running,
+    required this.trackerLabel,
+    required this.subjectLabel,
+    required this.onPress,
+    required this.onRelease,
+    required this.onActivate,
+    super.key,
+  });
+
+  @override
+  State<_HoldTimerBtn> createState() => _HoldTimerBtnState();
+}
+
+class _HoldTimerBtnState extends State<_HoldTimerBtn> {
+  int? _activePointer;
+
+  void _releasePointer(int pointer) {
+    if (_activePointer != pointer) return;
+    _activePointer = null;
+    widget.onRelease();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final label = '${widget.trackerLabel} for ${widget.subjectLabel}';
+    return Semantics(
+      button: true,
+      enabled: true,
+      label: widget.running ? 'Stop $label' : 'Hold $label',
+      hint: widget.running
+          ? 'Release to stop, or activate to stop with assistive technology.'
+          : 'Press and hold to time. Release to stop.',
+      onTap: widget.onActivate,
+      child: Tooltip(
+        message: 'Press and hold $label',
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: Listener(
+            behavior: HitTestBehavior.opaque,
+            onPointerDown: (event) {
+              if (_activePointer != null) return;
+              _activePointer = event.pointer;
+              widget.onPress();
+            },
+            onPointerUp: (event) => _releasePointer(event.pointer),
+            onPointerCancel: (event) => _releasePointer(event.pointer),
+            child: SizedBox.square(
+              dimension: 48,
+              child: Center(
+                child: Icon(
+                  widget.running ? Icons.stop_rounded : Icons.touch_app_rounded,
+                  size: ToolsetLayout.glyph,
+                  color: widget.running
+                      ? FlowTheme.negative
+                      : FlowTheme.positive,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _MiniTextField extends StatelessWidget {
@@ -927,12 +1075,14 @@ class _HotkeyBadge extends StatelessWidget {
 class _TrackerPickerDialog extends StatefulWidget {
   final Set<String> currentTrackerIds;
   final List<TrackingDefinition> presets;
+  final SportTaxonomy? taxonomy;
   final void Function(List<TrackingDefinition> selected) onConfirm;
   final VoidCallback onCancel;
 
   const _TrackerPickerDialog({
     required this.currentTrackerIds,
     required this.presets,
+    this.taxonomy,
     required this.onConfirm,
     required this.onCancel,
   });
@@ -977,17 +1127,21 @@ class _TrackerPickerDialogState extends State<_TrackerPickerDialog> {
                 'Manual counts are separate from Record events. Record all opportunities before using rates.',
               ),
             ),
-            _sectionHeader('Counters'),
-            for (final t in widget.presets.where(
-              (t) => t.kind == TrackerKind.counter && _matches(t),
-            ))
-              _trackerTile(t),
-            const SizedBox(height: 8),
-            _sectionHeader('Timers'),
-            for (final t in widget.presets.where(
-              (t) => t.kind == TrackerKind.timer && _matches(t),
-            ))
-              _trackerTile(t),
+            for (final categoryId
+                in widget.presets.map((t) => t.categoryId).toSet()) ...[
+              if (widget.presets.any(
+                (t) => t.categoryId == categoryId && _matches(t),
+              ))
+                _sectionHeader(
+                  widget.taxonomy?.getCategoryById(categoryId ?? '')?.name ??
+                      categoryId ??
+                      'Time and exposure',
+                ),
+              for (final t in widget.presets.where(
+                (t) => t.categoryId == categoryId && _matches(t),
+              ))
+                _trackerTile(t),
+            ],
           ],
         ),
       ),

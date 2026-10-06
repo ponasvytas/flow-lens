@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../models/tracking_models.dart';
+import '../models/tracking_template.dart';
 import '../utils/app_hotkeys.dart';
 
 /// Key for identifying a running timer: (subjectId, trackerId).
@@ -56,23 +57,13 @@ class _ActiveTimer {
   const _ActiveTimer({required this.startTimestamp});
 }
 
-TrackingSession _mutableSession(TrackingSession source) => TrackingSession(
-  id: source.id,
-  videoSource: source.videoSource,
-  createdAt: source.createdAt,
-  subjects: List<TrackingSubject>.of(source.subjects),
-  trackers: List<TrackingDefinition>.of(source.trackers),
-  events: List<TrackingEvent>.of(source.events),
-  hotkeys: Map<String, String>.of(source.hotkeys),
-);
-
 /// Central state controller for player tracking.
 ///
 /// Owns the tracking session (subjects, tracker definitions, raw events)
 /// and provides methods to record counter and timer actions.
 ///
 /// All timestamps must be **video positions** (not wall-clock time) so that
-/// playback speed, pauses, and seeks are automatically handled.
+/// playback speed and pauses do not count wall time. Finalize timers before seeks.
 class TrackingController extends ChangeNotifier {
   TrackingSession _session;
 
@@ -85,14 +76,19 @@ class TrackingController extends ChangeNotifier {
   String? _activeSubjectId;
 
   int _nextEventId = 1;
+  final Map<(String, String?), TrackingSession> _workspaces = {};
+  TrackingSession? _configurationBefore;
+  TrackingSession? _configurationAfter;
+  Map<_TimerKey, _ActiveTimer>? _timersBefore;
+  String? _subjectBefore;
+  bool _batching = false;
 
   TrackingController({TrackingSession? session})
-    : _session = _mutableSession(
-        session ??
-            TrackingSession(
-              id: DateTime.now().millisecondsSinceEpoch.toString(),
-            ),
-      ) {
+    : _session =
+          session ??
+          TrackingSession(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+          ) {
     _rebuildIndexes();
   }
 
@@ -102,8 +98,24 @@ class TrackingController extends ChangeNotifier {
 
   TrackingSession get session => _session;
 
-  List<TrackingSubject> get subjects => _session.subjects;
-  List<TrackingDefinition> get trackers => _session.trackers;
+  List<TrackingSubject> get subjects => _session.subjects
+      .where((s) => !_session.hiddenSubjectIds.contains(s.id))
+      .toList(growable: false);
+  List<TrackingDefinition> get trackers {
+    final byId = {for (final tracker in _session.trackers) tracker.id: tracker};
+    return [
+      for (final id in _session.visibleTrackerIds)
+        if (byId[id] != null) byId[id]!,
+    ];
+  }
+
+  List<TrackingDefinition> trackersForSubject(String subjectId) => trackers
+      .where(
+        (t) =>
+            !_session.trackerSubjects.containsKey(t.id) ||
+            _session.trackerSubjects[t.id]!.contains(subjectId),
+      )
+      .toList();
   List<TrackingEvent> get events => _session.events;
 
   String? get activeSubjectId => _activeSubjectId;
@@ -158,7 +170,9 @@ class TrackingController extends ChangeNotifier {
   // -----------------------------------------------------------------------
 
   void loadSession(TrackingSession session) {
-    _session = _mutableSession(session);
+    _rememberWorkspace();
+    _session = session;
+    _configurationAfter = null;
     _activeTimers.clear();
     _activeSubjectId = null;
     _rebuildIndexes();
@@ -168,6 +182,8 @@ class TrackingController extends ChangeNotifier {
   void clearSession() {
     _session = TrackingSession(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
+      sportId: _session.sportId,
+      videoIdentity: _session.videoIdentity,
     );
     _activeTimers.clear();
     _activeSubjectId = null;
@@ -177,20 +193,265 @@ class TrackingController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _rememberWorkspace() {
+    final sport = _session.sportId;
+    if (sport != null) _workspaces[(sport, _session.videoIdentity)] = _session;
+  }
+
+  void activateWorkspace({
+    required String sportId,
+    required String? videoIdentity,
+    required Duration timestamp,
+    String? taxonomyRevision,
+  }) {
+    if (_session.sportId == sportId &&
+        _session.videoIdentity == videoIdentity) {
+      return;
+    }
+    stopAllTimers(timestamp: timestamp);
+    _rememberWorkspace();
+    loadSession(
+      _workspaces[(sportId, videoIdentity)] ??
+          TrackingSession(
+            id: DateTime.now().microsecondsSinceEpoch.toString(),
+            sportId: sportId,
+            videoIdentity: videoIdentity,
+            taxonomyRevision: taxonomyRevision,
+          ),
+    );
+  }
+
+  void _validateDefinitions(
+    List<TrackingDefinition> selected, {
+    bool allowUpdate = false,
+  }) {
+    if (selected.map((t) => t.id).toSet().length != selected.length) {
+      throw const FormatException('Choose each tracker once.');
+    }
+    final sports = {
+      ..._session.trackers.map((t) => t.sportId),
+      ...selected.map((t) => t.sportId),
+      if (_session.sportId != null) _session.sportId!,
+    };
+    if (sports.length > 1) {
+      throw StateError('Trackers must belong to the session sport.');
+    }
+    for (final tracker in selected) {
+      final previous = _session.trackers
+          .where((t) => t.id == tracker.id)
+          .firstOrNull;
+      if (!allowUpdate && previous != null && previous != tracker) {
+        throw StateError(
+          '“${tracker.label}” differs from the saved definition. Keep the session version or start a new session.',
+        );
+      }
+    }
+  }
+
+  void _stopMatchingTimers(
+    bool Function(_TimerKey) matches,
+    Duration? timestamp,
+  ) {
+    for (final key in _activeTimers.keys.where(matches).toList()) {
+      if (timestamp == null) {
+        cancelTimer(
+          subjectId: key.subjectId,
+          trackerId: key.trackerId,
+          timestamp: _activeTimers[key]!.startTimestamp,
+        );
+      } else {
+        stopTimer(
+          subjectId: key.subjectId,
+          trackerId: key.trackerId,
+          timestamp: timestamp,
+        );
+      }
+    }
+  }
+
+  /// Changes visibility without deleting the definitions used by recorded data.
+  void configureTrackers(
+    List<TrackingDefinition> selected, {
+    Duration? timestamp,
+  }) {
+    _validateDefinitions(selected);
+    final ids = selected.map((t) => t.id).toList();
+    if (listEquals(ids, _session.visibleTrackerIds)) return;
+    _batching = true;
+    try {
+      _stopMatchingTimers((key) => !ids.contains(key.trackerId), timestamp);
+      final known = _session.trackers.map((t) => t.id).toSet();
+      _session = _session.copyWith(
+        trackers: [
+          ..._session.trackers,
+          ...selected.where((t) => !known.contains(t.id)),
+        ],
+        visibleTrackerIds: ids,
+        clearTemplate: true,
+      );
+      _rebuildIndexes(preserveActiveTimers: true);
+    } finally {
+      _batching = false;
+    }
+    notifyListeners();
+  }
+
+  void applyTemplate(
+    TrackingTemplate template, {
+    required String subjectId,
+    required Duration timestamp,
+    bool replaceVisible = false,
+  }) {
+    template.validate();
+    if (!subjects.any((s) => s.id == subjectId)) {
+      throw StateError('Choose a subject in this session.');
+    }
+    _validateDefinitions(template.trackers);
+    if (_session.sportId != null && _session.sportId != template.sportId) {
+      throw StateError('Choose a template for the current sport.');
+    }
+    final ids = template.trackers.map((t) => t.id).toList();
+    final visible = replaceVisible
+        ? ids
+        : {..._session.visibleTrackerIds, ...ids}.toList();
+    final bindings = Map<String, List<String>>.from(_session.trackerSubjects);
+    for (final id in ids) {
+      final existing = replaceVisible
+          ? <String>[]
+          : bindings[id] ??
+                (_session.visibleTrackerIds.contains(id)
+                    ? subjects.map((s) => s.id).toList()
+                    : <String>[]);
+      bindings[id] = {...existing, subjectId}.toList();
+    }
+    if (listEquals(visible, _session.visibleTrackerIds) &&
+        ids.every(
+          (id) => listEquals(bindings[id], _session.trackerSubjects[id]),
+        ) &&
+        _session.templateId == template.id &&
+        _session.templateRevision == template.revision &&
+        _activeSubjectId == subjectId) {
+      return;
+    }
+    _configurationBefore = _session;
+    _timersBefore = Map.of(_activeTimers);
+    _subjectBefore = _activeSubjectId;
+    _batching = true;
+    try {
+      _stopMatchingTimers(
+        (key) =>
+            !visible.contains(key.trackerId) ||
+            (bindings.containsKey(key.trackerId) &&
+                !bindings[key.trackerId]!.contains(key.subjectId)),
+        timestamp,
+      );
+      final known = _session.trackers.map((t) => t.id).toSet();
+      _session = _session.copyWith(
+        sportId: template.sportId,
+        trackers: [
+          ..._session.trackers,
+          ...template.trackers.where((t) => !known.contains(t.id)),
+        ],
+        visibleTrackerIds: visible,
+        trackerSubjects: bindings,
+        templateId: template.id,
+        templateRevision: template.revision,
+      );
+      _activeSubjectId = subjectId;
+      _rebuildIndexes(preserveActiveTimers: true);
+      _configurationAfter = _session;
+    } finally {
+      _batching = false;
+    }
+    notifyListeners();
+  }
+
+  void applyTemplateToSubject(
+    TrackingTemplate template, {
+    String? subjectId,
+    TrackingSubject? newSubject,
+    required Duration timestamp,
+    bool replaceVisible = false,
+  }) {
+    template.validate();
+    _validateDefinitions(template.trackers);
+    if ((subjectId == null) == (newSubject == null)) {
+      throw StateError('Choose an existing subject or create one.');
+    }
+    final before = _session;
+    final timers = Map<_TimerKey, _ActiveTimer>.of(_activeTimers);
+    final focus = _activeSubjectId;
+    if (newSubject != null) {
+      _batching = true;
+      addSubject(newSubject);
+      _batching = false;
+    }
+    try {
+      applyTemplate(
+        template,
+        subjectId: subjectId ?? newSubject!.id,
+        timestamp: timestamp,
+        replaceVisible: replaceVisible,
+      );
+      if (newSubject != null) {
+        _configurationBefore = before;
+        _timersBefore = timers;
+        _subjectBefore = focus;
+      }
+    } catch (_) {
+      _session = before;
+      _activeTimers
+        ..clear()
+        ..addAll(timers);
+      _activeSubjectId = focus;
+      _rebuildIndexes(preserveActiveTimers: true);
+      rethrow;
+    }
+  }
+
+  bool get canUndoTemplate =>
+      _configurationBefore != null && identical(_session, _configurationAfter);
+
+  bool undoTemplate() {
+    if (!canUndoTemplate) return false;
+    _session = _configurationBefore!;
+    _activeTimers
+      ..clear()
+      ..addAll(_timersBefore!);
+    _activeSubjectId = _subjectBefore;
+    _configurationAfter = null;
+    _rebuildIndexes(preserveActiveTimers: true);
+    notifyListeners();
+    return true;
+  }
+
+  @override
+  void notifyListeners() {
+    if (!_batching) super.notifyListeners();
+  }
+
   // -----------------------------------------------------------------------
   // Subject management
   // -----------------------------------------------------------------------
 
   void addSubject(TrackingSubject subject) {
-    _session.subjects.add(subject);
+    final existing = _session.subjects
+        .where((s) => s.id == subject.id)
+        .firstOrNull;
+    _session = _session.copyWith(
+      subjects: existing == null
+          ? [..._session.subjects, subject]
+          : _session.subjects,
+      hiddenSubjectIds: {..._session.hiddenSubjectIds}..remove(subject.id),
+    );
     notifyListeners();
   }
 
-  void removeSubject(String subjectId) {
-    _session.subjects.removeWhere((s) => s.id == subjectId);
-    // Cancel any running timers for this subject
-    _activeTimers.removeWhere((key, _) => key.subjectId == subjectId);
-    _removeCellsWhere((key) => key.subjectId == subjectId);
+  void removeSubject(String subjectId, {Duration? timestamp}) {
+    _stopMatchingTimers((key) => key.subjectId == subjectId, timestamp);
+    _session = _session.copyWith(
+      hiddenSubjectIds: {..._session.hiddenSubjectIds, subjectId},
+    );
     if (_activeSubjectId == subjectId) {
       _activeSubjectId = null;
     }
@@ -200,9 +461,18 @@ class TrackingController extends ChangeNotifier {
   void updateSubject(TrackingSubject updated) {
     final index = _session.subjects.indexWhere((s) => s.id == updated.id);
     if (index != -1) {
-      _session.subjects[index] = updated;
+      _session = _session.copyWith(
+        subjects: _session.subjects
+            .map((s) => s.id == updated.id ? updated : s)
+            .toList(),
+      );
       notifyListeners();
     }
+  }
+
+  void restoreSubjects() {
+    _session = _session.copyWith(hiddenSubjectIds: {});
+    notifyListeners();
   }
 
   void setActiveSubject(String? subjectId) {
@@ -215,22 +485,30 @@ class TrackingController extends ChangeNotifier {
   // -----------------------------------------------------------------------
 
   void addTracker(TrackingDefinition tracker) {
-    _session.trackers.add(tracker);
-    notifyListeners();
+    configureTrackers([...trackers.where((t) => t.id != tracker.id), tracker]);
   }
 
-  void removeTracker(String trackerId) {
-    _session.trackers.removeWhere((t) => t.id == trackerId);
-    // Cancel any running timers using this tracker
-    _activeTimers.removeWhere((key, _) => key.trackerId == trackerId);
-    _removeCellsWhere((key) => key.trackerId == trackerId);
-    notifyListeners();
+  void removeTracker(String trackerId, {Duration? timestamp}) {
+    configureTrackers(
+      trackers.where((t) => t.id != trackerId).toList(),
+      timestamp: timestamp,
+    );
   }
 
   void updateTracker(TrackingDefinition updated) {
     final index = _session.trackers.indexWhere((t) => t.id == updated.id);
     if (index != -1) {
-      _session.trackers[index] = updated;
+      if (_session.events.any((e) => e.trackerId == updated.id)) {
+        throw StateError(
+          'Recorded definitions cannot be changed. Use a new tracker ID.',
+        );
+      }
+      _validateDefinitions([updated], allowUpdate: true);
+      _session = _session.copyWith(
+        trackers: _session.trackers
+            .map((t) => t.id == updated.id ? updated : t)
+            .toList(),
+      );
       notifyListeners();
     }
   }
@@ -254,7 +532,7 @@ class TrackingController extends ChangeNotifier {
       action: TrackingAction.increment,
       delta: delta,
     );
-    _session.events.add(event);
+    _session = _session.copyWith(events: [..._session.events, event]);
     _updateCounter(subjectId, trackerId, delta);
     notifyListeners();
     return event;
@@ -274,7 +552,7 @@ class TrackingController extends ChangeNotifier {
       action: TrackingAction.decrement,
       delta: delta,
     );
-    _session.events.add(event);
+    _session = _session.copyWith(events: [..._session.events, event]);
     _updateCounter(subjectId, trackerId, -delta);
     notifyListeners();
     return event;
@@ -302,7 +580,7 @@ class TrackingController extends ChangeNotifier {
       timestamp: timestamp,
       action: TrackingAction.timerStart,
     );
-    _session.events.add(event);
+    _session = _session.copyWith(events: [..._session.events, event]);
     _setCellStats(
       key,
       getCellStats(
@@ -332,7 +610,7 @@ class TrackingController extends ChangeNotifier {
       timestamp: timestamp,
       action: TrackingAction.timerStop,
     );
-    _session.events.add(event);
+    _session = _session.copyWith(events: [..._session.events, event]);
     final previous = getCellStats(subjectId, trackerId);
     final elapsed = timestamp >= active.startTimestamp
         ? timestamp - active.startTimestamp
@@ -389,7 +667,7 @@ class TrackingController extends ChangeNotifier {
       timestamp: timestamp,
       action: TrackingAction.timerCancel,
     );
-    _session.events.add(event);
+    _session = _session.copyWith(events: [..._session.events, event]);
     _setCellStats(
       key,
       getCellStats(
@@ -445,10 +723,10 @@ class TrackingController extends ChangeNotifier {
           lastStart = event.timestamp;
           break;
         case TrackingAction.timerStop:
-          if (lastStart != null) {
+          if (lastStart != null && event.timestamp >= lastStart) {
             intervals.add((start: lastStart, stop: event.timestamp));
-            lastStart = null;
           }
+          lastStart = null;
           break;
         case TrackingAction.timerCancel:
           lastStart = null;
@@ -477,7 +755,10 @@ class TrackingController extends ChangeNotifier {
   /// Remove the last event (undo).
   TrackingEvent? undoLastEvent() {
     if (_session.events.isEmpty) return null;
-    final removed = _session.events.removeLast();
+    final removed = _session.events.last;
+    _session = _session.copyWith(
+      events: _session.events.sublist(0, _session.events.length - 1),
+    );
 
     // If it was a timer start, also remove the active timer state
     if (removed.action == TrackingAction.timerStart) {
@@ -510,7 +791,9 @@ class TrackingController extends ChangeNotifier {
   /// Delete a specific event by id.
   void deleteEvent(String eventId) {
     final before = _session.events.length;
-    _session.events.removeWhere((e) => e.id == eventId);
+    _session = _session.copyWith(
+      events: _session.events.where((e) => e.id != eventId).toList(),
+    );
     if (_session.events.length == before) return;
     _rebuildIndexes(preserveActiveTimers: true);
     notifyListeners();
@@ -543,14 +826,21 @@ class TrackingController extends ChangeNotifier {
   /// Invalid assignments leave both the current and other bindings intact.
   bool setHotkey(String subjectId, String trackerId, String key) {
     if (hotkeyError(subjectId, trackerId, key) != null) return false;
-    _session.hotkeys['$subjectId:$trackerId'] = key.toLowerCase();
+    _session = _session.copyWith(
+      hotkeys: {
+        ..._session.hotkeys,
+        '$subjectId:$trackerId': key.toLowerCase(),
+      },
+    );
     notifyListeners();
     return true;
   }
 
   /// Remove a hotkey binding.
   void removeHotkey(String subjectId, String trackerId) {
-    _session.hotkeys.remove('$subjectId:$trackerId');
+    _session = _session.copyWith(
+      hotkeys: {..._session.hotkeys}..remove('$subjectId:$trackerId'),
+    );
     notifyListeners();
   }
 
@@ -574,9 +864,9 @@ class TrackingController extends ChangeNotifier {
     final binding = findByHotkey(key);
     if (binding == null) return false;
 
-    final tracker = _session.trackers
-        .where((t) => t.id == binding.trackerId)
-        .firstOrNull;
+    final tracker = trackersForSubject(
+      binding.subjectId,
+    ).where((t) => t.id == binding.trackerId).firstOrNull;
     if (tracker == null) return false;
 
     _lastFeedback = binding;
@@ -610,9 +900,9 @@ class TrackingController extends ChangeNotifier {
     final binding = findByHotkey(key);
     if (binding == null) return false;
 
-    final tracker = _session.trackers
-        .where((t) => t.id == binding.trackerId)
-        .firstOrNull;
+    final tracker = trackersForSubject(
+      binding.subjectId,
+    ).where((t) => t.id == binding.trackerId).firstOrNull;
     if (tracker == null) return false;
 
     if (tracker.kind == TrackerKind.timer &&
@@ -637,7 +927,7 @@ class TrackingController extends ChangeNotifier {
     TrackingSubject subject,
     String? templateSubjectId,
   ) {
-    _session.subjects.add(subject);
+    addSubject(subject);
     // Trackers are shared across all subjects (session-level), so nothing
     // extra to copy. The UI shows all session trackers for each subject.
     notifyListeners();
@@ -737,14 +1027,6 @@ class TrackingController extends ChangeNotifier {
   void _syncAllCellNotifiers() {
     for (final entry in _cellNotifiers.entries) {
       entry.value.value = _cellStats[entry.key] ?? const TrackingCellStats();
-    }
-  }
-
-  void _removeCellsWhere(bool Function(_TimerKey key) predicate) {
-    _cellStats.removeWhere((key, _) => predicate(key));
-    final keys = _cellNotifiers.keys.where(predicate).toList();
-    for (final key in keys) {
-      _cellNotifiers.remove(key)?.dispose();
     }
   }
 

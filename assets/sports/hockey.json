@@ -389,6 +389,56 @@
       ]
     }
   ],
+  "trackingTemplates": [
+    {
+      "id": "hockey.faceoffs.basic",
+      "revision": 1,
+      "name": "Faceoffs",
+      "description": "Record who establishes team control after each draw. Include unknown outcomes.",
+      "subjectKind": "team",
+      "trackerIds": ["hockey_faceoff_won", "hockey_faceoff_lost", "event_faceoff_unknown"]
+    },
+    {
+      "id": "hockey.passing.basic",
+      "revision": 1,
+      "name": "Passing",
+      "description": "Record one outcome for every observed pass by the selected player.",
+      "subjectKind": "player",
+      "trackerIds": ["hockey_pass_completed", "event_pass_intercepted", "event_pass_incomplete", "event_pass_unknown"]
+    },
+    {
+      "id": "hockey.shots.basic",
+      "revision": 1,
+      "name": "Shot outcomes",
+      "description": "Record one outcome per shot attempt. Goals and saves are already on target.",
+      "subjectKind": "team",
+      "trackerIds": ["hockey_goal", "event_shot_saved", "event_shot_missed", "event_shot_blocked", "event_shot_unknown"]
+    },
+    {
+      "id": "hockey.battles.basic",
+      "revision": 1,
+      "name": "Puck battles",
+      "description": "Record the team-control outcome of each contested puck battle.",
+      "subjectKind": "team",
+      "trackerIds": ["hockey_puck_battle_won", "hockey_puck_battle_lost", "event_battle_unchanged", "event_battle_unknown"]
+    },
+    {
+      "id": "hockey.involvement.basic",
+      "revision": 1,
+      "name": "Player involvement",
+      "description": "Track controlled receptions, loose-puck recoveries and losses outside passes or battles. Shift time is observed video duration, including stoppages; start at visible entry and stop at exit or loss of view.",
+      "subjectKind": "player",
+      "trackerIds": ["hockey_pass_received", "event_possession_recovery", "event_possession_lost", "hockey_shift_time"]
+    },
+    {
+      "id": "hockey.goalie.basic",
+      "revision": 1,
+      "name": "Goalie outcomes",
+      "description": "Track observed saves, eligible goals against and puck plays. Exclude empty-net goals; these counts do not establish a complete-game save percentage.",
+      "subjectKind": "goalie",
+      "trackerIds": ["event_goalie_save", "event_goalie_goal_against", "event_goalie_puck_play"]
+    }
+  ],
   "trackingPresets": [
     {
       "id": "hockey_pass_attempted",

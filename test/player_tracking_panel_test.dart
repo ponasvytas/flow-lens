@@ -47,6 +47,12 @@ void main() {
             kind: TrackerKind.timer,
             timerMode: TimerMode.toggle,
           ),
+          const TrackingDefinition(
+            id: 'shift',
+            label: 'Shift time',
+            kind: TrackerKind.timer,
+            timerMode: TimerMode.hold,
+          ),
         ],
       ),
     );
@@ -94,6 +100,28 @@ void main() {
     await tester.tap(find.byTooltip('Undo last tracking event'));
     await tester.pumpAndSettle();
     expect(find.text('0 tracking events'), findsOneWidget);
+    final holdButton = find.byTooltip('Press and hold Shift time for Alex');
+    final hold = await tester.startGesture(tester.getCenter(holdButton));
+    await tester.pump();
+    expect(controller.isTimerRunning('p', 'shift'), isTrue);
+    await hold.up();
+    await tester.pump();
+    expect(controller.isTimerRunning('p', 'shift'), isFalse);
+    final cancelledHold = await tester.startGesture(
+      tester.getCenter(holdButton),
+    );
+    await tester.pump();
+    expect(controller.isTimerRunning('p', 'shift'), isTrue);
+    await cancelledHold.cancel();
+    await tester.pump();
+    expect(controller.isTimerRunning('p', 'shift'), isFalse);
+    final toggleButton = find.byTooltip('Start Time on ice for Alex');
+    await tester.tap(toggleButton);
+    await tester.pump();
+    expect(controller.isTimerRunning('p', 'time'), isTrue);
+    await tester.tap(find.byTooltip('Stop Time on ice for Alex'));
+    await tester.pump();
+    expect(controller.isTimerRunning('p', 'time'), isFalse);
     await tester.tap(find.byTooltip('Remove Alex'));
     await tester.pumpAndSettle();
     expect(controller.subjects, hasLength(1));

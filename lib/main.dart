@@ -48,6 +48,7 @@ import 'services/tracking_import_export_service.dart';
 import 'services/event_session_repository.dart';
 import 'services/tracking_session_repository.dart';
 import 'models/sport_taxonomy.dart';
+import 'models/tracking_models.dart';
 import 'controllers/events_controller.dart';
 import 'controllers/event_entry_controller.dart';
 import 'controllers/settings_controller.dart';
@@ -222,7 +223,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     controller = VideoController(player);
 
     _eventPreview = EventPreviewCoordinator(
-      seek: player.seek,
+      seek: _seekVideo,
       play: player.play,
       pause: player.pause,
       duration: () => player.state.duration,
@@ -319,6 +320,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
       setState(() {
         _taxonomy = taxonomy;
       });
+      _activateTrackingWorkspace(taxonomy);
       if (_videoIdentity != null) {
         _quickEvents.selectGame(_videoIdentity!, taxonomy);
       }
@@ -334,6 +336,117 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
       _selectedSportProfile = profile;
     });
     _loadTaxonomy();
+  }
+
+  void _activateTrackingWorkspace(SportTaxonomy taxonomy) {
+    final previousId = _trackingController.session.id;
+    _trackingController.activateWorkspace(
+      sportId: taxonomy.sportId,
+      videoIdentity: _videoIdentity,
+      taxonomyRevision: taxonomy.revision,
+      timestamp: player.state.position,
+    );
+    if (_trackingController.session.id != previousId) {
+      _activeTrackingCloudSessionId = null;
+      _activeTrackingCloudSessionTitle = null;
+    }
+  }
+
+  Future<void> _seekVideo(Duration position) async {
+    _trackingController.stopAllTimers(timestamp: player.state.position);
+    await player.seek(position);
+  }
+
+  Future<bool> _restoreTrackingSession(
+    TrackingSession session, {
+    String? envelopeSport,
+  }) async {
+    var sportId = session.sportId ?? envelopeSport;
+    if (sportId == null && session.trackers.isEmpty && mounted) {
+      sportId = await showDialog<String>(
+        context: context,
+        builder: (context) => SimpleDialog(
+          title: const Text('Choose the session sport'),
+          children: [
+            for (final profile in SportProfile.availableProfiles.where(
+              (p) => p.enabled,
+            ))
+              SimpleDialogOption(
+                onPressed: () => Navigator.pop(context, profile.id),
+                child: Text(profile.displayName),
+              ),
+          ],
+        ),
+      );
+      if (sportId == null) return false;
+    }
+    if (sportId == null ||
+        (envelopeSport != null && sportId != envelopeSport) ||
+        session.trackers.any((t) => t.sportId != sportId)) {
+      throw const FormatException(
+        'This session has missing or conflicting sport information. Its trackers must identify one sport.',
+      );
+    }
+    SportTaxonomy taxonomy;
+    try {
+      taxonomy = await _taxonomyRepository.loadSportTaxonomy(sportId);
+    } catch (_) {
+      taxonomy = SportTaxonomy(
+        schemaVersion: 1,
+        sportId: sportId,
+        name: sportId,
+        categories: [],
+      );
+    }
+    if (!mounted) return false;
+    if (_videoIdentity != null && session.videoIdentity != _videoIdentity) {
+      final attach = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Use the current video?'),
+          content: const Text(
+            'This session was saved with a different or unidentified video. Use the current video for its timestamps?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Use current video'),
+            ),
+          ],
+        ),
+      );
+      if (attach != true || !mounted) return false;
+    }
+    _trackingController.stopAllTimers(timestamp: player.state.position);
+    _trackingController.loadSession(
+      session.copyWith(sportId: sportId, videoIdentity: _videoIdentity),
+    );
+    _taxonomyRequestGeneration++;
+    final resolvedSportId = sportId;
+    setState(() {
+      _taxonomy = taxonomy;
+      _selectedSportProfile =
+          SportProfile.availableProfiles
+              .where((p) => p.id == sportId)
+              .firstOrNull ??
+          SportProfile(
+            id: resolvedSportId,
+            name: resolvedSportId,
+            displayName: resolvedSportId,
+            iconData: Icons.sports,
+            enabled: true,
+          );
+      _activeTrackingCloudSessionId = null;
+      _activeTrackingCloudSessionTitle = null;
+    });
+    if (_videoIdentity != null) {
+      _quickEvents.selectGame(_videoIdentity!, taxonomy);
+    }
+    return true;
   }
 
   @override
@@ -432,6 +545,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
 
   Future<void> _saveTrackingSession() async {
     try {
+      _trackingController.stopAllTimers(timestamp: player.state.position);
       await _trackingImportExportService.saveSession(
         _trackingController.session,
       );
@@ -452,8 +566,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   Future<void> _loadTrackingSession() async {
     try {
       final session = await _trackingImportExportService.loadSession();
-      if (session != null) {
-        _trackingController.loadSession(session);
+      if (session != null && await _restoreTrackingSession(session)) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -553,6 +666,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     String? identity,
   }) async {
     _eventPreview.cancel();
+    _trackingController.stopAllTimers(timestamp: player.state.position);
     final previousSource = _videoSourcePath;
     _drawing.resetForVideo();
     _altKey.cancelDraft();
@@ -587,6 +701,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
       }
       if (_taxonomy != null) {
         _quickEvents.selectGame(_videoIdentity!, _taxonomy!);
+        _activateTrackingWorkspace(_taxonomy!);
       }
       _lastQuickEvent.value = null;
       if (mounted) {
@@ -621,7 +736,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     // Pause video during seek for smoother experience
     final wasPlaying = player.state.playing;
     player.pause();
-    player.seek(newPosition).then((_) {
+    _seekVideo(newPosition).then((_) {
       if (wasPlaying) player.play();
     });
     AppLog.debug(
@@ -636,11 +751,11 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     // Pause video during seek for smoother experience
     final wasPlaying = player.state.playing;
     player.pause();
-    player.seek(newPosition > Duration.zero ? newPosition : Duration.zero).then(
-      (_) {
-        if (wasPlaying) player.play();
-      },
-    );
+    _seekVideo(newPosition > Duration.zero ? newPosition : Duration.zero).then((
+      _,
+    ) {
+      if (wasPlaying) player.play();
+    });
     AppLog.debug(
       "Jumped backward ${duration.inSeconds}s to ${newPosition.toString()}",
     );
@@ -983,9 +1098,16 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   Future<void> _saveCloudTrackingSession(String title, bool asNew) async {
     final repository = _trackingSessionRepository;
     if (repository == null) return;
+    _trackingController.stopAllTimers(timestamp: player.state.position);
+    final sportId = _trackingController.session.sportId;
+    if (sportId == null || !_trackingController.session.hasConsistentSport) {
+      throw const FormatException(
+        'Resolve the tracking session sport before saving.',
+      );
+    }
     final draft = TrackingSessionDraft(
       title: title,
-      sportId: _selectedSportProfile?.id ?? 'hockey',
+      sportId: sportId,
       session: _trackingController.session,
       sourceVideo: VideoSourceMetadata.fromSource(
         _videoSourcePath,
@@ -1023,13 +1145,29 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
     _eventsController.selectEvent(null);
     _lastQuickEvent.value = null;
     _quickEvents.selectGame('cloud:${session.id}', taxonomy);
+    _activateTrackingWorkspace(taxonomy);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Loaded “${session.title}” from cloud.')),
     );
   }
 
-  void _loadCloudTrackingSession(CloudTrackingSession session) {
-    _trackingController.loadSession(session.session);
+  Future<void> _loadCloudTrackingSession(CloudTrackingSession session) async {
+    try {
+      if (!await _restoreTrackingSession(
+        session.session,
+        envelopeSport: session.sportId,
+      )) {
+        return;
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load tracking: $error')),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
     setState(() {
       _activeTrackingCloudSessionId = session.id;
       _activeTrackingCloudSessionTitle = session.title;
@@ -1643,6 +1781,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                 key: _playerTrackingPanelKey,
                 controller: _trackingController,
                 taxonomy: _taxonomy,
+                templates: _runtime.trackingTemplatesController,
                 player: player,
                 dockEdge: dockEdge,
                 onSave: _saveTrackingSession,
@@ -2283,7 +2422,12 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                             onSpeedChange: _changeSpeed,
                             events: _eventsController.filteredEvents,
                             onEventTap: _navigateToEvent,
-                            onScrubStart: _eventPreview.cancel,
+                            onScrubStart: () {
+                              _eventPreview.cancel();
+                              _trackingController.stopAllTimers(
+                                timestamp: player.state.position,
+                              );
+                            },
                             onJumpBackward: () =>
                                 _jumpBackward(const Duration(seconds: 5)),
                           ),

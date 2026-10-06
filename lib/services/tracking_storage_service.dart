@@ -8,7 +8,11 @@ import '../utils/file_saver.dart';
 class TrackingImportExportService {
   /// Prompts user to save a tracking session to a JSON file.
   Future<void> saveSession(TrackingSession session) async {
-    if (session.events.isEmpty && session.subjects.isEmpty) return;
+    if (session.events.isEmpty &&
+        session.subjects.isEmpty &&
+        session.trackers.isEmpty) {
+      return;
+    }
 
     try {
       final jsonString = const JsonEncoder.withIndent(
@@ -95,7 +99,7 @@ class TrackingImportExportService {
             break;
           case TrackingAction.timerStop:
             final start = timerStarts.remove(pairKey);
-            if (start != null) {
+            if (start != null && event.timestamp >= start) {
               value = '${(event.timestamp - start).inMilliseconds}';
             } else {
               value = '';
@@ -111,9 +115,9 @@ class TrackingImportExportService {
           '${event.id},'
           '${event.timestamp.inMilliseconds},'
           '${event.subjectId},'
-          '"$subjectLabel",'
+          '"${subjectLabel.replaceAll('"', '""')}",'
           '${event.trackerId},'
-          '"$trackerLabel",'
+          '"${trackerLabel.replaceAll('"', '""')}",'
           '${event.action.name},'
           '$value',
         );
