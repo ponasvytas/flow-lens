@@ -9,6 +9,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:file_picker/file_picker.dart';
 
 import 'app/app_bootstrap.dart';
+import 'app/backend_environment.dart';
 import 'theme/flow_theme.dart';
 import 'models/quick_event.dart';
 import 'controllers/quick_events_controller.dart';
@@ -66,8 +67,12 @@ import 'widgets/event_navigation_panel.dart';
 import 'widgets/player_tracking_panel.dart';
 import 'widgets/account_view.dart';
 import 'widgets/cloud_sessions_view.dart';
+import 'widgets/challenges_page.dart';
+import 'models/challenge.dart';
 
 Future<void> main() async {
+  // Preserve invitation fragments before Flutter's hash routing initializes.
+  final launchUri = Uri.base;
   // 1. Initialize MediaKit (Crucial for the native video engine)
   WidgetsFlutterBinding.ensureInitialized();
   Perf.install();
@@ -77,7 +82,19 @@ Future<void> main() async {
   runApp(
     MaterialApp(
       theme: FlowTheme.dark,
-      home: HockeyAnalyzerScreen(composition: composition),
+      debugShowCheckedModeBanner: !BackendEnvironment.current.useEmulators,
+      builder: BackendEnvironment.current.useEmulators
+          ? (context, child) => Banner(
+              message: 'LOCAL',
+              location: BannerLocation.topEnd,
+              child: child!,
+            )
+          : null,
+      initialRoute: '/',
+      home: HockeyAnalyzerScreen(
+        composition: composition,
+        launchUri: launchUri,
+      ),
     ),
   );
 }
@@ -87,9 +104,10 @@ Future<void> main() async {
 // ---------------------------------------------------------------------------
 
 class HockeyAnalyzerScreen extends StatefulWidget {
-  const HockeyAnalyzerScreen({super.key, this.composition});
+  const HockeyAnalyzerScreen({super.key, this.composition, this.launchUri});
 
   final AppComposition? composition;
+  final Uri? launchUri;
 
   @override
   State<HockeyAnalyzerScreen> createState() => _HockeyAnalyzerScreenState();
@@ -274,7 +292,21 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
   ///   t     : initial playback position in seconds (int or float). Optional.
   void _handleDeepLink() {
     if (!mounted) return;
-    final base = Uri.base;
+    final base = widget.launchUri ?? Uri.base;
+    if (base.queryParameters.containsKey('challenge')) {
+      final invitation = ChallengeInvitation.parse(base.toString());
+      if (invitation == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'This invitation is incomplete. Paste the full link in Challenges.',
+            ),
+          ),
+        );
+      }
+      _showChallenges(invitation: invitation);
+      return;
+    }
     AppLog.debug('[DeepLink] Uri.base=$base');
     AppLog.debug('[DeepLink] queryParameters=${base.queryParameters}');
     final params = base.queryParameters;
@@ -1014,6 +1046,46 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
         ),
       );
     }
+  }
+
+  Future<void> _showChallenges({ChallengeInvitation? invitation}) async {
+    await player.pause();
+    if (!mounted) return;
+    final metadata = VideoSourceMetadata.fromSource(
+      _videoSourcePath,
+      duration: player.state.duration,
+    );
+    final identity = _videoIdentity;
+    final displayName =
+        kIsWeb &&
+            isOwnedVideoUrl(_videoSourcePath ?? '') &&
+            identity != null &&
+            identity.contains(':')
+        ? identity.substring(0, identity.lastIndexOf(':'))
+        : metadata.displayName;
+    final selected = _eventsController.selectedEventIds;
+    final moments = _eventsController.allEvents
+        .where((e) => selected.isEmpty || selected.contains(e.id))
+        .map(ChallengeMoment.fromEvent)
+        .toList();
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ChallengesPage(
+          account: _accountController,
+          repository: _runtime.challengeRepository,
+          video: VideoSourceMetadata(
+            kind: metadata.kind,
+            displayName: displayName,
+            externalUrl: metadata.externalUrl,
+            durationMs: metadata.durationMs,
+          ),
+          moments: moments,
+          sportId: _selectedSportProfile?.name ?? 'hockey',
+          invitation: invitation,
+        ),
+      ),
+    );
+    if (mounted) _rootFocus.requestFocus();
   }
 
   void _showCloudSessions() {
@@ -2221,6 +2293,7 @@ class _HockeyAnalyzerScreenState extends State<HockeyAnalyzerScreen>
                                 : null,
                             onShowAccount: _showAccount,
                             onShowCloudSessions: _showCloudSessions,
+                            onShowChallenges: _showChallenges,
                             isSignedIn: _accountController.isSignedIn,
                             hasPremium:
                                 _accountController.capabilities.canSyncSettings,

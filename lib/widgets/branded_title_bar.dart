@@ -16,6 +16,7 @@ class BrandedTitleBar extends StatelessWidget {
   final VoidCallback? onShowSettings;
   final VoidCallback? onShowAccount;
   final VoidCallback? onShowCloudSessions;
+  final VoidCallback? onShowChallenges;
   final VoidCallback? onResetLayout;
   final bool isSignedIn;
   final bool hasPremium;
@@ -40,6 +41,7 @@ class BrandedTitleBar extends StatelessWidget {
     this.onShowSettings,
     this.onShowAccount,
     this.onShowCloudSessions,
+    this.onShowChallenges,
     this.onResetLayout,
     this.isSignedIn = false,
     this.hasPremium = false,
@@ -82,6 +84,7 @@ class BrandedTitleBar extends StatelessWidget {
           onShowAccount,
         ),
         ('Cloud sessions', Icons.cloud_outlined, onShowCloudSessions),
+        ('Challenges', Icons.flag_outlined, onShowChallenges),
         ('Keyboard shortcuts', Icons.keyboard_outlined, onShowShortcuts),
       ];
       return Container(

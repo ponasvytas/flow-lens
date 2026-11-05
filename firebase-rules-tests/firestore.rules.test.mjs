@@ -36,6 +36,25 @@ test('anonymous users cannot read private entitlements', async () => {
   await assertFails(getDoc(doc(db, 'users/user-a/entitlements/current')));
 });
 
+test('challenge data, answers, results and quotas are accessible only through the backend', async () => {
+  const paths = ['challenges/example-challenge',
+    'challenges/example-challenge/submissions/player',
+    'users/player/challengeUsage/current',
+    'users/player/challengeRequests/request-id',
+    'users/player/challengeMemberships/example-challenge'];
+  await environment.withSecurityRulesDisabled(async context => {
+    for (const path of paths) await setDoc(doc(context.firestore(), path), { private: true });
+  });
+  for (const context of [environment.unauthenticatedContext(), environment.authenticatedContext('player')]) {
+    for (const path of paths) {
+      const ref = doc(context.firestore(), path);
+      await assertFails(getDoc(ref));
+      await assertFails(setDoc(ref, { forged: true }));
+      await assertFails(deleteDoc(ref));
+    }
+  }
+});
+
 test('users can read only their own entitlement', async () => {
   const ownerDb = environment.authenticatedContext('user-a').firestore();
   await assertSucceeds(

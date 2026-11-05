@@ -8,6 +8,7 @@ import '../controllers/tracking_controller.dart';
 import '../controllers/tracking_templates_controller.dart';
 import '../controllers/ui_controller.dart';
 import '../services/auth_repository.dart';
+import '../services/challenge_repository.dart';
 import '../services/cloud_settings_store.dart';
 import '../services/dock_layout_repository.dart';
 import '../services/entitlements_repository.dart';
@@ -34,6 +35,7 @@ class AppComposition {
     required this.entitlementsRepository,
     required this.settingsRepository,
     this.cloudSettingsStore,
+    this.challengeRepository,
     required this.dockLayoutRepository,
     required this.taxonomyRepository,
     required this.eventImportExportService,
@@ -60,6 +62,9 @@ class AppComposition {
     final database = firestore ?? FirebaseFirestore.instance;
     return AppComposition(
       authRepository: FirebaseAuthRepository(auth ?? FirebaseAuth.instance),
+      challengeRepository: FirebaseChallengeRepository(
+        auth ?? FirebaseAuth.instance,
+      ),
       entitlementsRepository: FirestoreEntitlementsRepository(database),
       settingsRepository: SharedPreferencesSettingsRepository(),
       cloudSettingsStore: FirestoreCloudSettingsStore(database),
@@ -75,6 +80,7 @@ class AppComposition {
   final EntitlementsRepository entitlementsRepository;
   final SettingsRepository settingsRepository;
   final CloudSettingsStore? cloudSettingsStore;
+  final ChallengeRepository? challengeRepository;
   final DockLayoutRepository dockLayoutRepository;
   final TaxonomyRepository taxonomyRepository;
   final EventImportExportService eventImportExportService;
@@ -113,6 +119,7 @@ class AppComposition {
           );
 
     return AppRuntime(
+      challengeRepository: challengeRepository,
       accountController: accountController,
       eventsController: EventsController(),
       settingsController: SettingsController(
@@ -136,6 +143,7 @@ class AppComposition {
 /// App-scoped objects owned by the root screen.
 class AppRuntime {
   AppRuntime({
+    this.challengeRepository,
     required this.accountController,
     required this.eventsController,
     required this.settingsController,
@@ -150,6 +158,7 @@ class AppRuntime {
   });
 
   final AccountController accountController;
+  final ChallengeRepository? challengeRepository;
   final EventsController eventsController;
   final SettingsController settingsController;
   final UIController uiController;

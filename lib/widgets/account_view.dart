@@ -131,7 +131,7 @@ class _AccountViewState extends State<AccountView> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          _creatingAccount ? 'Create an account' : 'Sign in for premium',
+          _creatingAccount ? 'Create an account' : 'Sign in',
           style: Theme.of(context).textTheme.titleLarge,
         ),
         const SizedBox(height: 8),

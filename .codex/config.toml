@@ -9,6 +9,12 @@ command = "cmd"
 args = ["/c", "dart", "mcp-server"]
 startup_timeout_sec = 60
 
+[mcp_servers.dart.tools.dtd]
+approval_mode = "approve"
+
+[mcp_servers.dart.tools.hot_reload]
+approval_mode = "approve"
+
 [mcp_servers.firebase]
 command = "cmd"
 args = ["/c", "npx", "-y", "firebase-tools", "experimental:mcp"]
